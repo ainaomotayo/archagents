@@ -23,6 +23,64 @@ servers:
 
 paths:
   /v1/scans:
+    get:
+      operationId: listScans
+      summary: List scans
+      description: |
+        List scans with filtering by status and project, with pagination support.
+      tags: [Scans]
+      security:
+        - hmacAuth: []
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [pending, scanning, completed, failed]
+          description: Filter by scan status
+        - name: projectId
+          in: query
+          schema:
+            type: string
+          description: Filter by project ID
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 50
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+      responses:
+        "200":
+          description: Paginated list of scans
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [scans, total, limit, offset]
+                properties:
+                  scans:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/ScanRecord"
+                  total:
+                    type: integer
+                  limit:
+                    type: integer
+                  offset:
+                    type: integer
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
     post:
       operationId: submitScan
       summary: Submit a scan
@@ -60,6 +118,44 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
         "429":
           description: Rate limit exceeded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /v1/scans/{id}:
+    get:
+      operationId: getScan
+      summary: Get a scan
+      description: |
+        Retrieve a single scan by its ID, including associated certificate
+        and finding count.
+      tags: [Scans]
+      security:
+        - hmacAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Scan ID
+      responses:
+        "200":
+          description: Scan details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScanRecord"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Scan not found
           content:
             application/json:
               schema:
@@ -170,6 +266,43 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /v1/findings/{id}:
+    get:
+      operationId: getFinding
+      summary: Get a finding
+      description: |
+        Retrieve a single finding by its ID.
+      tags: [Findings]
+      security:
+        - hmacAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Finding ID
+      responses:
+        "200":
+          description: Finding details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Finding"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Finding not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /v1/certificates:
     get:
       operationId: listCertificates
@@ -230,6 +363,89 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /v1/certificates/{id}:
+    get:
+      operationId: getCertificate
+      summary: Get a certificate
+      description: |
+        Retrieve a single compliance certificate by its ID.
+      tags: [Certificates]
+      security:
+        - hmacAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Certificate ID
+      responses:
+        "200":
+          description: Certificate details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Certificate"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Certificate not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /v1/certificates/{id}/verify:
+    post:
+      operationId: verifyCertificate
+      summary: Verify certificate signature
+      description: |
+        Verify the cryptographic signature of a compliance certificate.
+        Returns whether the certificate signature is valid.
+      tags: [Certificates]
+      security:
+        - hmacAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Certificate ID
+      responses:
+        "200":
+          description: Verification result
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [valid, certificateId]
+                properties:
+                  valid:
+                    type: boolean
+                    description: Whether the certificate signature is valid
+                  certificateId:
+                    type: string
+                    format: uuid
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Certificate not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /v1/certificates/{id}/revoke:
     post:
       operationId: revokeCertificate
@@ -285,6 +501,68 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
         "404":
           description: Certificate not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /v1/projects:
+    get:
+      operationId: listProjects
+      summary: List projects
+      description: |
+        List all projects in the organization, including scan counts.
+      tags: [Projects]
+      security:
+        - hmacAuth: []
+      responses:
+        "200":
+          description: List of projects
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Project"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /v1/projects/{id}:
+    get:
+      operationId: getProject
+      summary: Get a project
+      description: |
+        Retrieve a single project by ID, including scan count and the
+        10 most recent scans with their certificates.
+      tags: [Projects]
+      security:
+        - hmacAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Project ID
+      responses:
+        "200":
+          description: Project details with recent scans
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectDetail"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Project not found
           content:
             application/json:
               schema:
@@ -513,6 +791,40 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /v1/admin/dlq:
+    get:
+      operationId: getDlqMessages
+      summary: DLQ monitoring
+      description: |
+        Retrieve dead-letter queue depth and messages for monitoring purposes.
+        Requires authentication.
+      tags: [Admin]
+      security:
+        - hmacAuth: []
+      responses:
+        "200":
+          description: DLQ status and messages
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [depth, messages]
+                properties:
+                  depth:
+                    type: integer
+                    description: Number of messages in the dead-letter queue
+                  messages:
+                    type: array
+                    items:
+                      type: object
+                      additionalProperties: true
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /health:
     get:
       operationId: healthCheck
@@ -534,6 +846,22 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthResponse"
+
+  /metrics:
+    get:
+      operationId: getMetrics
+      summary: Prometheus metrics
+      description: |
+        Returns Prometheus-formatted metrics. Does not require authentication.
+        Used by monitoring systems for scraping application metrics.
+      tags: [System]
+      responses:
+        "200":
+          description: Prometheus metrics
+          content:
+            text/plain:
+              schema:
+                type: string
 
 components:
   schemas:
@@ -961,6 +1289,71 @@ components:
         uptime:
           type: number
           description: Uptime in seconds
+
+    ScanRecord:
+      type: object
+      required: [id, projectId, commitHash, branch, author, status, startedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        projectId:
+          type: string
+        commitHash:
+          type: string
+        branch:
+          type: string
+        author:
+          type: string
+        status:
+          type: string
+          enum: [pending, scanning, completed, failed]
+        startedAt:
+          type: string
+          format: date-time
+        completedAt:
+          type: string
+          format: date-time
+        certificate:
+          $ref: "#/components/schemas/Certificate"
+        _count:
+          type: object
+          properties:
+            findings:
+              type: integer
+
+    Project:
+      type: object
+      required: [id, name, createdAt]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        repository:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        _count:
+          type: object
+          properties:
+            scans:
+              type: integer
+
+    ProjectDetail:
+      allOf:
+        - $ref: "#/components/schemas/Project"
+        - type: object
+          properties:
+            scans:
+              type: array
+              items:
+                $ref: "#/components/schemas/ScanRecord"
+              description: The 10 most recent scans for this project
 
     ErrorResponse:
       type: object
