@@ -59,3 +59,6 @@ export {
 
 export type { ArchiveProvider, CloudProvider } from "./archive-provider.js";
 export { getCloudProvider, createArchiveProvider, createKmsProvider } from "./cloud-factory.js";
+
+export { GcpArchiveProvider } from "./archive-gcp.js";
+export { GcpKmsKeyStore } from "./kms-gcp.js";
