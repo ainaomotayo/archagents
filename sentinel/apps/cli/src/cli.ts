@@ -29,9 +29,21 @@ program
 program
   .command("ci")
   .description("CI/CD mode — synchronous scan with exit codes")
-  .action(async () => {
-    console.log("CI mode not yet implemented");
-    process.exit(2);
+  .option("--api-url <url>", "API base URL", "http://localhost:8080")
+  .option("--timeout <seconds>", "Poll timeout in seconds", "120")
+  .option("--json", "Output machine-readable JSON report")
+  .option("--sarif", "Output findings in SARIF 2.1.0 format")
+  .action(async (opts) => {
+    const { runCi } = await import("./commands/ci.js");
+    const code = await runCi({
+      apiUrl: opts.apiUrl,
+      apiKey: process.env.SENTINEL_API_KEY ?? "",
+      secret: process.env.SENTINEL_SECRET ?? "",
+      timeout: parseInt(opts.timeout, 10),
+      json: opts.json ?? false,
+      sarif: opts.sarif ?? false,
+    });
+    process.exit(code);
   });
 
 program.parse();
