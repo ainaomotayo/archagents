@@ -37,6 +37,12 @@ export function createAuthHook(options: AuthHookOptions) {
 
     // Store on request for downstream use
     (request as any).role = role;
+
+    // Read org from dashboard header
+    const orgHeader = request.headers["x-sentinel-org-id"] as string | undefined;
+    if (orgHeader) {
+      (request as any).orgId = orgHeader;
+    }
     (request as any).orgId = (request as any).orgId ?? "default";
 
     // RBAC check — use Fastify route pattern for matching
