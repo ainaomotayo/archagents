@@ -1,5 +1,5 @@
 import { Redis } from "ioredis";
-import { EventBus } from "@sentinel/events";
+import { EventBus, withRetry } from "@sentinel/events";
 import { Assessor } from "@sentinel/assessor";
 import { getDb, disconnectDb } from "@sentinel/db";
 import {
@@ -123,12 +123,18 @@ const shutdown = async () => {
 process.on("SIGTERM", shutdown);
 process.on("SIGINT", shutdown);
 
+// Wrap handler with retry + DLQ logic
+const wrappedHandler = withRetry(redis, "sentinel.findings", handleFinding, {
+  maxRetries: 3,
+  baseDelayMs: 1000,
+});
+
 // Start consuming
 eventBus.subscribe(
   "sentinel.findings",
   "assessors",
   `assessor-${process.pid}`,
-  handleFinding,
+  wrappedHandler,
 );
 
 logger.info("Assessor worker started, consuming sentinel.findings...");

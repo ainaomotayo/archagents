@@ -77,8 +77,13 @@ export class EventBus {
             string,
             unknown
           >;
-          await handler(id, parsed);
-          await this.subscriber.xack(stream, group, id);
+          try {
+            await handler(id, parsed);
+            await this.subscriber.xack(stream, group, id);
+          } catch {
+            // Handler threw — don't ACK. Message stays pending for redelivery.
+            // The withRetry wrapper handles DLQ logic.
+          }
         }
       }
     }

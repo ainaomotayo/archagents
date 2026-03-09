@@ -2,7 +2,7 @@ import crypto from "node:crypto";
 import Fastify from "fastify";
 import { Redis } from "ioredis";
 import { getDb, disconnectDb } from "@sentinel/db";
-import { EventBus } from "@sentinel/events";
+import { EventBus, getDlqDepth, readDlq } from "@sentinel/events";
 import { AuditLog } from "@sentinel/audit";
 import { verifyCertificate } from "@sentinel/assessor";
 import { createLogger, withCorrelationId, registry, httpRequestDuration } from "@sentinel/telemetry";
@@ -212,6 +212,13 @@ app.get("/v1/audit", { preHandler: authHook }, async (request) => {
     db.auditEvent.count(),
   ]);
   return { events, total, limit: Number(limit), offset: Number(offset) };
+});
+
+// --- DLQ monitoring ---
+app.get("/v1/admin/dlq", { preHandler: authHook }, async () => {
+  const depth = await getDlqDepth(redis, "sentinel.findings.dlq");
+  const messages = await readDlq(redis, "sentinel.findings.dlq");
+  return { depth, messages };
 });
 
 // --- Graceful shutdown ---
