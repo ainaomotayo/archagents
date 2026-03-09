@@ -19,6 +19,7 @@ import {
   MOCK_FINDING_COUNTS_BY_CATEGORY,
   MOCK_FINDINGS,
   MOCK_OVERVIEW_STATS,
+  MOCK_POLICIES,
   MOCK_PROJECTS,
   MOCK_SCANS,
 } from "./mock-data";
@@ -263,14 +264,14 @@ export async function getPolicies() {
   return tryApi(async (headers) => {
     const { apiGet } = await import("./api-client");
     return apiGet<any[]>("/v1/policies", undefined, headers);
-  }, []);
+  }, MOCK_POLICIES);
 }
 
 export async function getPolicyById(id: string) {
   return tryApi(async (headers) => {
     const { apiGet } = await import("./api-client");
     return apiGet<any>(`/v1/policies/${id}`, undefined, headers);
-  }, null);
+  }, MOCK_POLICIES.find((p) => p.id === id) ?? null);
 }
 
 // ── Audit Log ─────────────────────────────────────────────────────────
