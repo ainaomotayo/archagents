@@ -40,6 +40,22 @@ services:
       DATABASE_URL: postgresql://sentinel:sentinel_dev@postgres:5432/sentinel
       REDIS_URL: redis://redis:6379
       SENTINEL_SECRET: dev-secret-change-in-production
+      CLOUD_PROVIDER: ${CLOUD_PROVIDER:-}
+      ARCHIVE_BUCKET: ${ARCHIVE_BUCKET:-}
+      ARCHIVE_PREFIX: ${ARCHIVE_PREFIX:-sentinel}
+      ARCHIVE_RETENTION_DAYS: ${ARCHIVE_RETENTION_DAYS:-2555}
+      AWS_REGION: ${AWS_REGION:-us-east-1}
+      S3_ARCHIVE_BUCKET: ${S3_ARCHIVE_BUCKET:-}
+      KMS_MASTER_KEY_ID: ${KMS_MASTER_KEY_ID:-}
+      GCP_PROJECT_ID: ${GCP_PROJECT_ID:-}
+      GCS_ARCHIVE_BUCKET: ${GCS_ARCHIVE_BUCKET:-}
+      GCP_KMS_LOCATION: ${GCP_KMS_LOCATION:-global}
+      GCP_KMS_KEY_RING: ${GCP_KMS_KEY_RING:-sentinel}
+      GCP_KMS_KEY_ID: ${GCP_KMS_KEY_ID:-sentinel-master}
+      AZURE_STORAGE_ACCOUNT_URL: ${AZURE_STORAGE_ACCOUNT_URL:-}
+      AZURE_ARCHIVE_CONTAINER: ${AZURE_ARCHIVE_CONTAINER:-}
+      AZURE_KEY_VAULT_URL: ${AZURE_KEY_VAULT_URL:-}
+      AZURE_KEY_NAME: ${AZURE_KEY_NAME:-sentinel-master}
 
   assessor-worker:
     build:
@@ -54,6 +70,22 @@ services:
       DATABASE_URL: postgresql://sentinel:sentinel_dev@postgres:5432/sentinel
       REDIS_URL: redis://redis:6379
       SENTINEL_SECRET: dev-secret-change-in-production
+      CLOUD_PROVIDER: ${CLOUD_PROVIDER:-}
+      ARCHIVE_BUCKET: ${ARCHIVE_BUCKET:-}
+      ARCHIVE_PREFIX: ${ARCHIVE_PREFIX:-sentinel}
+      ARCHIVE_RETENTION_DAYS: ${ARCHIVE_RETENTION_DAYS:-2555}
+      AWS_REGION: ${AWS_REGION:-us-east-1}
+      S3_ARCHIVE_BUCKET: ${S3_ARCHIVE_BUCKET:-}
+      KMS_MASTER_KEY_ID: ${KMS_MASTER_KEY_ID:-}
+      GCP_PROJECT_ID: ${GCP_PROJECT_ID:-}
+      GCS_ARCHIVE_BUCKET: ${GCS_ARCHIVE_BUCKET:-}
+      GCP_KMS_LOCATION: ${GCP_KMS_LOCATION:-global}
+      GCP_KMS_KEY_RING: ${GCP_KMS_KEY_RING:-sentinel}
+      GCP_KMS_KEY_ID: ${GCP_KMS_KEY_ID:-sentinel-master}
+      AZURE_STORAGE_ACCOUNT_URL: ${AZURE_STORAGE_ACCOUNT_URL:-}
+      AZURE_ARCHIVE_CONTAINER: ${AZURE_ARCHIVE_CONTAINER:-}
+      AZURE_KEY_VAULT_URL: ${AZURE_KEY_VAULT_URL:-}
+      AZURE_KEY_NAME: ${AZURE_KEY_NAME:-sentinel-master}
     command: ["node", "apps/api/dist/worker.js"]
 
   # Analysis Agents (uncomment when running full pipeline)
