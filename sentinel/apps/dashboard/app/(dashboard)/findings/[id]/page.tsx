@@ -27,7 +27,7 @@ export default async function FindingDetailPage({
       {/* Header */}
       <div className="animate-fade-up">
         <Link
-          href="/dashboard/findings"
+          href="/findings"
           className="inline-flex items-center gap-1 text-[13px] text-text-tertiary hover:text-accent transition-colors focus-ring rounded"
           aria-label="Back to findings"
         >

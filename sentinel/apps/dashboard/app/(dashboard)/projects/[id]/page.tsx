@@ -47,7 +47,7 @@ export default async function ProjectDetailPage({
       {/* Header */}
       <div className="animate-fade-up">
         <Link
-          href="/dashboard/projects"
+          href="/projects"
           className="inline-flex items-center gap-1 text-[13px] text-text-tertiary hover:text-accent transition-colors focus-ring rounded"
           aria-label="Back to projects"
         >

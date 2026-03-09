@@ -25,7 +25,7 @@ export default async function ProjectsPage() {
         {projects.map((project, i) => (
           <Link
             key={project.id}
-            href={`/dashboard/projects/${project.id}`}
+            href={`/projects/${project.id}`}
             className="animate-fade-up group block rounded-xl border border-border bg-surface-1 p-5 transition-all duration-150 hover:border-border-accent hover:bg-surface-2 focus-ring"
             style={{ animationDelay: `${0.05 * i}s` }}
             aria-label={`View project ${project.name}`}

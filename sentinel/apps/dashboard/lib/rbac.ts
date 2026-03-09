@@ -2,6 +2,9 @@
  * SENTINEL Dashboard — Role-Based Access Control
  *
  * Defines roles, route permissions, and access-check helpers.
+ *
+ * Note: The (dashboard) route group does NOT create a URL segment,
+ * so all dashboard pages are served at the root (/, /findings, etc.).
  */
 
 export type Role = "admin" | "manager" | "dev" | "viewer";
@@ -14,18 +17,18 @@ export interface RoutePermission {
 /**
  * Route permissions ordered from most-specific to least-specific.
  * The first matching prefix wins, so more restrictive routes must
- * come before the catch-all `/dashboard`.
+ * come before the catch-all `/`.
  */
 export const ROUTE_PERMISSIONS: RoutePermission[] = [
-  { path: "/dashboard/settings", roles: ["admin"] },
-  { path: "/dashboard/policies", roles: ["admin", "manager"] },
-  { path: "/dashboard/audit", roles: ["admin", "manager"] },
-  { path: "/dashboard/reports", roles: ["admin", "manager"] },
-  { path: "/dashboard/drift", roles: ["admin", "manager", "dev"] },
-  { path: "/dashboard/projects", roles: ["admin", "manager", "dev"] },
-  { path: "/dashboard/findings", roles: ["admin", "manager", "dev"] },
-  { path: "/dashboard/certificates", roles: ["admin", "manager", "dev", "viewer"] },
-  { path: "/dashboard", roles: ["admin", "manager", "dev", "viewer"] },
+  { path: "/settings", roles: ["admin"] },
+  { path: "/policies", roles: ["admin", "manager"] },
+  { path: "/audit", roles: ["admin", "manager"] },
+  { path: "/reports", roles: ["admin", "manager"] },
+  { path: "/drift", roles: ["admin", "manager", "dev"] },
+  { path: "/projects", roles: ["admin", "manager", "dev"] },
+  { path: "/findings", roles: ["admin", "manager", "dev"] },
+  { path: "/certificates", roles: ["admin", "manager", "dev", "viewer"] },
+  { path: "/", roles: ["admin", "manager", "dev", "viewer"] },
 ];
 
 /**
@@ -35,19 +38,19 @@ export const ROUTE_PERMISSIONS: RoutePermission[] = [
 export interface NavItem {
   label: string;
   href: string;
-  icon: string; // placeholder icon name
+  icon: string;
 }
 
 export const NAV_ITEMS: NavItem[] = [
-  { label: "Overview", href: "/dashboard", icon: "home" },
-  { label: "Projects", href: "/dashboard/projects", icon: "folder" },
-  { label: "Findings", href: "/dashboard/findings", icon: "search" },
-  { label: "Certificates", href: "/dashboard/certificates", icon: "shield" },
-  { label: "Policies", href: "/dashboard/policies", icon: "file-text" },
-  { label: "Reports", href: "/dashboard/reports", icon: "bar-chart" },
-  { label: "Drift", href: "/dashboard/drift", icon: "trending-up" },
-  { label: "Audit Log", href: "/dashboard/audit", icon: "clock" },
-  { label: "Settings", href: "/dashboard/settings", icon: "settings" },
+  { label: "Overview", href: "/", icon: "home" },
+  { label: "Projects", href: "/projects", icon: "folder" },
+  { label: "Findings", href: "/findings", icon: "search" },
+  { label: "Certificates", href: "/certificates", icon: "shield" },
+  { label: "Policies", href: "/policies", icon: "file-text" },
+  { label: "Reports", href: "/reports", icon: "bar-chart" },
+  { label: "Drift", href: "/drift", icon: "trending-up" },
+  { label: "Audit Log", href: "/audit", icon: "clock" },
+  { label: "Settings", href: "/settings", icon: "settings" },
 ];
 
 /**
@@ -57,9 +60,13 @@ export const NAV_ITEMS: NavItem[] = [
  * If no rule matches the path, access is denied by default.
  */
 export function canAccess(userRole: Role, path: string): boolean {
-  const normalised = path.replace(/\/+$/, "") || "/dashboard";
+  const normalised = path.replace(/\/+$/, "") || "/";
 
   for (const rule of ROUTE_PERMISSIONS) {
+    if (rule.path === "/") {
+      if (normalised === "/") return rule.roles.includes(userRole);
+      continue;
+    }
     if (normalised === rule.path || normalised.startsWith(rule.path + "/")) {
       return rule.roles.includes(userRole);
     }

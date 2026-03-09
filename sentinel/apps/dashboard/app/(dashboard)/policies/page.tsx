@@ -13,7 +13,7 @@ export default function PoliciesPage() {
         description="Manage scanning and compliance policies for your organization."
         action={
           <Link
-            href="/dashboard/policies/new"
+            href="/policies/new"
             className="inline-flex items-center gap-2 rounded-lg bg-accent px-4 py-2.5 text-[13px] font-semibold text-text-inverse transition-all hover:brightness-110 focus-ring"
           >
             <IconPlus className="h-4 w-4" />
@@ -63,7 +63,7 @@ export default function PoliciesPage() {
                 </td>
                 <td className="px-5 py-3.5">
                   <Link
-                    href={`/dashboard/policies/${policy.id}`}
+                    href={`/policies/${policy.id}`}
                     className="text-[13px] font-medium text-accent hover:brightness-110 focus-ring rounded"
                   >
                     Edit

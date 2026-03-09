@@ -5,7 +5,7 @@ const TIERS = [
     period: "",
     description: "For individual developers and small open-source projects.",
     cta: "Get Started",
-    ctaHref: "/dashboard",
+    ctaHref: "/",
     highlighted: false,
     features: [
       "Up to 3 projects",
@@ -22,7 +22,7 @@ const TIERS = [
     period: "/mo",
     description: "For teams shipping AI-generated code in production.",
     cta: "Start Free Trial",
-    ctaHref: "/dashboard",
+    ctaHref: "/",
     highlighted: true,
     features: [
       "Unlimited projects",

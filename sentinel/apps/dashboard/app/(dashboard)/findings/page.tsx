@@ -20,7 +20,7 @@ export default async function FindingsPage() {
         {findings.map((finding, i) => (
           <Link
             key={finding.id}
-            href={`/dashboard/findings/${finding.id}`}
+            href={`/findings/${finding.id}`}
             className="animate-fade-up block focus-ring rounded-lg"
             style={{ animationDelay: `${0.05 * i}s` }}
             aria-label={`View finding: ${finding.title}`}

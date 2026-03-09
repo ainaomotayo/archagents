@@ -65,7 +65,7 @@ export default function LandingPage() {
           </p>
           <div className="mt-10 flex items-center justify-center gap-4">
             <a
-              href="/dashboard"
+              href="/"
               className="rounded-xl bg-accent px-8 py-3.5 text-[14px] font-semibold text-text-inverse shadow-lg shadow-accent/20 transition-all hover:brightness-110 hover:shadow-accent/30"
             >
               Get Started
@@ -120,7 +120,7 @@ export default function LandingPage() {
             Start scanning in minutes. No credit card required.
           </p>
           <a
-            href="/dashboard"
+            href="/"
             className="mt-8 inline-block rounded-xl bg-accent px-10 py-3.5 text-[14px] font-semibold text-text-inverse shadow-lg shadow-accent/20 transition-all hover:brightness-110"
           >
             Get Started

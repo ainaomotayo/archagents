@@ -13,7 +13,7 @@ interface NavItemProps {
 export function NavItem({ label, href, icon }: NavItemProps) {
   const pathname = usePathname();
   const isActive =
-    pathname === href || (href !== "/dashboard" && pathname.startsWith(href + "/"));
+    pathname === href || (href !== "/" && pathname.startsWith(href + "/"));
 
   const Icon = ICON_MAP[icon];
 

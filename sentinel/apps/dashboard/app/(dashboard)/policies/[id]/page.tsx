@@ -73,7 +73,7 @@ export default function PolicyEditorPage({
       <div className="flex items-start justify-between gap-4">
         <div>
           <Link
-            href="/dashboard/policies"
+            href="/policies"
             className="inline-flex items-center gap-1 text-[13px] text-text-tertiary hover:text-accent transition-colors focus-ring rounded"
           >
             <IconChevronLeft className="h-3.5 w-3.5" />
