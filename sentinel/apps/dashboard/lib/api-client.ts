@@ -6,7 +6,11 @@
 const API_URL = process.env.SENTINEL_API_URL ?? "http://localhost:8080";
 const API_SECRET = process.env.SENTINEL_SECRET ?? "";
 
-export async function apiGet<T>(path: string, query?: Record<string, string>): Promise<T> {
+export async function apiGet<T>(
+  path: string,
+  query?: Record<string, string>,
+  extraHeaders?: Record<string, string>,
+): Promise<T> {
   const url = new URL(path, API_URL);
   if (query) {
     for (const [k, v] of Object.entries(query)) {
@@ -23,6 +27,7 @@ export async function apiGet<T>(path: string, query?: Record<string, string>): P
     headers: {
       "X-Sentinel-Signature": signature,
       "X-Sentinel-API-Key": "dashboard",
+      ...extraHeaders,
     },
     next: { revalidate: 30 },
   });
@@ -33,7 +38,11 @@ export async function apiGet<T>(path: string, query?: Record<string, string>): P
   return res.json() as Promise<T>;
 }
 
-export async function apiPost<T>(path: string, data: unknown): Promise<T> {
+export async function apiPost<T>(
+  path: string,
+  data: unknown,
+  extraHeaders?: Record<string, string>,
+): Promise<T> {
   const url = new URL(path, API_URL);
   const bodyStr = JSON.stringify(data);
   const { signRequest } = await import("@sentinel/auth");
@@ -45,6 +54,7 @@ export async function apiPost<T>(path: string, data: unknown): Promise<T> {
       "Content-Type": "application/json",
       "X-Sentinel-Signature": signature,
       "X-Sentinel-API-Key": "dashboard",
+      ...extraHeaders,
     },
     body: bodyStr,
   });
