@@ -289,6 +289,27 @@ app.get("/v1/projects/:id", { preHandler: authHook }, async (request, reply) => 
   });
 });
 
+app.get("/v1/projects/:id/findings", { preHandler: authHook }, async (request) => {
+  const orgId = (request as any).orgId ?? "default";
+  const { id } = request.params as { id: string };
+  const { limit = "50", offset = "0", severity, category } = request.query as any;
+  return withTenant(db, orgId, async (tx) => {
+    const where: any = { scan: { projectId: id } };
+    if (severity) where.severity = severity;
+    if (category) where.category = category;
+    const [findings, total] = await Promise.all([
+      tx.finding.findMany({
+        where,
+        take: Number(limit),
+        skip: Number(offset),
+        orderBy: { createdAt: "desc" },
+      }),
+      tx.finding.count({ where }),
+    ]);
+    return { findings, total, limit: Number(limit), offset: Number(offset) };
+  });
+});
+
 // --- Policies ---
 app.get("/v1/policies", { preHandler: authHook }, async (request) => {
   const orgId = (request as any).orgId ?? "default";

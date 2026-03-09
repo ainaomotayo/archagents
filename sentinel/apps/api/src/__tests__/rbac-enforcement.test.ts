@@ -49,6 +49,12 @@ describe("RBAC enforcement", () => {
     expect(isAuthorized("viewer", "DELETE", "/v1/policies/:id")).toBe(false);
   });
 
+  it("GET /v1/projects/:id/findings is accessible by all authenticated roles", () => {
+    expect(isAuthorized("admin", "GET", "/v1/projects/:id/findings")).toBe(true);
+    expect(isAuthorized("viewer", "GET", "/v1/projects/:id/findings")).toBe(true);
+    expect(isAuthorized("service", "GET", "/v1/projects/:id/findings")).toBe(false);
+  });
+
   it("service role can submit and read scans", () => {
     expect(isAuthorized("service", "POST", "/v1/scans")).toBe(true);
     expect(isAuthorized("service", "GET", "/v1/scans")).toBe(true);

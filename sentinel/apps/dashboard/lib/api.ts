@@ -127,10 +127,18 @@ export async function getProjectScans(projectId: string): Promise<Scan[]> {
 }
 
 export async function getProjectFindingCounts(
-  _projectId: string,
+  projectId: string,
 ): Promise<FindingCountByCategory[]> {
-  // TODO: Add a dedicated API endpoint for this
-  return MOCK_FINDING_COUNTS_BY_CATEGORY;
+  return tryApi(async () => {
+    const { apiGet } = await import("./api-client");
+    const data = await apiGet<{ findings: any[] }>(`/v1/projects/${projectId}/findings`, { limit: "500" });
+    const counts = new Map<string, number>();
+    for (const f of data.findings ?? []) {
+      const cat = f.category ?? f.type ?? "other";
+      counts.set(cat, (counts.get(cat) ?? 0) + 1);
+    }
+    return Array.from(counts.entries()).map(([category, count]) => ({ category, count }));
+  }, MOCK_FINDING_COUNTS_BY_CATEGORY);
 }
 
 // ── Findings ──────────────────────────────────────────────────────────
