@@ -4,6 +4,7 @@ sentinel_quality/__main__.py
 sentinel_quality/agent.py
 sentinel_quality/complexity.py
 sentinel_quality/duplication.py
+sentinel_quality/naming.py
 sentinel_quality/test_coverage.py
 sentinel_quality_agent.egg-info/PKG-INFO
 sentinel_quality_agent.egg-info/SOURCES.txt
@@ -14,3 +15,4 @@ tests/test_agent.py
 tests/test_complexity.py
 tests/test_coverage_gap.py
 tests/test_duplication.py
+tests/test_naming.py

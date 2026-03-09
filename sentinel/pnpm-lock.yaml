@@ -237,6 +237,9 @@ importers:
 
   test/e2e:
     dependencies:
+      '@sentinel/assessor':
+        specifier: workspace:*
+        version: link:../../packages/assessor
       '@sentinel/audit':
         specifier: workspace:*
         version: link:../../packages/audit

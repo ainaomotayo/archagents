@@ -10,7 +10,8 @@
     "@sentinel/shared": "workspace:*",
     "@sentinel/auth": "workspace:*",
     "@sentinel/events": "workspace:*",
-    "@sentinel/audit": "workspace:*"
+    "@sentinel/audit": "workspace:*",
+    "@sentinel/assessor": "workspace:*"
   },
   "devDependencies": {
     "vitest": "^3.0",
