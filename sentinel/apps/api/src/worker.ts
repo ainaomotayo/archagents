@@ -2,7 +2,16 @@ import { Redis } from "ioredis";
 import { EventBus } from "@sentinel/events";
 import { Assessor } from "@sentinel/assessor";
 import { getDb, disconnectDb } from "@sentinel/db";
+import {
+  createLogger,
+  findingsTotal,
+  agentResultsTotal,
+  pendingScansGauge,
+  scanDuration,
+} from "@sentinel/telemetry";
 import { createAssessmentStore } from "./stores.js";
+
+const logger = createLogger({ name: "sentinel-worker" });
 
 const redis = new Redis(process.env.REDIS_URL ?? "redis://localhost:6379");
 const eventBus = new EventBus(redis);
@@ -17,6 +26,7 @@ interface PendingScan {
   findings: any[];
   agents: Set<string>;
   timer: ReturnType<typeof setTimeout>;
+  startedAt: number;
 }
 
 const pendingScans = new Map<string, PendingScan>();
@@ -30,12 +40,24 @@ async function handleFinding(_id: string, data: Record<string, unknown>) {
       findings: [],
       agents: new Set(),
       timer: setTimeout(() => finalizeScan(scanId, true), AGENT_TIMEOUT_MS),
+      startedAt: performance.now(),
     };
     pendingScans.set(scanId, pending);
+    pendingScansGauge.set(pendingScans.size);
   }
 
   pending.findings.push({ scanId, agentName, findings, agentResult });
   pending.agents.add(agentName);
+
+  // Track per-finding metrics
+  if (Array.isArray(findings)) {
+    for (const f of findings) {
+      findingsTotal.inc({ severity: f.severity ?? "unknown", agent: agentName });
+    }
+  }
+  agentResultsTotal.inc({ agent: agentName, status: "received" });
+
+  logger.info({ scanId, agentName, findingsCount: Array.isArray(findings) ? findings.length : 0 }, "Agent finding received");
 
   if (EXPECTED_AGENTS.every((a) => pending!.agents.has(a))) {
     clearTimeout(pending.timer);
@@ -47,10 +69,11 @@ async function finalizeScan(scanId: string, hasTimeouts: boolean) {
   const pending = pendingScans.get(scanId);
   if (!pending) return;
   pendingScans.delete(scanId);
+  pendingScansGauge.set(pendingScans.size);
 
   const scan = await db.scan.findUnique({ where: { id: scanId } });
   if (!scan) {
-    console.error(`Scan ${scanId} not found, skipping assessment`);
+    logger.error({ scanId }, "Scan not found, skipping assessment");
     return;
   }
 
@@ -73,9 +96,12 @@ async function finalizeScan(scanId: string, hasTimeouts: boolean) {
       certificateId: assessment.certificate?.id,
     });
 
-    console.log(`Scan ${scanId} assessed: ${assessment.status} (score: ${assessment.riskScore})`);
+    const durationSec = (performance.now() - pending.startedAt) / 1000;
+    scanDuration.observe({ status: assessment.status }, durationSec);
+
+    logger.info({ scanId, status: assessment.status, riskScore: assessment.riskScore, durationSec }, "Scan assessed");
   } catch (err) {
-    console.error(`Failed to assess scan ${scanId}:`, err);
+    logger.error({ scanId, err }, "Failed to assess scan");
     await db.scan.update({
       where: { id: scanId },
       data: { status: "failed", completedAt: new Date() },
@@ -85,7 +111,7 @@ async function finalizeScan(scanId: string, hasTimeouts: boolean) {
 
 // Graceful shutdown
 const shutdown = async () => {
-  console.log("Assessor worker shutting down...");
+  logger.info("Assessor worker shutting down...");
   for (const [scanId, pending] of pendingScans) {
     clearTimeout(pending.timer);
     await finalizeScan(scanId, true);
@@ -105,4 +131,4 @@ eventBus.subscribe(
   handleFinding,
 );
 
-console.log("Assessor worker started, consuming sentinel.findings...");
+logger.info("Assessor worker started, consuming sentinel.findings...");

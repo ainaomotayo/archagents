@@ -17,6 +17,7 @@
     "@sentinel/audit": "workspace:*",
     "@sentinel/db": "workspace:*",
     "@sentinel/assessor": "workspace:*",
+    "@sentinel/telemetry": "workspace:*",
     "fastify": "^5.2",
     "ioredis": "^5.6"
   },

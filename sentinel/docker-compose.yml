@@ -87,5 +87,12 @@ services:
   #   environment:
   #     REDIS_URL: redis://redis:6379
 
+  prometheus:
+    image: prom/prometheus:v3.2
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./docker/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+
 volumes:
   pgdata:

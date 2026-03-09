@@ -1,14 +1,16 @@
+import crypto from "node:crypto";
 import Fastify from "fastify";
 import { Redis } from "ioredis";
 import { getDb, disconnectDb } from "@sentinel/db";
 import { EventBus } from "@sentinel/events";
 import { AuditLog } from "@sentinel/audit";
 import { verifyCertificate } from "@sentinel/assessor";
+import { createLogger, withCorrelationId, registry, httpRequestDuration } from "@sentinel/telemetry";
 import { createAuthHook } from "./middleware/auth.js";
 import { buildScanRoutes } from "./routes/scans.js";
 import { createScanStore, createAuditEventStore } from "./stores.js";
 
-const app = Fastify({ logger: true });
+const app = Fastify({ logger: createLogger({ name: "sentinel-api" }) });
 
 // --- Infrastructure ---
 const db = getDb();
@@ -30,12 +32,37 @@ const scanRoutes = buildScanRoutes({
   auditLog,
 });
 
+// --- Observability hooks ---
+app.addHook("onRequest", async (request) => {
+  (request as any).correlationId = crypto.randomUUID();
+  (request as any).startTime = performance.now();
+  request.log = withCorrelationId(request.log as any, (request as any).correlationId) as any;
+});
+
+app.addHook("onResponse", async (request, reply) => {
+  const durationSec = (performance.now() - (request as any).startTime) / 1000;
+  httpRequestDuration.observe(
+    {
+      method: request.method,
+      route: request.routeOptions?.url ?? request.url,
+      status_code: String(reply.statusCode),
+    },
+    durationSec,
+  );
+});
+
 // --- Health (no auth) ---
 app.get("/health", async () => ({
   status: "ok",
   version: "0.1.0",
   uptime: process.uptime(),
 }));
+
+// --- Metrics (no auth) ---
+app.get("/metrics", async (_request, reply) => {
+  const metrics = await registry.metrics();
+  reply.type("text/plain").send(metrics);
+});
 
 // --- Scans ---
 app.post("/v1/scans", { preHandler: authHook }, async (request, reply) => {

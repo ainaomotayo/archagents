@@ -1,0 +1,20 @@
+{
+  "name": "@sentinel/telemetry",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "pino": "^10.3",
+    "prom-client": "^15.1"
+  },
+  "devDependencies": {
+    "typescript": "^5.7",
+    "vitest": "^3.0"
+  }
+}
