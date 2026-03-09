@@ -1,0 +1,26 @@
+{
+  "name": "@sentinel/cli",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "sentinel": "dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx src/cli.ts",
+    "test": "vitest run",
+    "lint": "echo 'lint placeholder'"
+  },
+  "dependencies": {
+    "@sentinel/shared": "workspace:*",
+    "@sentinel/auth": "workspace:*",
+    "commander": "^13.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0",
+    "tsx": "^4.19",
+    "typescript": "^5.7",
+    "vitest": "^3.0"
+  }
+}

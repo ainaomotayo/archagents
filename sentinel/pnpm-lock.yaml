@@ -43,6 +43,31 @@ importers:
         specifier: ^3.0
         version: 3.2.4(@types/node@25.3.5)(jiti@2.6.1)(tsx@4.21.0)
 
+  apps/cli:
+    dependencies:
+      '@sentinel/auth':
+        specifier: workspace:*
+        version: link:../../packages/auth
+      '@sentinel/shared':
+        specifier: workspace:*
+        version: link:../../packages/shared
+      commander:
+        specifier: ^13.1
+        version: 13.1.0
+    devDependencies:
+      '@types/node':
+        specifier: ^22.0
+        version: 22.19.15
+      tsx:
+        specifier: ^4.19
+        version: 4.21.0
+      typescript:
+        specifier: ^5.7
+        version: 5.9.3
+      vitest:
+        specifier: ^3.0
+        version: 3.2.4(@types/node@22.19.15)(jiti@2.6.1)(tsx@4.21.0)
+
   packages/audit:
     devDependencies:
       '@types/node':
@@ -566,6 +591,10 @@ packages:
   cluster-key-slot@1.1.2:
     resolution: {integrity: sha512-RMr0FhtfXemyinomL4hrWcYJxmX6deFdCxpJzhDttxgO1+bcCnkk+9drydLVDmAMG7NE6aN/fl4F7ucU/90gAA==}
     engines: {node: '>=0.10.0'}
+
+  commander@13.1.0:
+    resolution: {integrity: sha512-/rFeCpNJQbhSZjGVwO9RFV3xPqbnERS8MmIQzCtD/zl6gpJuV/bMLuN92oG3F7d8oDEHHRrujSXNUr8fpjntKw==}
+    engines: {node: '>=18'}
 
   confbox@0.2.4:
     resolution: {integrity: sha512-ysOGlgTFbN2/Y6Cg3Iye8YKulHw+R2fNXHrgSmXISQdMnomY6eNDprVdW9R5xBguEqI954+S6709UyiO7B+6OQ==}
@@ -1399,6 +1428,8 @@ snapshots:
   citty@0.2.1: {}
 
   cluster-key-slot@1.1.2: {}
+
+  commander@13.1.0: {}
 
   confbox@0.2.4: {}
 
