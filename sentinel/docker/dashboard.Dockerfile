@@ -15,4 +15,4 @@ COPY --from=builder /app/apps/dashboard/.next/static ./.next/static
 COPY --from=builder /app/apps/dashboard/public ./public
 EXPOSE 3000
 ENV NODE_ENV=production
-CMD ["node", "server.js"]
+CMD ["node", "apps/dashboard/server.js"]
