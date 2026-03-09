@@ -18,6 +18,7 @@ export default function ErrorPage({
       <p className="text-[13px] text-text-secondary">{error.message}</p>
       <button
         onClick={reset}
+        aria-label="Try again"
         className="rounded-lg border border-border bg-surface-2 px-5 py-2.5 text-[13px] font-medium text-text-primary transition-colors hover:bg-surface-3 focus-ring"
       >
         Try again

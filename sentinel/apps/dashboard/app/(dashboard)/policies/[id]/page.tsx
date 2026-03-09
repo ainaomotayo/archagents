@@ -104,6 +104,7 @@ export default function PolicyEditorPage({
           <button
             onClick={handleSave}
             disabled={hasErrors}
+            aria-label={saved ? "Policy saved" : "Save policy"}
             className={`rounded-lg px-4 py-2.5 text-[13px] font-semibold text-text-inverse transition-all hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-40 focus-ring ${
               saved ? "bg-status-pass" : "bg-accent"
             }`}
