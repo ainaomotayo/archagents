@@ -20,6 +20,8 @@ export const ROUTE_PERMISSIONS: RoutePermission[] = [
   { path: "/dashboard/settings", roles: ["admin"] },
   { path: "/dashboard/policies", roles: ["admin", "manager"] },
   { path: "/dashboard/audit", roles: ["admin", "manager"] },
+  { path: "/dashboard/reports", roles: ["admin", "manager"] },
+  { path: "/dashboard/drift", roles: ["admin", "manager", "dev"] },
   { path: "/dashboard/projects", roles: ["admin", "manager", "dev"] },
   { path: "/dashboard/findings", roles: ["admin", "manager", "dev"] },
   { path: "/dashboard/certificates", roles: ["admin", "manager", "dev", "viewer"] },
@@ -42,6 +44,8 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Findings", href: "/dashboard/findings", icon: "search" },
   { label: "Certificates", href: "/dashboard/certificates", icon: "shield" },
   { label: "Policies", href: "/dashboard/policies", icon: "file-text" },
+  { label: "Reports", href: "/dashboard/reports", icon: "bar-chart" },
+  { label: "Drift", href: "/dashboard/drift", icon: "trending-up" },
   { label: "Audit Log", href: "/dashboard/audit", icon: "clock" },
   { label: "Settings", href: "/dashboard/settings", icon: "settings" },
 ];

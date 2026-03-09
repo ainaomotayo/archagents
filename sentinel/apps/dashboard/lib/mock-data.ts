@@ -366,3 +366,240 @@ export const MOCK_FINDING_COUNTS_BY_CATEGORY: FindingCountByCategory[] = [
   { category: "dependency", count: 3 },
   { category: "compliance", count: 1 },
 ];
+
+// ── Policies ──────────────────────────────────────────────────────────
+
+export interface MockPolicy {
+  id: string;
+  name: string;
+  enabled: boolean;
+  ruleCount: number;
+  updatedAt: string;
+  yaml: string;
+}
+
+export const MOCK_POLICIES: MockPolicy[] = [
+  {
+    id: "policy-001",
+    name: "Default Security Policy",
+    enabled: true,
+    ruleCount: 4,
+    updatedAt: "2026-03-08T10:00:00Z",
+    yaml: `version: "1.0"
+rules:
+  - id: secret-detection
+    severity: critical
+    enabled: true
+    description: "Detect hard-coded secrets and API keys"
+    threshold: 0
+
+  - id: ai-code-review
+    severity: high
+    enabled: true
+    description: "Flag AI-generated code without review markers"
+    threshold: 5
+
+  - id: dependency-audit
+    severity: medium
+    enabled: true
+    description: "Check for vulnerable dependencies"
+    threshold: 10
+
+  - id: pii-scanner
+    severity: high
+    enabled: true
+    description: "Identify PII exposure in source code"
+    threshold: 0
+`,
+  },
+  {
+    id: "policy-002",
+    name: "Strict Compliance Policy",
+    enabled: true,
+    ruleCount: 6,
+    updatedAt: "2026-03-06T14:30:00Z",
+    yaml: `version: "1.0"
+rules:
+  - id: secret-detection
+    severity: critical
+    enabled: true
+    threshold: 0
+
+  - id: ai-code-review
+    severity: critical
+    enabled: true
+    threshold: 0
+
+  - id: dependency-audit
+    severity: high
+    enabled: true
+    threshold: 0
+
+  - id: pii-scanner
+    severity: critical
+    enabled: true
+    threshold: 0
+
+  - id: license-check
+    severity: high
+    enabled: true
+    threshold: 0
+
+  - id: code-quality
+    severity: medium
+    enabled: true
+    threshold: 5
+`,
+  },
+  {
+    id: "policy-003",
+    name: "Development (Relaxed)",
+    enabled: false,
+    ruleCount: 2,
+    updatedAt: "2026-02-20T09:00:00Z",
+    yaml: `version: "1.0"
+rules:
+  - id: secret-detection
+    severity: high
+    enabled: true
+    threshold: 0
+
+  - id: dependency-audit
+    severity: medium
+    enabled: true
+    threshold: 20
+`,
+  },
+];
+
+// ── Audit Log ─────────────────────────────────────────────────────────
+
+export interface MockAuditEvent {
+  id: string;
+  timestamp: string;
+  action: string;
+  actor: string;
+  resource: string;
+  details: string;
+}
+
+export const MOCK_AUDIT_LOG: MockAuditEvent[] = [
+  {
+    id: "audit-001",
+    timestamp: "2026-03-08T14:35:00Z",
+    action: "certificate",
+    actor: "system",
+    resource: "cert-301",
+    details: "Certificate issued for sentinel-core (main @ a1b2c3d)",
+  },
+  {
+    id: "audit-002",
+    timestamp: "2026-03-08T14:30:00Z",
+    action: "scan",
+    actor: "ci-pipeline",
+    resource: "scan-101",
+    details: "Scan completed — PASS (risk score: 12)",
+  },
+  {
+    id: "audit-003",
+    timestamp: "2026-03-07T09:20:00Z",
+    action: "revocation",
+    actor: "admin@acme.com",
+    resource: "cert-303",
+    details: "Certificate revoked due to critical finding in payment-service",
+  },
+  {
+    id: "audit-004",
+    timestamp: "2026-03-07T09:15:00Z",
+    action: "scan",
+    actor: "ci-pipeline",
+    resource: "scan-102",
+    details: "Scan completed — FAIL (risk score: 78, 5 findings)",
+  },
+  {
+    id: "audit-005",
+    timestamp: "2026-03-07T09:15:00Z",
+    action: "finding",
+    actor: "system",
+    resource: "find-201",
+    details: "Critical finding: Hard-coded API key in payment-service",
+  },
+  {
+    id: "audit-006",
+    timestamp: "2026-03-06T18:45:00Z",
+    action: "scan",
+    actor: "ci-pipeline",
+    resource: "scan-103",
+    details: "Scan completed — PROVISIONAL (risk score: 45)",
+  },
+  {
+    id: "audit-007",
+    timestamp: "2026-03-06T15:00:00Z",
+    action: "policy",
+    actor: "admin@acme.com",
+    resource: "policy-002",
+    details: "Policy 'Strict Compliance Policy' updated — 6 rules",
+  },
+  {
+    id: "audit-008",
+    timestamp: "2026-03-05T11:05:00Z",
+    action: "certificate",
+    actor: "system",
+    resource: "cert-302",
+    details: "Certificate issued for data-pipeline (main @ q3r4s5t)",
+  },
+  {
+    id: "audit-009",
+    timestamp: "2026-03-05T10:00:00Z",
+    action: "scan",
+    actor: "ci-pipeline",
+    resource: "scan-104",
+    details: "Scan completed — PASS (risk score: 8)",
+  },
+  {
+    id: "audit-010",
+    timestamp: "2026-03-04T16:30:00Z",
+    action: "scan",
+    actor: "ci-pipeline",
+    resource: "scan-106",
+    details: "Scan completed — PASS (risk score: 22, 2 findings)",
+  },
+];
+
+// ── Webhooks ──────────────────────────────────────────────────────────
+
+export interface MockWebhook {
+  id: string;
+  name: string;
+  url: string;
+  events: string[];
+  enabled: boolean;
+  lastTriggered: string | null;
+}
+
+export const MOCK_WEBHOOKS: MockWebhook[] = [
+  {
+    id: "wh-001",
+    name: "Slack — #security-alerts",
+    url: "https://hooks.slack.com/services/T00000000/B00000000/XXXXXXXXXXXXXXXXXXXXXXXX",
+    events: ["scan.failed", "finding.created", "certificate.revoked"],
+    enabled: true,
+    lastTriggered: "2026-03-07T09:15:00Z",
+  },
+  {
+    id: "wh-002",
+    name: "PagerDuty — On-Call",
+    url: "https://events.pagerduty.com/integration/abc123/enqueue",
+    events: ["finding.created"],
+    enabled: true,
+    lastTriggered: "2026-03-07T09:15:00Z",
+  },
+  {
+    id: "wh-003",
+    name: "Jira — Ticket Creation",
+    url: "https://acme.atlassian.net/rest/webhooks/1.0/webhook",
+    events: ["scan.completed", "certificate.issued"],
+    enabled: false,
+    lastTriggered: null,
+  },
+];
