@@ -6,6 +6,10 @@ describe("s3-client", () => {
     delete process.env.S3_ARCHIVE_BUCKET;
     delete process.env.S3_ARCHIVE_PREFIX;
     delete process.env.S3_RETENTION_DAYS;
+    delete process.env.ARCHIVE_BUCKET;
+    delete process.env.ARCHIVE_PREFIX;
+    delete process.env.ARCHIVE_RETENTION_DAYS;
+    delete process.env.CLOUD_PROVIDER;
   });
 
   it("isArchiveEnabled returns false without env var", () => {
@@ -14,6 +18,7 @@ describe("s3-client", () => {
   });
 
   it("isArchiveEnabled returns true with env var", () => {
+    process.env.CLOUD_PROVIDER = "aws";
     process.env.S3_ARCHIVE_BUCKET = "my-bucket";
     expect(isArchiveEnabled()).toBe(true);
   });

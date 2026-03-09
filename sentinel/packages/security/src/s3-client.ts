@@ -1,20 +1,18 @@
-import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 import {
   buildArchiveKey,
-  buildPutObjectParams,
   type ArchiveConfig,
   type ArchiveResult,
 } from "./s3-archive.js";
+import type { ArchiveProvider } from "./archive-provider.js";
+import { createArchiveProvider, getCloudProvider } from "./cloud-factory.js";
 
-let s3: S3Client | undefined;
+let provider: ArchiveProvider | null | undefined;
 
-export function getS3Client(): S3Client {
-  if (!s3) {
-    s3 = new S3Client({
-      region: process.env.AWS_REGION ?? "us-east-1",
-    });
+async function getProvider(): Promise<ArchiveProvider | null> {
+  if (provider === undefined) {
+    provider = await createArchiveProvider();
   }
-  return s3;
+  return provider;
 }
 
 export async function archiveToS3(
@@ -23,28 +21,43 @@ export async function archiveToS3(
   documentId: string,
   data: string,
 ): Promise<ArchiveResult> {
-  const key = buildArchiveKey(orgId, documentId);
-  const params = buildPutObjectParams(config, key, data) as any;
-  const client = getS3Client();
+  const p = await getProvider();
+  if (!p) {
+    throw new Error("No cloud provider configured. Set CLOUD_PROVIDER env var.");
+  }
 
-  const result = await client.send(new PutObjectCommand(params));
+  const key = `${config.prefix}/${buildArchiveKey(orgId, documentId)}`;
 
-  return {
-    key: params.Key,
-    bucket: params.Bucket,
-    versionId: result.VersionId ?? "",
-    retainUntil: params.ObjectLockRetainUntilDate,
-  };
+  return p.upload({
+    bucket: config.bucket,
+    key,
+    data,
+    contentType: "application/json",
+    retentionDays: config.retentionDays,
+  });
 }
 
 export function isArchiveEnabled(): boolean {
-  return !!process.env.S3_ARCHIVE_BUCKET;
+  return getCloudProvider() !== null && !!(
+    process.env.ARCHIVE_BUCKET ||
+    process.env.S3_ARCHIVE_BUCKET ||
+    process.env.GCS_ARCHIVE_BUCKET ||
+    process.env.AZURE_ARCHIVE_CONTAINER
+  );
 }
 
 export function getArchiveConfig(): ArchiveConfig {
   return {
-    bucket: process.env.S3_ARCHIVE_BUCKET ?? "",
-    prefix: process.env.S3_ARCHIVE_PREFIX ?? "sentinel",
-    retentionDays: parseInt(process.env.S3_RETENTION_DAYS ?? "2555", 10),
+    bucket:
+      process.env.ARCHIVE_BUCKET ??
+      process.env.S3_ARCHIVE_BUCKET ??
+      process.env.GCS_ARCHIVE_BUCKET ??
+      process.env.AZURE_ARCHIVE_CONTAINER ??
+      "",
+    prefix: process.env.ARCHIVE_PREFIX ?? process.env.S3_ARCHIVE_PREFIX ?? "sentinel",
+    retentionDays: parseInt(
+      process.env.ARCHIVE_RETENTION_DAYS ?? process.env.S3_RETENTION_DAYS ?? "2555",
+      10,
+    ),
   };
 }

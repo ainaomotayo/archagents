@@ -38,6 +38,8 @@ export { archiveToS3, isArchiveEnabled, getArchiveConfig } from "./s3-client.js"
 
 export { AwsKmsKeyStore } from "./kms-aws.js";
 
+export { AwsArchiveProvider } from "./archive-aws.js";
+
 export {
   parsePnpmLockfile,
   parsePipRequirements,
