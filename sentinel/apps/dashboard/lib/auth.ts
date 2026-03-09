@@ -91,6 +91,53 @@ export function getConfiguredProviders(): any[] {
     );
   }
 
+  if (process.env.OIDC_CLIENT_ID && process.env.OIDC_CLIENT_SECRET && process.env.OIDC_ISSUER) {
+    providers.push({
+      id: "oidc",
+      name: process.env.OIDC_PROVIDER_NAME ?? "SSO",
+      type: "oauth",
+      wellKnown: `${process.env.OIDC_ISSUER}/.well-known/openid-configuration`,
+      clientId: process.env.OIDC_CLIENT_ID,
+      clientSecret: process.env.OIDC_CLIENT_SECRET,
+      authorization: { params: { scope: "openid email profile" } },
+      idToken: true,
+      profile(profile: any) {
+        return {
+          id: profile.sub,
+          name: profile.name ?? profile.preferred_username,
+          email: profile.email,
+          image: profile.picture,
+        };
+      },
+    } as any);
+  }
+
+  if (process.env.SAML_JACKSON_URL) {
+    const jacksonUrl = process.env.SAML_JACKSON_URL;
+    const product = process.env.SAML_JACKSON_PRODUCT ?? "sentinel";
+    providers.push({
+      id: "saml-jackson",
+      name: "SAML SSO",
+      type: "oauth",
+      authorization: {
+        url: `${jacksonUrl}/api/oauth/authorize`,
+        params: { scope: "", response_type: "code", provider: "saml", product },
+      },
+      token: `${jacksonUrl}/api/oauth/token`,
+      userinfo: `${jacksonUrl}/api/oauth/userinfo`,
+      clientId: process.env.SAML_CLIENT_ID ?? "dummy",
+      clientSecret: process.env.SAML_CLIENT_SECRET ?? "dummy",
+      profile(profile: any) {
+        return {
+          id: profile.id ?? profile.email,
+          name: profile.firstName ? `${profile.firstName} ${profile.lastName ?? ""}`.trim() : profile.email,
+          email: profile.email,
+          image: null,
+        };
+      },
+    } as any);
+  }
+
   return providers;
 }
 
