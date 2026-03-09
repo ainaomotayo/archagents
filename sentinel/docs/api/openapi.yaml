@@ -714,6 +714,39 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
 
   /v1/policies/{id}:
+    get:
+      operationId: getPolicy
+      summary: Get a policy
+      description: Retrieve a single compliance policy by ID.
+      tags: [Policies]
+      security:
+        - hmacAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Policy details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Policy"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Policy not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
     put:
       operationId: updatePolicy
       summary: Update a policy
