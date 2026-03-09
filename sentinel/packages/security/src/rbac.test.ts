@@ -17,7 +17,7 @@ describe("rbac", () => {
     // Viewer should NOT have write access
     expect(isAuthorized("viewer", "POST", "/v1/scans")).toBe(false);
     expect(isAuthorized("viewer", "POST", "/v1/policies")).toBe(false);
-    expect(isAuthorized("viewer", "DELETE", "/v1/policies")).toBe(false);
+    expect(isAuthorized("viewer", "DELETE", "/v1/policies/:id")).toBe(false);
     expect(isAuthorized("viewer", "POST", "/v1/orgs/purge")).toBe(false);
   });
 
@@ -33,10 +33,10 @@ describe("rbac", () => {
   });
 
   it("should restrict DELETE /v1/policies to admin only", () => {
-    expect(isAuthorized("admin", "DELETE", "/v1/policies")).toBe(true);
-    expect(isAuthorized("manager", "DELETE", "/v1/policies")).toBe(false);
-    expect(isAuthorized("developer", "DELETE", "/v1/policies")).toBe(false);
-    expect(isAuthorized("viewer", "DELETE", "/v1/policies")).toBe(false);
+    expect(isAuthorized("admin", "DELETE", "/v1/policies/:id")).toBe(true);
+    expect(isAuthorized("manager", "DELETE", "/v1/policies/:id")).toBe(false);
+    expect(isAuthorized("developer", "DELETE", "/v1/policies/:id")).toBe(false);
+    expect(isAuthorized("viewer", "DELETE", "/v1/policies/:id")).toBe(false);
   });
 
   it("should restrict purge to admin only", () => {
@@ -46,7 +46,7 @@ describe("rbac", () => {
 
   it("should allow manager to manage policies and certificates", () => {
     expect(isAuthorized("manager", "POST", "/v1/policies")).toBe(true);
-    expect(isAuthorized("manager", "PUT", "/v1/policies")).toBe(true);
+    expect(isAuthorized("manager", "PUT", "/v1/policies/:id")).toBe(true);
     expect(isAuthorized("manager", "POST", "/v1/certificates/:id/revoke")).toBe(true);
   });
 
@@ -69,6 +69,6 @@ describe("rbac", () => {
     // isAuthorized normalizes method to uppercase
     expect(isAuthorized("admin", "get", "/v1/scans")).toBe(true);
     expect(isAuthorized("admin", "post", "/v1/scans")).toBe(true);
-    expect(isAuthorized("admin", "delete", "/v1/policies")).toBe(true);
+    expect(isAuthorized("admin", "delete", "/v1/policies/:id")).toBe(true);
   });
 });

@@ -306,6 +306,38 @@ app.post("/v1/policies", { preHandler: authHook }, async (request, reply) => {
   });
 });
 
+app.put("/v1/policies/:id", { preHandler: authHook }, async (request, reply) => {
+  const orgId = (request as any).orgId ?? "default";
+  const { id } = request.params as { id: string };
+  const body = request.body as any;
+  return withTenant(db, orgId, async (tx) => {
+    const existing = await tx.policy.findUnique({ where: { id } });
+    if (!existing) {
+      reply.code(404).send({ error: "Policy not found" });
+      return;
+    }
+    const updated = await tx.policy.update({
+      where: { id },
+      data: { name: body.name, rules: body.rules, version: { increment: 1 } },
+    });
+    return updated;
+  });
+});
+
+app.delete("/v1/policies/:id", { preHandler: authHook }, async (request, reply) => {
+  const orgId = (request as any).orgId ?? "default";
+  const { id } = request.params as { id: string };
+  return withTenant(db, orgId, async (tx) => {
+    const existing = await tx.policy.findUnique({ where: { id } });
+    if (!existing) {
+      reply.code(404).send({ error: "Policy not found" });
+      return;
+    }
+    await tx.policy.delete({ where: { id } });
+    reply.code(204).send();
+  });
+});
+
 // --- Audit log ---
 app.get("/v1/audit", { preHandler: authHook }, async (request) => {
   const orgId = (request as any).orgId ?? "default";

@@ -35,6 +35,20 @@ describe("RBAC enforcement", () => {
     expect(isAuthorized("developer", "GET", "/v1/admin/dlq")).toBe(false);
   });
 
+  it("PUT /v1/policies/:id requires admin or manager", () => {
+    expect(isAuthorized("admin", "PUT", "/v1/policies/:id")).toBe(true);
+    expect(isAuthorized("manager", "PUT", "/v1/policies/:id")).toBe(true);
+    expect(isAuthorized("developer", "PUT", "/v1/policies/:id")).toBe(false);
+    expect(isAuthorized("viewer", "PUT", "/v1/policies/:id")).toBe(false);
+  });
+
+  it("DELETE /v1/policies/:id requires admin only", () => {
+    expect(isAuthorized("admin", "DELETE", "/v1/policies/:id")).toBe(true);
+    expect(isAuthorized("manager", "DELETE", "/v1/policies/:id")).toBe(false);
+    expect(isAuthorized("developer", "DELETE", "/v1/policies/:id")).toBe(false);
+    expect(isAuthorized("viewer", "DELETE", "/v1/policies/:id")).toBe(false);
+  });
+
   it("service role can submit and read scans", () => {
     expect(isAuthorized("service", "POST", "/v1/scans")).toBe(true);
     expect(isAuthorized("service", "GET", "/v1/scans")).toBe(true);
