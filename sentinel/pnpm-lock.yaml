@@ -108,6 +108,15 @@ importers:
         specifier: ^3.0.0
         version: 3.2.4(@types/node@22.19.15)(jiti@2.6.1)(lightningcss@1.31.1)(tsx@4.21.0)(yaml@2.8.2)
 
+  deploy:
+    devDependencies:
+      typescript:
+        specifier: ^5.7
+        version: 5.9.3
+      vitest:
+        specifier: ^3.0
+        version: 3.2.4(@types/node@25.3.5)(jiti@2.6.1)(lightningcss@1.31.1)(tsx@4.21.0)(yaml@2.8.2)
+
   packages/assessor:
     dependencies:
       '@sentinel/shared':
@@ -240,6 +249,15 @@ importers:
       '@sentinel/shared':
         specifier: workspace:*
         version: link:../../packages/shared
+    devDependencies:
+      typescript:
+        specifier: ^5.7
+        version: 5.9.3
+      vitest:
+        specifier: ^3.0
+        version: 3.2.4(@types/node@25.3.5)(jiti@2.6.1)(lightningcss@1.31.1)(tsx@4.21.0)(yaml@2.8.2)
+
+  test/load:
     devDependencies:
       typescript:
         specifier: ^5.7
