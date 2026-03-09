@@ -1,7 +1,8 @@
 import cron from "node-cron";
 import { Redis } from "ioredis";
 import { EventBus } from "@sentinel/events";
-import { SELF_SCAN_CONFIG, validateSelfScanConfig } from "@sentinel/security";
+import { SELF_SCAN_CONFIG, validateSelfScanConfig, runRetentionCleanup } from "@sentinel/security";
+import { getDb } from "@sentinel/db";
 import { createLogger } from "@sentinel/telemetry";
 
 const logger = createLogger({ name: "sentinel-scheduler" });
@@ -15,6 +16,8 @@ export interface SchedulerConfig {
   cveRescanEnabled: boolean;
   enabled: boolean;
 }
+
+export const RETENTION_SCHEDULE = "0 4 * * *";
 
 export function buildSchedulerConfig(): SchedulerConfig {
   const enabled = process.env.SELF_SCAN_ENABLED !== "false";
@@ -92,6 +95,18 @@ if (process.env.NODE_ENV !== "test") {
       }
     });
   }
+
+  // Data retention cleanup — daily at 4 AM
+  logger.info({ schedule: RETENTION_SCHEDULE }, "Starting data retention scheduler");
+  cron.schedule(RETENTION_SCHEDULE, async () => {
+    try {
+      const db = getDb();
+      const result = await runRetentionCleanup(db);
+      logger.info(result, "Data retention cleanup completed");
+    } catch (err) {
+      logger.error({ err }, "Data retention cleanup failed");
+    }
+  });
 
   const shutdown = async () => {
     logger.info("Scheduler shutting down...");

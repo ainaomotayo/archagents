@@ -1,5 +1,5 @@
 import { describe, test, expect } from "vitest";
-import { buildSchedulerConfig, shouldTriggerScan } from "../scheduler.js";
+import { buildSchedulerConfig, shouldTriggerScan, RETENTION_SCHEDULE } from "../scheduler.js";
 
 describe("scheduler", () => {
   test("buildSchedulerConfig returns valid config from SELF_SCAN_CONFIG", () => {
@@ -30,5 +30,9 @@ describe("scheduler", () => {
     const config = buildSchedulerConfig();
     config.enabled = false;
     expect(shouldTriggerScan(config)).toBe(false);
+  });
+
+  test("RETENTION_SCHEDULE is a valid daily cron expression", () => {
+    expect(RETENTION_SCHEDULE).toBe("0 4 * * *");
   });
 });
