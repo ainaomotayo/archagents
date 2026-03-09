@@ -2,8 +2,18 @@ import { describe, it, expect, vi } from "vitest";
 import { createAuthHook } from "./auth.js";
 import { signRequest } from "@sentinel/auth";
 
-function mockRequest(headers: Record<string, string>, body: unknown) {
-  return { headers, body } as Parameters<ReturnType<typeof createAuthHook>>[0];
+function mockRequest(
+  headers: Record<string, string>,
+  body: unknown,
+  options?: { method?: string; url?: string },
+) {
+  return {
+    headers,
+    body,
+    method: options?.method ?? "POST",
+    url: options?.url ?? "/v1/scans",
+    routeOptions: { url: options?.url ?? "/v1/scans" },
+  } as unknown as Parameters<ReturnType<typeof createAuthHook>>[0];
 }
 
 function mockReply() {

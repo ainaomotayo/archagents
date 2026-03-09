@@ -1,8 +1,10 @@
 import { verifyRequest } from "@sentinel/auth";
+import { isAuthorized, type ApiRole } from "@sentinel/security";
 import type { FastifyRequest, FastifyReply } from "fastify";
 
 interface AuthHookOptions {
   getOrgSecret: (apiKey?: string) => Promise<string | null>;
+  resolveRole?: (apiKey?: string) => Promise<ApiRole>;
 }
 
 export function createAuthHook(options: AuthHookOptions) {
@@ -13,18 +15,34 @@ export function createAuthHook(options: AuthHookOptions) {
       return;
     }
 
-    const secret = await options.getOrgSecret(
-      request.headers["x-sentinel-api-key"] as string | undefined,
-    );
+    const apiKey = request.headers["x-sentinel-api-key"] as string | undefined;
+
+    const secret = await options.getOrgSecret(apiKey);
     if (!secret) {
       reply.code(401).send({ error: "Invalid API key" });
       return;
     }
 
-    const body = typeof request.body === "string" ? request.body : JSON.stringify(request.body);
+    const body = typeof request.body === "string" ? request.body : JSON.stringify(request.body ?? "");
     const result = verifyRequest(signature, body, secret);
     if (!result.valid) {
       reply.code(401).send({ error: `Authentication failed: ${result.reason}` });
+      return;
+    }
+
+    // Resolve role
+    const role: ApiRole = options.resolveRole
+      ? await options.resolveRole(apiKey)
+      : (request.headers["x-sentinel-role"] as ApiRole) ?? "service";
+
+    // Store on request for downstream use
+    (request as any).role = role;
+    (request as any).orgId = (request as any).orgId ?? "default";
+
+    // RBAC check — use Fastify route pattern for matching
+    const routePath = request.routeOptions?.url ?? request.url;
+    if (!isAuthorized(role, request.method, routePath)) {
+      reply.code(403).send({ error: "Forbidden: insufficient permissions" });
       return;
     }
   };

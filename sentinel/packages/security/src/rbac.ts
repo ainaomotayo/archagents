@@ -8,15 +8,24 @@ export interface EndpointPermission {
 
 export const API_PERMISSIONS: EndpointPermission[] = [
   { method: "POST", path: "/v1/scans", roles: ["admin", "manager", "developer", "service"] },
-  { method: "GET", path: "/v1/scans", roles: ["admin", "manager", "developer", "viewer"] },
+  { method: "GET", path: "/v1/scans", roles: ["admin", "manager", "developer", "viewer", "service"] },
+  { method: "GET", path: "/v1/scans/:id", roles: ["admin", "manager", "developer", "viewer", "service"] },
+  { method: "GET", path: "/v1/scans/:id/poll", roles: ["admin", "manager", "developer", "viewer", "service"] },
   { method: "GET", path: "/v1/findings", roles: ["admin", "manager", "developer", "viewer"] },
+  { method: "GET", path: "/v1/findings/:id", roles: ["admin", "manager", "developer", "viewer"] },
+  { method: "GET", path: "/v1/certificates", roles: ["admin", "manager", "developer", "viewer"] },
+  { method: "GET", path: "/v1/certificates/:id", roles: ["admin", "manager", "developer", "viewer"] },
+  { method: "POST", path: "/v1/certificates/:id/verify", roles: ["admin", "manager", "developer", "viewer"] },
+  { method: "POST", path: "/v1/certificates/:id/revoke", roles: ["admin", "manager"] },
+  { method: "GET", path: "/v1/projects", roles: ["admin", "manager", "developer", "viewer"] },
+  { method: "GET", path: "/v1/projects/:id", roles: ["admin", "manager", "developer", "viewer"] },
+  { method: "GET", path: "/v1/policies", roles: ["admin", "manager", "developer", "viewer"] },
   { method: "POST", path: "/v1/policies", roles: ["admin", "manager"] },
   { method: "PUT", path: "/v1/policies", roles: ["admin", "manager"] },
   { method: "DELETE", path: "/v1/policies", roles: ["admin"] },
   { method: "GET", path: "/v1/audit", roles: ["admin", "manager"] },
   { method: "POST", path: "/v1/orgs/purge", roles: ["admin"] },
-  { method: "GET", path: "/v1/certificates", roles: ["admin", "manager", "developer", "viewer"] },
-  { method: "POST", path: "/v1/certificates/revoke", roles: ["admin", "manager"] },
+  { method: "GET", path: "/v1/admin/dlq", roles: ["admin"] },
 ];
 
 /**

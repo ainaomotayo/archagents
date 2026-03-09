@@ -21,9 +21,10 @@ describe("rbac", () => {
     expect(isAuthorized("viewer", "POST", "/v1/orgs/purge")).toBe(false);
   });
 
-  it("should allow service account to POST scans only", () => {
+  it("should allow service account to POST and GET scans", () => {
     expect(isAuthorized("service", "POST", "/v1/scans")).toBe(true);
-    expect(isAuthorized("service", "GET", "/v1/scans")).toBe(false);
+    expect(isAuthorized("service", "GET", "/v1/scans")).toBe(true);
+    expect(isAuthorized("service", "GET", "/v1/scans/:id/poll")).toBe(true);
     expect(isAuthorized("service", "POST", "/v1/policies")).toBe(false);
   });
 
@@ -46,7 +47,7 @@ describe("rbac", () => {
   it("should allow manager to manage policies and certificates", () => {
     expect(isAuthorized("manager", "POST", "/v1/policies")).toBe(true);
     expect(isAuthorized("manager", "PUT", "/v1/policies")).toBe(true);
-    expect(isAuthorized("manager", "POST", "/v1/certificates/revoke")).toBe(true);
+    expect(isAuthorized("manager", "POST", "/v1/certificates/:id/revoke")).toBe(true);
   });
 
   it("should return all endpoints for admin via getPermittedEndpoints", () => {
@@ -56,9 +57,11 @@ describe("rbac", () => {
 
   it("should return limited endpoints for viewer", () => {
     const endpoints = getPermittedEndpoints("viewer");
-    expect(endpoints.length).toBe(3); // GET scans, findings, certificates
+    expect(endpoints.length).toBe(11);
+    // Viewer should not have DELETE or admin access
     for (const ep of endpoints) {
-      expect(ep.method).toBe("GET");
+      expect(ep.method).not.toBe("DELETE");
+      expect(ep.path).not.toContain("/admin/");
     }
   });
 
