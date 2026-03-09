@@ -1,16 +1,18 @@
-import { MOCK_SCANS, MOCK_FINDINGS, MOCK_CERTIFICATES } from "@/lib/mock-data";
+import { getRecentScans, getFindings, getCertificates } from "@/lib/api";
 import { generateReportData, generateReportHtml } from "@/lib/report-generator";
 import { assessCompliance } from "@/lib/eu-ai-act";
 import { PageHeader } from "@/components/page-header";
 import { IconDownload } from "@/components/icons";
 
-export default function ReportsPage() {
-  const reportData = generateReportData(
-    MOCK_SCANS,
-    MOCK_FINDINGS,
-    MOCK_CERTIFICATES,
-  );
-  const euAssessment = assessCompliance(MOCK_SCANS, MOCK_CERTIFICATES);
+export default async function ReportsPage() {
+  const [scans, findings, certificates] = await Promise.all([
+    getRecentScans(100),
+    getFindings(),
+    getCertificates(),
+  ]);
+
+  const reportData = generateReportData(scans, findings, certificates);
+  const euAssessment = assessCompliance(scans, certificates);
 
   const html = generateReportHtml(reportData);
   const dataUri = `data:text/html;charset=utf-8,${encodeURIComponent(html)}`;

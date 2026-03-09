@@ -17,12 +17,18 @@ importers:
 
   apps/api:
     dependencies:
+      '@sentinel/assessor':
+        specifier: workspace:*
+        version: link:../../packages/assessor
       '@sentinel/audit':
         specifier: workspace:*
         version: link:../../packages/audit
       '@sentinel/auth':
         specifier: workspace:*
         version: link:../../packages/auth
+      '@sentinel/db':
+        specifier: workspace:*
+        version: link:../../packages/db
       '@sentinel/events':
         specifier: workspace:*
         version: link:../../packages/events
@@ -32,6 +38,9 @@ importers:
       fastify:
         specifier: ^5.2
         version: 5.8.2
+      ioredis:
+        specifier: ^5.6
+        version: 5.10.0
     devDependencies:
       tsx:
         specifier: ^4.19
@@ -70,6 +79,9 @@ importers:
 
   apps/dashboard:
     dependencies:
+      '@sentinel/auth':
+        specifier: workspace:*
+        version: link:../../packages/auth
       next:
         specifier: ^15.3.0
         version: 15.5.12(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
@@ -166,6 +178,9 @@ importers:
       prisma:
         specifier: ^6.4
         version: 6.19.2(typescript@5.9.3)
+      tsx:
+        specifier: ^4.19
+        version: 4.21.0
       typescript:
         specifier: ^5.7
         version: 5.9.3
