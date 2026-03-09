@@ -9,3 +9,10 @@ export type { CheckRunInput } from "./check-runs.js";
 
 export { findingsToAnnotations } from "./annotations.js";
 export type { CheckAnnotation } from "./annotations.js";
+
+export {
+  buildScanCompleteMessage,
+  buildRevocationMessage,
+  buildCriticalFindingMessage,
+} from "./slack.js";
+export type { SlackBlockMessage, SlackBlock } from "./slack.js";
