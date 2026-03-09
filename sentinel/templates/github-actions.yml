@@ -1,0 +1,38 @@
+# SENTINEL Scan - GitHub Actions Integration Template
+#
+# Add this workflow to your repository at .github/workflows/sentinel.yml
+# Required secrets:
+#   - SENTINEL_API_URL: Your SENTINEL API endpoint
+#   - SENTINEL_API_KEY: Your SENTINEL API key
+#   - SENTINEL_SECRET: Your HMAC shared secret
+
+name: SENTINEL Scan
+on: [push, pull_request]
+
+permissions:
+  contents: read
+  checks: write
+  pull-requests: write
+
+jobs:
+  sentinel:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install SENTINEL CLI
+        run: npm install -g @sentinel/cli
+
+      - name: Run SENTINEL Scan
+        run: sentinel ci --api-url ${{ secrets.SENTINEL_API_URL }}
+        env:
+          SENTINEL_API_KEY: ${{ secrets.SENTINEL_API_KEY }}
+          SENTINEL_SECRET: ${{ secrets.SENTINEL_SECRET }}
