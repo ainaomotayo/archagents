@@ -1,0 +1,985 @@
+openapi: "3.1.0"
+info:
+  title: SENTINEL API
+  version: "1.0.0"
+  description: |
+    AI-Generated Code Governance & Compliance API.
+
+    SENTINEL scans code diffs for security vulnerabilities, license compliance,
+    quality issues, policy violations, dependency risks, and AI-generation markers.
+    Passing scans receive a cryptographically signed compliance certificate.
+  contact:
+    name: SENTINEL Team
+    email: sentinel@archagents.dev
+  license:
+    name: Proprietary
+    identifier: LicenseRef-SENTINEL-1.0
+
+servers:
+  - url: https://api.sentinel.example.com
+    description: Production
+  - url: https://api-staging.sentinel.example.com
+    description: Staging
+
+paths:
+  /v1/scans:
+    post:
+      operationId: submitScan
+      summary: Submit a scan
+      description: |
+        Submit a code diff for compliance scanning. Returns a scan ID and
+        poll URL to check status. The scan runs asynchronously through the
+        agent pipeline (security, license, quality, policy, dependency, AI-detection).
+      tags: [Scans]
+      security:
+        - hmacAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ScanSubmission"
+      responses:
+        "202":
+          description: Scan accepted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScanResponse"
+        "400":
+          description: Invalid request body
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Missing or invalid HMAC signature
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          description: Rate limit exceeded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /v1/scans/{id}/poll:
+    get:
+      operationId: pollScan
+      summary: Poll scan status
+      description: |
+        Poll the status of a previously submitted scan. Returns the current
+        status and, when completed, the full assessment summary.
+      tags: [Scans]
+      security:
+        - hmacAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Scan ID returned from POST /v1/scans
+      responses:
+        "200":
+          description: Current scan status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PollResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Scan not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /v1/findings:
+    get:
+      operationId: listFindings
+      summary: List findings
+      description: |
+        List findings across scans with filtering and pagination.
+      tags: [Findings]
+      security:
+        - hmacAuth: []
+      parameters:
+        - name: scanId
+          in: query
+          schema:
+            type: string
+            format: uuid
+          description: Filter by scan ID
+        - name: severity
+          in: query
+          schema:
+            type: string
+            enum: [critical, high, medium, low, info]
+          description: Filter by severity
+        - name: type
+          in: query
+          schema:
+            type: string
+            enum: [security, license, quality, policy, dependency, ai-detection]
+          description: Filter by finding type
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 50
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+      responses:
+        "200":
+          description: Paginated list of findings
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [findings, total, limit, offset]
+                properties:
+                  findings:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Finding"
+                  total:
+                    type: integer
+                  limit:
+                    type: integer
+                  offset:
+                    type: integer
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /v1/certificates:
+    get:
+      operationId: listCertificates
+      summary: List certificates
+      description: |
+        List compliance certificates with filtering and pagination.
+      tags: [Certificates]
+      security:
+        - hmacAuth: []
+      parameters:
+        - name: projectId
+          in: query
+          schema:
+            type: string
+          description: Filter by project ID
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [pass, provisional, fail]
+          description: Filter by certificate verdict status
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 50
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+      responses:
+        "200":
+          description: Paginated list of certificates
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [certificates, total, limit, offset]
+                properties:
+                  certificates:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Certificate"
+                  total:
+                    type: integer
+                  limit:
+                    type: integer
+                  offset:
+                    type: integer
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /v1/certificates/{id}/revoke:
+    post:
+      operationId: revokeCertificate
+      summary: Revoke a certificate
+      description: |
+        Revoke a previously issued compliance certificate. This is an
+        irreversible action that updates the certificate status and creates
+        an audit log entry.
+      tags: [Certificates]
+      security:
+        - hmacAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Certificate ID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              properties:
+                reason:
+                  type: string
+                  description: Reason for revocation
+      responses:
+        "200":
+          description: Certificate revoked
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [id, status, revokedAt]
+                properties:
+                  id:
+                    type: string
+                  status:
+                    type: string
+                    enum: [revoked]
+                  revokedAt:
+                    type: string
+                    format: date-time
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Certificate not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /v1/policies:
+    get:
+      operationId: listPolicies
+      summary: List policies
+      description: List configured compliance policies for the organization.
+      tags: [Policies]
+      security:
+        - hmacAuth: []
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 50
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+      responses:
+        "200":
+          description: Paginated list of policies
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [policies, total, limit, offset]
+                properties:
+                  policies:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Policy"
+                  total:
+                    type: integer
+                  limit:
+                    type: integer
+                  offset:
+                    type: integer
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    post:
+      operationId: createPolicy
+      summary: Create a policy
+      description: Create a new compliance policy for the organization.
+      tags: [Policies]
+      security:
+        - hmacAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PolicyInput"
+      responses:
+        "201":
+          description: Policy created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Policy"
+        "400":
+          description: Invalid policy definition
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /v1/policies/{id}:
+    put:
+      operationId: updatePolicy
+      summary: Update a policy
+      description: Update an existing compliance policy.
+      tags: [Policies]
+      security:
+        - hmacAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PolicyInput"
+      responses:
+        "200":
+          description: Policy updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Policy"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Policy not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      operationId: deletePolicy
+      summary: Delete a policy
+      description: Delete an existing compliance policy.
+      tags: [Policies]
+      security:
+        - hmacAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: Policy deleted
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Policy not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /v1/audit:
+    get:
+      operationId: queryAuditLog
+      summary: Query audit log
+      description: |
+        Query the immutable, hash-chained audit log. Supports filtering by
+        actor, action, resource type, and time range.
+      tags: [Audit]
+      security:
+        - hmacAuth: []
+      parameters:
+        - name: action
+          in: query
+          schema:
+            type: string
+          description: Filter by action (e.g. scan.started, certificate.issued)
+        - name: resourceType
+          in: query
+          schema:
+            type: string
+            enum: [scan, certificate, finding, policy, project]
+          description: Filter by resource type
+        - name: since
+          in: query
+          schema:
+            type: string
+            format: date-time
+          description: Start of time range (inclusive)
+        - name: until
+          in: query
+          schema:
+            type: string
+            format: date-time
+          description: End of time range (inclusive)
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 500
+            default: 100
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+      responses:
+        "200":
+          description: Paginated audit events
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [events, total, limit, offset]
+                properties:
+                  events:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/AuditEvent"
+                  total:
+                    type: integer
+                  limit:
+                    type: integer
+                  offset:
+                    type: integer
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /health:
+    get:
+      operationId: healthCheck
+      summary: Health check
+      description: |
+        Returns service health status. Does not require authentication.
+        Used by load balancers and monitoring systems.
+      tags: [System]
+      responses:
+        "200":
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+        "503":
+          description: Service is degraded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+
+components:
+  schemas:
+    ScanSubmission:
+      type: object
+      required: [projectId, commitHash, branch, author, timestamp, files, scanConfig]
+      properties:
+        projectId:
+          type: string
+          description: Unique project identifier
+        commitHash:
+          type: string
+          description: Git commit SHA
+        branch:
+          type: string
+          description: Git branch name
+        author:
+          type: string
+          description: Commit author
+        timestamp:
+          type: string
+          format: date-time
+          description: Commit timestamp
+        files:
+          type: array
+          items:
+            type: object
+            required: [path, language, hunks, aiScore]
+            properties:
+              path:
+                type: string
+              language:
+                type: string
+              hunks:
+                type: array
+                items:
+                  type: object
+                  required: [oldStart, oldCount, newStart, newCount, content]
+                  properties:
+                    oldStart:
+                      type: integer
+                    oldCount:
+                      type: integer
+                    newStart:
+                      type: integer
+                    newCount:
+                      type: integer
+                    content:
+                      type: string
+              aiScore:
+                type: number
+                minimum: 0
+                maximum: 1
+        toolHints:
+          type: object
+          properties:
+            tool:
+              type: string
+            markers:
+              type: array
+              items:
+                type: string
+        scanConfig:
+          type: object
+          required: [securityLevel, licensePolicy, qualityThreshold]
+          properties:
+            securityLevel:
+              type: string
+              enum: [standard, strict, audit]
+            licensePolicy:
+              type: string
+            qualityThreshold:
+              type: number
+
+    ScanResponse:
+      type: object
+      required: [scanId, status, pollUrl]
+      properties:
+        scanId:
+          type: string
+          format: uuid
+          description: Unique scan identifier
+        status:
+          type: string
+          description: Current scan status
+        pollUrl:
+          type: string
+          description: URL to poll for scan completion
+
+    PollResponse:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [pending, scanning, completed, failed]
+          description: Current scan status
+        assessment:
+          type: object
+          properties:
+            status:
+              type: string
+              description: Assessment result status
+            riskScore:
+              type: number
+              minimum: 0
+              maximum: 100
+            findingCount:
+              type: integer
+            certificateId:
+              type: string
+              format: uuid
+
+    Finding:
+      type: object
+      required: [type, file, lineStart, lineEnd, severity, confidence]
+      properties:
+        type:
+          type: string
+          enum: [security, license, quality, policy, dependency, ai-detection]
+        file:
+          type: string
+        lineStart:
+          type: integer
+        lineEnd:
+          type: integer
+        severity:
+          type: string
+          enum: [critical, high, medium, low, info]
+        confidence:
+          type: string
+          enum: [high, medium, low]
+        title:
+          type: string
+        description:
+          type: string
+        remediation:
+          type: string
+        cweId:
+          type: string
+
+    Certificate:
+      type: object
+      required: [id, version, subject, verdict, scanMetadata, signature, issuedAt, expiresAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        version:
+          type: string
+          enum: ["1.0"]
+        subject:
+          type: object
+          required: [projectId, repository, commitHash, branch, author, timestamp]
+          properties:
+            projectId:
+              type: string
+            repository:
+              type: string
+            commitHash:
+              type: string
+            branch:
+              type: string
+            author:
+              type: string
+            timestamp:
+              type: string
+              format: date-time
+        verdict:
+          type: object
+          required: [status, riskScore, categories]
+          properties:
+            status:
+              type: string
+              enum: [pass, provisional, fail]
+            riskScore:
+              type: number
+              minimum: 0
+              maximum: 100
+            categories:
+              type: object
+              additionalProperties:
+                type: string
+                enum: [pass, warn, fail]
+        scanMetadata:
+          type: object
+          required: [agents, environmentHash, totalDurationMs, scanLevel]
+          properties:
+            agents:
+              type: array
+              items:
+                type: object
+                required: [name, version, rulesetVersion, rulesetHash, status, findingCount, durationMs]
+                properties:
+                  name:
+                    type: string
+                  version:
+                    type: string
+                  rulesetVersion:
+                    type: string
+                  rulesetHash:
+                    type: string
+                  status:
+                    type: string
+                    enum: [completed, error, timeout]
+                  findingCount:
+                    type: integer
+                  durationMs:
+                    type: integer
+            environmentHash:
+              type: string
+            totalDurationMs:
+              type: integer
+            scanLevel:
+              type: string
+              enum: [standard, strict, audit]
+        compliance:
+          type: object
+          properties:
+            euAiAct:
+              type: object
+              properties:
+                riskCategory:
+                  type: string
+                documentationComplete:
+                  type: boolean
+                humanOversightVerified:
+                  type: boolean
+            soc2:
+              type: object
+              properties:
+                controlsMapped:
+                  type: array
+                  items:
+                    type: string
+            iso27001:
+              type: object
+              properties:
+                controlsMapped:
+                  type: array
+                  items:
+                    type: string
+        signature:
+          type: string
+          description: Cryptographic signature of the certificate
+        issuedAt:
+          type: string
+          format: date-time
+        expiresAt:
+          type: string
+          format: date-time
+
+    Assessment:
+      type: object
+      required: [id, commitHash, projectId, timestamp, status, riskScore, categories, findings]
+      properties:
+        id:
+          type: string
+          format: uuid
+        commitHash:
+          type: string
+        projectId:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+        status:
+          type: string
+          enum: [full_pass, provisional_pass, fail, revoked, partial]
+        riskScore:
+          type: number
+          minimum: 0
+          maximum: 100
+        categories:
+          type: object
+          properties:
+            security:
+              $ref: "#/components/schemas/CategoryScore"
+            license:
+              $ref: "#/components/schemas/CategoryScore"
+            quality:
+              $ref: "#/components/schemas/CategoryScore"
+            policy:
+              $ref: "#/components/schemas/CategoryScore"
+            dependency:
+              $ref: "#/components/schemas/CategoryScore"
+        findings:
+          type: array
+          items:
+            $ref: "#/components/schemas/Finding"
+
+    CategoryScore:
+      type: object
+      required: [score, status, findings]
+      properties:
+        score:
+          type: number
+          minimum: 0
+          maximum: 100
+        status:
+          type: string
+          enum: [pass, warn, fail, error]
+        findings:
+          type: object
+          properties:
+            critical:
+              type: integer
+            high:
+              type: integer
+            medium:
+              type: integer
+            low:
+              type: integer
+
+    Policy:
+      type: object
+      required: [id, name, type, enabled, rules, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        type:
+          type: string
+          enum: [security, license, quality, dependency, ai-usage]
+        enabled:
+          type: boolean
+        rules:
+          type: array
+          items:
+            type: object
+            required: [field, operator, value]
+            properties:
+              field:
+                type: string
+              operator:
+                type: string
+                enum: [eq, neq, gt, lt, gte, lte, contains, not_contains]
+              value:
+                type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    PolicyInput:
+      type: object
+      required: [name, type, enabled, rules]
+      properties:
+        name:
+          type: string
+        type:
+          type: string
+          enum: [security, license, quality, dependency, ai-usage]
+        enabled:
+          type: boolean
+        rules:
+          type: array
+          items:
+            type: object
+            required: [field, operator, value]
+            properties:
+              field:
+                type: string
+              operator:
+                type: string
+                enum: [eq, neq, gt, lt, gte, lte, contains, not_contains]
+              value:
+                type: string
+
+    AuditEvent:
+      type: object
+      required: [id, timestamp, actor, action, resource, detail, eventHash]
+      properties:
+        id:
+          type: string
+          format: uuid
+        timestamp:
+          type: string
+          format: date-time
+        actor:
+          type: object
+          required: [type, id, name]
+          properties:
+            type:
+              type: string
+              enum: [system, user, agent, api]
+            id:
+              type: string
+            name:
+              type: string
+            ip:
+              type: string
+        action:
+          type: string
+        resource:
+          type: object
+          required: [type, id]
+          properties:
+            type:
+              type: string
+              enum: [scan, certificate, finding, policy, project]
+            id:
+              type: string
+        detail:
+          type: object
+          additionalProperties: true
+        previousEventHash:
+          type: string
+        eventHash:
+          type: string
+
+    HealthResponse:
+      type: object
+      required: [status, version, uptime]
+      properties:
+        status:
+          type: string
+          enum: [ok, degraded]
+        version:
+          type: string
+        uptime:
+          type: number
+          description: Uptime in seconds
+
+    ErrorResponse:
+      type: object
+      required: [error, code]
+      properties:
+        error:
+          type: string
+          description: Human-readable error message
+        code:
+          type: string
+          description: Machine-readable error code
+        details:
+          description: Additional error context
+
+  securitySchemes:
+    hmacAuth:
+      type: apiKey
+      in: header
+      name: X-Sentinel-Signature
+      description: |
+        HMAC-SHA256 signature of the request body using the shared secret.
+        Format: sha256=<hex-encoded-signature>

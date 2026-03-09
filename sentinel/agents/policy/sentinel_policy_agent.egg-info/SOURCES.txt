@@ -1,0 +1,16 @@
+pyproject.toml
+sentinel_policy/__init__.py
+sentinel_policy/__main__.py
+sentinel_policy/agent.py
+sentinel_policy/merge.py
+sentinel_policy/parser.py
+sentinel_policy/rules.py
+sentinel_policy_agent.egg-info/PKG-INFO
+sentinel_policy_agent.egg-info/SOURCES.txt
+sentinel_policy_agent.egg-info/dependency_links.txt
+sentinel_policy_agent.egg-info/requires.txt
+sentinel_policy_agent.egg-info/top_level.txt
+tests/test_agent.py
+tests/test_merge.py
+tests/test_parser.py
+tests/test_rules.py

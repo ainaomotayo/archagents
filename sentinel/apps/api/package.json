@@ -1,0 +1,25 @@
+{
+  "name": "@sentinel/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx watch src/server.ts",
+    "start": "node dist/server.js",
+    "test": "vitest run",
+    "lint": "echo 'lint placeholder'"
+  },
+  "dependencies": {
+    "@sentinel/shared": "workspace:*",
+    "@sentinel/events": "workspace:*",
+    "@sentinel/auth": "workspace:*",
+    "@sentinel/audit": "workspace:*",
+    "fastify": "^5.2"
+  },
+  "devDependencies": {
+    "tsx": "^4.19",
+    "typescript": "^5.7",
+    "vitest": "^3.0"
+  }
+}

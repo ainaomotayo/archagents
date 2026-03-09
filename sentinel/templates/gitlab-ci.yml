@@ -1,0 +1,23 @@
+# SENTINEL Scan - GitLab CI Integration Template
+#
+# Add this job to your .gitlab-ci.yml or include it via CI/CD includes.
+# Required CI/CD variables (Settings > CI/CD > Variables):
+#   - SENTINEL_API_URL: Your SENTINEL API endpoint
+#   - SENTINEL_API_KEY: Your SENTINEL API key (masked)
+#   - SENTINEL_SECRET: Your HMAC shared secret (masked)
+
+sentinel-scan:
+  stage: test
+  image: node:22-alpine
+  before_script:
+    - npm install -g @sentinel/cli
+  script:
+    - sentinel ci --api-url $SENTINEL_API_URL
+  variables:
+    SENTINEL_API_KEY: $SENTINEL_API_KEY
+    SENTINEL_SECRET: $SENTINEL_SECRET
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+  timeout: 10m
+  allow_failure: false

@@ -1,0 +1,259 @@
+# SENTINEL On-Prem Production Deployment
+# Usage: docker compose -f docker-compose.sentinel.yml --env-file .env up -d
+# With LLM agent: docker compose -f docker-compose.sentinel.yml --profile llm --env-file .env up -d
+
+networks:
+  sentinel-internal:
+    driver: bridge
+    internal: true
+  sentinel-external:
+    driver: bridge
+
+volumes:
+  pgdata:
+  redisdata:
+
+services:
+  # ---------- Infrastructure ----------
+
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    networks:
+      - sentinel-internal
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    networks:
+      - sentinel-internal
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # ---------- Application ----------
+
+  api:
+    build:
+      context: .
+      dockerfile: docker/api.Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - sentinel-internal
+      - sentinel-external
+    ports:
+      - "${API_PORT:-8080}:8080"
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: ${REDIS_URL}
+      SENTINEL_SECRET: ${SENTINEL_SECRET}
+      NODE_ENV: production
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+  dashboard:
+    build:
+      context: .
+      dockerfile: docker/dashboard.Dockerfile
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    networks:
+      - sentinel-external
+    ports:
+      - "${DASHBOARD_PORT:-3000}:3000"
+    environment:
+      NEXTAUTH_URL: ${NEXTAUTH_URL}
+      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET}
+      GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID}
+      GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET}
+      NEXT_PUBLIC_API_URL: http://api:8080
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/api/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  # ---------- Analysis Agents ----------
+
+  security-agent:
+    build:
+      context: .
+      dockerfile: docker/agent.Dockerfile
+      args:
+        AGENT_NAME: security
+    restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - sentinel-internal
+    environment:
+      REDIS_URL: ${REDIS_URL}
+    healthcheck:
+      test: ["CMD-SHELL", "python -c 'import sentinel_security; print(\"ok\")' || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+  license-agent:
+    build:
+      context: .
+      dockerfile: docker/agent.Dockerfile
+      args:
+        AGENT_NAME: ip-license
+    restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - sentinel-internal
+    environment:
+      REDIS_URL: ${REDIS_URL}
+    healthcheck:
+      test: ["CMD-SHELL", "python -c 'import sentinel_ip_license; print(\"ok\")' || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+  dependency-agent:
+    build:
+      context: .
+      dockerfile: docker/agent.Dockerfile
+      args:
+        AGENT_NAME: dependency
+    restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - sentinel-internal
+    environment:
+      REDIS_URL: ${REDIS_URL}
+    healthcheck:
+      test: ["CMD-SHELL", "python -c 'import sentinel_dependency; print(\"ok\")' || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+  ai-detector-agent:
+    build:
+      context: .
+      dockerfile: docker/agent.Dockerfile
+      args:
+        AGENT_NAME: ai-detector
+    restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - sentinel-internal
+    environment:
+      REDIS_URL: ${REDIS_URL}
+    healthcheck:
+      test: ["CMD-SHELL", "python -c 'import sentinel_ai_detector; print(\"ok\")' || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+  quality-agent:
+    build:
+      context: .
+      dockerfile: docker/agent.Dockerfile
+      args:
+        AGENT_NAME: quality
+    restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - sentinel-internal
+    environment:
+      REDIS_URL: ${REDIS_URL}
+    healthcheck:
+      test: ["CMD-SHELL", "python -c 'import sentinel_quality; print(\"ok\")' || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+  policy-agent:
+    build:
+      context: .
+      dockerfile: docker/agent.Dockerfile
+      args:
+        AGENT_NAME: policy
+    restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - sentinel-internal
+    environment:
+      REDIS_URL: ${REDIS_URL}
+    healthcheck:
+      test: ["CMD-SHELL", "python -c 'import sentinel_policy; print(\"ok\")' || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+  # ---------- Optional: LLM-powered Agents (requires API key) ----------
+
+  llm-review-agent:
+    profiles:
+      - llm
+    build:
+      context: .
+      dockerfile: docker/agent.Dockerfile
+      args:
+        AGENT_NAME: llm-review
+    restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - sentinel-internal
+    environment:
+      REDIS_URL: ${REDIS_URL}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      LLM_TOKEN_BUDGET: ${LLM_TOKEN_BUDGET:-50000}
+    healthcheck:
+      test: ["CMD-SHELL", "python -c 'import sentinel_llm_review; print(\"ok\")' || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s

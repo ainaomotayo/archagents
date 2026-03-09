@@ -1,0 +1,19 @@
+{
+  "name": "@sentinel/e2e-tests",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@sentinel/shared": "workspace:*",
+    "@sentinel/auth": "workspace:*",
+    "@sentinel/events": "workspace:*",
+    "@sentinel/audit": "workspace:*"
+  },
+  "devDependencies": {
+    "vitest": "^3.0",
+    "typescript": "^5.7"
+  }
+}
