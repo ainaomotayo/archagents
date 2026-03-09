@@ -1,5 +1,16 @@
 import { getRecentScans } from "@/lib/api";
 import { PageHeader } from "@/components/page-header";
+import {
+  IconActivity,
+  IconTrendingUp,
+  IconBarChart,
+} from "@/components/icons";
+
+const STAT_ICONS = [
+  { Icon: IconActivity, accent: "text-accent", glow: "from-accent/20" },
+  { Icon: IconTrendingUp, accent: "text-status-warn", glow: "from-status-warn/20" },
+  { Icon: IconBarChart, accent: "text-status-pass", glow: "from-status-pass/20" },
+];
 
 export default async function DriftPage() {
   const scans = await getRecentScans(20);
@@ -21,6 +32,32 @@ export default async function DriftPage() {
   const latestAi = trendData.at(-1)?.aiPercent ?? 0;
   const firstAi = trendData.at(0)?.aiPercent ?? 0;
   const drift = latestAi - firstAi;
+  const maxPercent = Math.max(...trendData.map((d) => d.aiPercent), 1);
+
+  const statCards = [
+    {
+      label: "Current AI Composition",
+      value: `${latestAi.toFixed(1)}%`,
+      sub: "Latest scan",
+      trend: latestAi > 50 ? "Above threshold" : "Within threshold",
+      trendUp: latestAi <= 50,
+    },
+    {
+      label: "Drift (Period)",
+      value: `${drift > 0 ? "+" : ""}${drift.toFixed(1)}%`,
+      sub: `Over ${trendData.length} scans`,
+      trend: drift > 0 ? "Increasing" : "Stable",
+      trendUp: drift <= 0,
+      valueColor: drift > 0 ? "text-status-warn" : "text-status-pass",
+    },
+    {
+      label: "Scans Analysed",
+      value: trendData.length.toString(),
+      sub: "Total in period",
+      trend: "Complete",
+      trendUp: true,
+    },
+  ];
 
   return (
     <div className="space-y-8">
@@ -32,46 +69,129 @@ export default async function DriftPage() {
       {/* Summary cards */}
       <section aria-label="Drift metrics" className="animate-fade-up" style={{ animationDelay: "0.05s" }}>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-          <div className="stat-card rounded-xl border border-border bg-surface-1 p-5">
-            <p className="text-[11px] font-semibold uppercase tracking-wider text-text-tertiary">Current AI Composition</p>
-            <p className="mt-3 text-3xl font-bold tracking-tight text-text-primary">
-              {latestAi.toFixed(1)}%
-            </p>
-          </div>
-          <div className="stat-card rounded-xl border border-border bg-surface-1 p-5">
-            <p className="text-[11px] font-semibold uppercase tracking-wider text-text-tertiary">Drift (Period)</p>
-            <p className={`mt-3 text-3xl font-bold tracking-tight ${drift > 0 ? "text-status-warn" : "text-status-pass"}`}>
-              {drift > 0 ? "+" : ""}
-              {drift.toFixed(1)}%
-            </p>
-          </div>
-          <div className="stat-card rounded-xl border border-border bg-surface-1 p-5">
-            <p className="text-[11px] font-semibold uppercase tracking-wider text-text-tertiary">Scans Analysed</p>
-            <p className="mt-3 text-3xl font-bold tracking-tight text-text-primary">
-              {trendData.length}
-            </p>
-          </div>
+          {statCards.map((card, i) => {
+            const { Icon, accent, glow } = STAT_ICONS[i];
+            return (
+              <div
+                key={card.label}
+                className="stat-card group relative overflow-hidden rounded-xl border border-border bg-surface-1 p-5"
+              >
+                {/* Subtle gradient glow */}
+                <div
+                  className={`absolute -right-6 -top-6 h-24 w-24 rounded-full bg-gradient-radial ${glow} to-transparent opacity-0 transition-opacity group-hover:opacity-100`}
+                />
+                <div className="relative">
+                  <div className="flex items-center justify-between">
+                    <p className="text-[10px] font-semibold uppercase tracking-wider text-text-tertiary">
+                      {card.label}
+                    </p>
+                    <div
+                      className={`flex h-7 w-7 items-center justify-center rounded-lg bg-surface-2 ${accent}`}
+                    >
+                      <Icon className="h-3.5 w-3.5" />
+                    </div>
+                  </div>
+                  <p className={`mt-2 text-3xl font-bold tracking-tight ${
+                    "valueColor" in card && card.valueColor
+                      ? card.valueColor
+                      : "text-text-primary"
+                  }`}>
+                    {card.value}
+                  </p>
+                  <div className="mt-2 flex items-center justify-between">
+                    <p className="text-[10px] text-text-tertiary">{card.sub}</p>
+                    <span
+                      className={`text-[10px] font-semibold ${
+                        card.trendUp
+                          ? "text-status-pass"
+                          : "text-status-warn"
+                      }`}
+                    >
+                      {card.trend}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
         </div>
       </section>
 
       {/* Trend chart */}
       <section aria-label="Drift trend chart" className="animate-fade-up" style={{ animationDelay: "0.15s" }}>
-        <h2 className="mb-4 text-sm font-semibold text-text-primary">AI Composition Over Time</h2>
         <div className="rounded-xl border border-border bg-surface-1 p-6">
-          <div className="flex items-end gap-2" style={{ height: "200px" }}>
-            {trendData.map((d, i) => (
-              <div key={d.commit} className="flex flex-1 flex-col items-center gap-2">
-                <div
-                  className="chart-bar w-full rounded-t bg-accent/40 hover:bg-accent/70 transition-colors cursor-default"
-                  style={{
-                    height: `${d.aiPercent * 1.8}px`,
-                    animationDelay: `${i * 0.1}s`,
-                  }}
-                  title={`${d.date}: ${d.aiPercent.toFixed(1)}% AI`}
-                />
-                <span className="text-[10px] text-text-tertiary">{d.date}</span>
-              </div>
-            ))}
+          <div className="mb-4 flex items-center justify-between">
+            <div>
+              <h2 className="text-sm font-semibold text-text-primary">AI Composition Over Time</h2>
+              <p className="mt-0.5 text-[11px] text-text-tertiary">
+                Percentage of AI-generated code per scan
+              </p>
+            </div>
+            {/* Chart legend */}
+            <div className="flex items-center gap-4 text-[10px]">
+              <span className="flex items-center gap-1.5">
+                <span className="h-2 w-2 rounded-full bg-accent" />
+                <span className="text-text-tertiary">Under 50%</span>
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span className="h-2 w-2 rounded-full bg-status-warn" />
+                <span className="text-text-tertiary">50% &ndash; 75%</span>
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span className="h-2 w-2 rounded-full bg-status-fail" />
+                <span className="text-text-tertiary">Above 75%</span>
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span className="h-[1px] w-3 border-t border-dashed border-status-fail/50" />
+                <span className="text-text-tertiary">Threshold (50%)</span>
+              </span>
+            </div>
+          </div>
+
+          {/* Chart */}
+          <div className="relative">
+            {/* Threshold line at 50% */}
+            <div
+              className="absolute left-0 right-0 border-t border-dashed border-status-fail/25"
+              style={{ bottom: `${(50 / maxPercent) * 90}%` }}
+            >
+              <span className="absolute -top-3 right-0 text-[9px] text-status-fail/50">
+                50%
+              </span>
+            </div>
+
+            <div className="flex items-end gap-1.5" style={{ height: "200px" }}>
+              {trendData.map((d, i) => {
+                const height = Math.max((d.aiPercent / maxPercent) * 90, 6);
+                const barColor =
+                  d.aiPercent >= 75
+                    ? "bg-status-fail"
+                    : d.aiPercent >= 50
+                      ? "bg-status-warn"
+                      : "bg-accent";
+
+                return (
+                  <div
+                    key={d.commit}
+                    className="group/bar flex flex-1 flex-col items-center gap-1"
+                  >
+                    {/* Tooltip */}
+                    <div className="invisible mb-1 whitespace-nowrap rounded-md bg-surface-4 px-2.5 py-1.5 text-[10px] text-text-primary shadow-lg group-hover/bar:visible">
+                      <span className="font-semibold">{d.aiPercent.toFixed(1)}%</span>
+                      <span className="ml-1 text-text-tertiary">AI</span>
+                    </div>
+                    <div
+                      className={`chart-bar w-full rounded-t ${barColor} opacity-80 transition-opacity hover:opacity-100`}
+                      style={{
+                        height: `${height}%`,
+                        animationDelay: `${i * 0.08}s`,
+                      }}
+                    />
+                    <span className="text-[9px] text-text-tertiary">{d.date}</span>
+                  </div>
+                );
+              })}
+            </div>
           </div>
         </div>
       </section>
@@ -82,12 +202,12 @@ export default async function DriftPage() {
         <div className="overflow-hidden rounded-xl border border-border bg-surface-1">
           <table className="w-full text-left text-[13px]">
             <thead>
-              <tr className="border-b border-border bg-surface-2">
-                <th scope="col" className="px-5 py-3 text-[10px] font-semibold uppercase tracking-widest text-text-tertiary">Date</th>
-                <th scope="col" className="px-5 py-3 text-[10px] font-semibold uppercase tracking-widest text-text-tertiary">Commit</th>
-                <th scope="col" className="px-5 py-3 text-[10px] font-semibold uppercase tracking-widest text-text-tertiary">Branch</th>
-                <th scope="col" className="px-5 py-3 text-[10px] font-semibold uppercase tracking-widest text-text-tertiary">AI %</th>
-                <th scope="col" className="px-5 py-3 text-[10px] font-semibold uppercase tracking-widest text-text-tertiary">Risk Score</th>
+              <tr className="border-b border-border bg-surface-2/50">
+                <th scope="col" className="px-5 py-2.5 text-[10px] font-semibold uppercase tracking-widest text-text-tertiary">Date</th>
+                <th scope="col" className="px-5 py-2.5 text-[10px] font-semibold uppercase tracking-widest text-text-tertiary">Commit</th>
+                <th scope="col" className="px-5 py-2.5 text-[10px] font-semibold uppercase tracking-widest text-text-tertiary">Branch</th>
+                <th scope="col" className="px-5 py-2.5 text-[10px] font-semibold uppercase tracking-widest text-text-tertiary">AI %</th>
+                <th scope="col" className="px-5 py-2.5 text-[10px] font-semibold uppercase tracking-widest text-text-tertiary">Risk Score</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border-subtle">
@@ -98,15 +218,31 @@ export default async function DriftPage() {
                   <td className="px-5 py-3.5 text-text-secondary">{d.branch}</td>
                   <td className="px-5 py-3.5 font-mono text-text-secondary">{d.aiPercent.toFixed(1)}%</td>
                   <td className="px-5 py-3.5">
-                    <span className={
-                      d.riskScore >= 50
-                        ? "font-semibold text-status-fail"
-                        : d.riskScore >= 25
-                          ? "font-semibold text-status-warn"
-                          : "text-text-secondary"
-                    }>
-                      {d.riskScore}
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <div className="h-1.5 w-16 overflow-hidden rounded-full bg-surface-3">
+                        <div
+                          className={`h-full rounded-full transition-all ${
+                            d.riskScore >= 50
+                              ? "bg-status-fail"
+                              : d.riskScore >= 25
+                                ? "bg-status-warn"
+                                : "bg-status-pass"
+                          }`}
+                          style={{ width: `${d.riskScore}%` }}
+                        />
+                      </div>
+                      <span
+                        className={`font-mono text-xs ${
+                          d.riskScore >= 50
+                            ? "text-status-fail"
+                            : d.riskScore >= 25
+                              ? "text-status-warn"
+                              : "text-text-secondary"
+                        }`}
+                      >
+                        {d.riskScore}
+                      </span>
+                    </div>
                   </td>
                 </tr>
               ))}
