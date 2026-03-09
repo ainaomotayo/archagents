@@ -1,0 +1,16 @@
+pyproject.toml
+sentinel_ai_detector_agent.egg-info/PKG-INFO
+sentinel_ai_detector_agent.egg-info/SOURCES.txt
+sentinel_ai_detector_agent.egg-info/dependency_links.txt
+sentinel_ai_detector_agent.egg-info/requires.txt
+sentinel_ai_detector_agent.egg-info/top_level.txt
+sentinel_aidetector/__init__.py
+sentinel_aidetector/__main__.py
+sentinel_aidetector/agent.py
+sentinel_aidetector/markers.py
+sentinel_aidetector/stylometric.py
+sentinel_aidetector/timing.py
+tests/test_agent.py
+tests/test_markers.py
+tests/test_stylometric.py
+tests/test_timing.py
