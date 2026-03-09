@@ -85,6 +85,24 @@ app.get("/metrics", { config: { rateLimit: false } }, async (_request, reply) =>
 });
 
 // --- Scans ---
+app.get("/v1/scans", { preHandler: authHook }, async (request) => {
+  const { limit = "50", offset = "0", status, projectId } = request.query as any;
+  const where: any = {};
+  if (status) where.status = status;
+  if (projectId) where.projectId = projectId;
+  const [scans, total] = await Promise.all([
+    db.scan.findMany({
+      where,
+      take: Number(limit),
+      skip: Number(offset),
+      orderBy: { startedAt: "desc" },
+      include: { certificate: true, _count: { select: { findings: true } } },
+    }),
+    db.scan.count({ where }),
+  ]);
+  return { scans, total, limit: Number(limit), offset: Number(offset) };
+});
+
 app.post("/v1/scans", { preHandler: authHook }, async (request, reply) => {
   const body = request.body as any;
   const orgId = (request as any).orgId ?? "default";

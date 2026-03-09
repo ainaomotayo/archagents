@@ -59,9 +59,19 @@ export async function getOverviewStats(): Promise<OverviewStats> {
 export async function getRecentScans(limit = 5): Promise<Scan[]> {
   return tryApi(async () => {
     const { apiGet } = await import("./api-client");
-    const data = await apiGet<any[]>("/v1/projects");
-    // For now return mock scans — the /v1/scans list endpoint needs to be added
-    return MOCK_SCANS.slice(0, limit);
+    const data = await apiGet<{ scans: any[] }>("/v1/scans", { limit: String(limit) });
+    return (data.scans ?? []).map((s: any) => ({
+      id: s.id,
+      projectId: s.projectId,
+      commit: s.commitHash ?? "",
+      branch: s.branch ?? "",
+      status: s.status === "completed"
+        ? (s.riskScore <= 20 ? "pass" : s.riskScore <= 50 ? "provisional" : "fail")
+        : s.status === "failed" ? "fail" : "running",
+      riskScore: s.riskScore ?? 0,
+      findingCount: s._count?.findings ?? 0,
+      date: s.startedAt,
+    }));
   }, MOCK_SCANS.slice(0, limit));
 }
 
