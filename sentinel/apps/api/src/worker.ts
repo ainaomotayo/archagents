@@ -9,6 +9,7 @@ import {
   pendingScansGauge,
   scanDuration,
 } from "@sentinel/telemetry";
+import { isArchiveEnabled, archiveToS3, getArchiveConfig } from "@sentinel/security";
 import { createAssessmentStore } from "./stores.js";
 
 const logger = createLogger({ name: "sentinel-worker" });
@@ -88,6 +89,21 @@ async function finalizeScan(scanId: string, hasTimeouts: boolean) {
     });
 
     await assessor.persist(store, assessment, scanId, scan.orgId);
+
+    if (isArchiveEnabled() && assessment.certificate) {
+      try {
+        await archiveToS3(
+          getArchiveConfig(),
+          scan.orgId,
+          assessment.certificate.id,
+          JSON.stringify(assessment.certificate),
+        );
+        logger.info({ scanId, certificateId: assessment.certificate.id }, "Certificate archived to S3");
+      } catch (archiveErr) {
+        logger.error({ scanId, err: archiveErr }, "Failed to archive certificate to S3");
+        // Don't fail the scan — archival is best-effort
+      }
+    }
 
     await eventBus.publish("sentinel.results", {
       scanId,
