@@ -62,6 +62,31 @@ describe("createAuthHook", () => {
     });
   });
 
+  it("passes RBAC for trailing-slash path (viewer GET /v1/scans/)", async () => {
+    const hook = createAuthHook({
+      getOrgSecret: async () => SECRET,
+    });
+
+    const body = JSON.stringify({ projectId: "p1" });
+    const signature = signRequest(body, SECRET);
+
+    const request = mockRequest(
+      {
+        "x-sentinel-signature": signature,
+        "x-sentinel-api-key": "key-1",
+        "x-sentinel-role": "viewer",
+      },
+      body,
+      { method: "GET", url: "/v1/scans/" },
+    );
+    const reply = mockReply();
+
+    await hook(request, reply);
+
+    expect(reply.code).not.toHaveBeenCalled();
+    expect(reply.send).not.toHaveBeenCalled();
+  });
+
   it("rejects request with invalid API key", async () => {
     const hook = createAuthHook({
       getOrgSecret: async () => null,

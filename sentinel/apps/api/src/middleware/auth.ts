@@ -40,7 +40,8 @@ export function createAuthHook(options: AuthHookOptions) {
     (request as any).orgId = (request as any).orgId ?? "default";
 
     // RBAC check — use Fastify route pattern for matching
-    const routePath = request.routeOptions?.url ?? request.url;
+    const rawPath = request.routeOptions?.url ?? request.url;
+    const routePath = rawPath.length > 1 ? rawPath.replace(/\/+$/, "") : rawPath;
     if (!isAuthorized(role, request.method, routePath)) {
       reply.code(403).send({ error: "Forbidden: insufficient permissions" });
       return;
