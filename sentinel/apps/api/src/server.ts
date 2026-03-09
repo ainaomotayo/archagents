@@ -6,8 +6,10 @@ import { EventBus, getDlqDepth, readDlq } from "@sentinel/events";
 import { AuditLog } from "@sentinel/audit";
 import { verifyCertificate } from "@sentinel/assessor";
 import { createLogger, withCorrelationId, registry, httpRequestDuration } from "@sentinel/telemetry";
+import { configureGitHubApp } from "@sentinel/github";
 import { createAuthHook } from "./middleware/auth.js";
 import { buildScanRoutes } from "./routes/scans.js";
+import { registerWebhookRoutes } from "./routes/webhooks.js";
 import { createScanStore, createAuditEventStore } from "./stores.js";
 import { registerSecurityPlugins } from "./plugins/security.js";
 
@@ -35,6 +37,20 @@ const scanRoutes = buildScanRoutes({
 
 // --- Security plugins ---
 await registerSecurityPlugins(app, { redis });
+
+// --- GitHub App configuration ---
+if (process.env.GITHUB_APP_ID && process.env.GITHUB_PRIVATE_KEY) {
+  configureGitHubApp({
+    appId: process.env.GITHUB_APP_ID,
+    privateKey: process.env.GITHUB_PRIVATE_KEY,
+  });
+}
+
+// Register webhook routes (no HMAC auth — uses GitHub signature verification)
+const webhookSecret = process.env.GITHUB_WEBHOOK_SECRET ?? "";
+if (webhookSecret) {
+  registerWebhookRoutes(app, { eventBus, webhookSecret, db });
+}
 
 // --- Observability hooks ---
 app.addHook("onRequest", async (request) => {

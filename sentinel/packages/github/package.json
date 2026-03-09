@@ -11,9 +11,12 @@
     "lint": "echo 'lint placeholder'"
   },
   "dependencies": {
+    "@octokit/auth-app": "^8.2.0",
+    "@octokit/rest": "^22.0.1",
     "@sentinel/shared": "workspace:*"
   },
   "devDependencies": {
+    "@types/node": "^25.3.5",
     "typescript": "^5.7",
     "vitest": "^3.0"
   }

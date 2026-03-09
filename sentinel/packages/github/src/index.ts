@@ -16,3 +16,5 @@ export {
   buildCriticalFindingMessage,
 } from "./slack.js";
 export type { SlackBlockMessage, SlackBlock } from "./slack.js";
+
+export { configureGitHubApp, isGitHubAppConfigured, getInstallationOctokit, verifyWebhookSignature } from "./client.js";

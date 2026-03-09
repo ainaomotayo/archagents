@@ -186,3 +186,17 @@ model User {
   @@index([orgId])
   @@map("users")
 }
+
+model GitHubInstallation {
+  id             String   @id @default(uuid()) @db.Uuid
+  installationId Int      @unique @map("installation_id")
+  orgId          String   @map("org_id") @db.Uuid
+  owner          String
+  repo           String?
+  permissions    Json     @default("{}")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  @@index([orgId])
+  @@map("github_installations")
+}

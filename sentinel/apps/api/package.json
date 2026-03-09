@@ -19,6 +19,7 @@
     "@sentinel/auth": "workspace:*",
     "@sentinel/db": "workspace:*",
     "@sentinel/events": "workspace:*",
+    "@sentinel/github": "workspace:*",
     "@sentinel/shared": "workspace:*",
     "@sentinel/telemetry": "workspace:*",
     "fastify": "^5.2",
