@@ -196,6 +196,46 @@ app.post("/v1/certificates/:id/verify", { preHandler: authHook }, async (request
   });
 });
 
+app.post("/v1/certificates/:id/revoke", { preHandler: authHook }, async (request, reply) => {
+  const { id } = request.params as { id: string };
+  const { reason } = (request.body as any) ?? {};
+  const orgId = (request as any).orgId ?? "default";
+
+  if (!reason || typeof reason !== "string") {
+    reply.code(400).send({ error: "reason is required" });
+    return;
+  }
+
+  const cert = await db.certificate.findUnique({ where: { id } });
+  if (!cert) {
+    reply.code(404).send({ error: "Certificate not found" });
+    return;
+  }
+
+  if (cert.revokedAt) {
+    reply.code(409).send({ error: "Certificate already revoked" });
+    return;
+  }
+
+  const now = new Date();
+  await db.certificate.update({
+    where: { id },
+    data: {
+      revokedAt: now,
+      revocationReason: reason,
+    },
+  });
+
+  await auditLog.append(orgId, {
+    actor: { type: "api", id: "cli", name: "SENTINEL CLI" },
+    action: "certificate.revoked",
+    resource: { type: "certificate", id },
+    detail: { reason },
+  });
+
+  return { id, status: "revoked", revokedAt: now.toISOString() };
+});
+
 // --- Projects ---
 app.get("/v1/projects", { preHandler: authHook }, async (request) => {
   const orgId = (request as any).orgId ?? "default";
