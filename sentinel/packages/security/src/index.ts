@@ -33,3 +33,20 @@ export {
   type ArchiveConfig,
   type ArchiveResult,
 } from "./s3-archive.js";
+
+export {
+  parsePnpmLockfile,
+  parsePipRequirements,
+  generateSbom,
+  sbomToJson,
+  type SbomEntry,
+  type Sbom,
+} from "./sbom-generator.js";
+
+export {
+  SELF_SCAN_CONFIG,
+  validateSelfScanConfig,
+  getCronDescription,
+  validatePolicyStructure,
+  type SelfScanConfig,
+} from "./self-scan-config.js";

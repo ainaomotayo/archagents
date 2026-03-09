@@ -1,0 +1,32 @@
+version: "1"
+rules:
+  - name: no-eval
+    type: deny-import
+    description: "eval() is prohibited in SENTINEL codebase"
+    severity: critical
+    targets: ["eval", "exec"]
+    files: "**/*.py"
+  - name: no-console-log
+    type: deny-pattern
+    description: "No console.log in production TypeScript"
+    severity: medium
+    pattern: "console\\.log\\("
+    files: "apps/**/*.ts"
+  - name: require-strict-mode
+    type: require-pattern
+    description: "All TypeScript files must use strict mode"
+    severity: low
+    pattern: "\"use strict\"|strict.*true"
+    files: "packages/**/*.ts"
+  - name: no-hardcoded-secrets
+    type: deny-pattern
+    description: "No hardcoded secrets or API keys"
+    severity: critical
+    pattern: "(api[_-]?key|secret|password|token)\\s*[:=]\\s*['\"][^'\"]{8,}['\"]"
+    files: "**/*.{ts,py}"
+  - name: no-any-type
+    type: deny-pattern
+    description: "Avoid 'any' type in TypeScript"
+    severity: low
+    pattern: ":\\s*any\\b"
+    files: "packages/**/*.ts"

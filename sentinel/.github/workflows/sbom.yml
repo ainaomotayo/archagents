@@ -1,0 +1,30 @@
+name: SBOM Generation
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "0 4 * * 1" # Weekly Monday 4 AM UTC
+jobs:
+  generate-sbom:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Syft
+        run: curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh | sh -s
+      - name: Generate SBOM
+        run: syft . -o cyclonedx-json > sbom.json
+      - name: Scan with Trivy
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: sbom
+          input: sbom.json
+          severity: CRITICAL,HIGH
+          exit-code: "1"
+      - name: Upload SBOM
+        uses: actions/upload-artifact@v4
+        with:
+          name: sentinel-sbom
+          path: sbom.json
+          retention-days: 90
