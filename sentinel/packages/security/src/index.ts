@@ -62,3 +62,6 @@ export { getCloudProvider, createArchiveProvider, createKmsProvider } from "./cl
 
 export { GcpArchiveProvider } from "./archive-gcp.js";
 export { GcpKmsKeyStore } from "./kms-gcp.js";
+
+export { AzureArchiveProvider } from "./archive-azure.js";
+export { AzureKmsKeyStore } from "./kms-azure.js";
