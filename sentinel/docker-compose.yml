@@ -25,5 +25,36 @@ services:
       timeout: 5s
       retries: 5
 
+  # Analysis Agents (uncomment when running full pipeline)
+  # agent-security:
+  #   build:
+  #     context: agents/security
+  #     dockerfile: Dockerfile
+  #   depends_on:
+  #     redis:
+  #       condition: service_healthy
+  #   environment:
+  #     REDIS_URL: redis://redis:6379
+  #
+  # agent-ip-license:
+  #   build:
+  #     context: agents/ip-license
+  #     dockerfile: Dockerfile
+  #   depends_on:
+  #     redis:
+  #       condition: service_healthy
+  #   environment:
+  #     REDIS_URL: redis://redis:6379
+  #
+  # agent-dependency:
+  #   build:
+  #     context: agents/dependency
+  #     dockerfile: Dockerfile
+  #   depends_on:
+  #     redis:
+  #       condition: service_healthy
+  #   environment:
+  #     REDIS_URL: redis://redis:6379
+
 volumes:
   pgdata:
