@@ -5,7 +5,7 @@ import { getDb, disconnectDb, withTenant } from "@sentinel/db";
 import { EventBus, getDlqDepth, readDlq } from "@sentinel/events";
 import { AuditLog } from "@sentinel/audit";
 import { verifyCertificate } from "@sentinel/assessor";
-import { createLogger, withCorrelationId, registry, httpRequestDuration, dlqDepthGauge } from "@sentinel/telemetry";
+import { withCorrelationId, registry, httpRequestDuration, dlqDepthGauge } from "@sentinel/telemetry";
 import { configureGitHubApp } from "@sentinel/github";
 import { createAuthHook } from "./middleware/auth.js";
 import { buildScanRoutes } from "./routes/scans.js";
@@ -13,7 +13,23 @@ import { registerWebhookRoutes } from "./routes/webhooks.js";
 import { createScanStore, createAuditEventStore } from "./stores.js";
 import { registerSecurityPlugins } from "./plugins/security.js";
 
-const app = Fastify({ logger: createLogger({ name: "sentinel-api" }) });
+const app = Fastify({
+  logger: {
+    name: "sentinel-api",
+    level: process.env.LOG_LEVEL ?? "info",
+    formatters: { level: (label: string) => ({ level: label }) },
+    redact: {
+      paths: [
+        "req.headers.authorization",
+        "req.headers['x-sentinel-signature']",
+        "req.headers['x-sentinel-api-key']",
+        "body.secret",
+        "body.password",
+      ],
+      censor: "[REDACTED]",
+    },
+  },
+});
 
 // --- Infrastructure ---
 const db = getDb();
