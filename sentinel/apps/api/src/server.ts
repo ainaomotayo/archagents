@@ -114,26 +114,38 @@ app.post("/v1/scans", { preHandler: authHook }, async (request, reply) => {
 });
 
 app.get("/v1/scans/:id", { preHandler: authHook }, async (request, reply) => {
+  const orgId = (request as any).orgId ?? "default";
   const { id } = request.params as { id: string };
-  const scan = await scanRoutes.getScan(id);
-  if (!scan) {
-    reply.code(404).send({ error: "Scan not found" });
-    return;
-  }
-  return scan;
+  return withTenant(db, orgId, async (tx) => {
+    const scan = await tx.scan.findUnique({
+      where: { id },
+      include: { findings: true, certificate: true, agentResults: true },
+    });
+    if (!scan) {
+      reply.code(404).send({ error: "Scan not found" });
+      return;
+    }
+    return scan;
+  });
 });
 
 app.get("/v1/scans/:id/poll", { preHandler: authHook }, async (request, reply) => {
+  const orgId = (request as any).orgId ?? "default";
   const { id } = request.params as { id: string };
-  const scan = await scanRoutes.getScan(id) as any;
-  if (!scan) {
-    reply.code(404).send({ error: "Scan not found" });
-    return;
-  }
-  return {
-    status: scan.status,
-    assessment: scan.status === "completed" ? scan : undefined,
-  };
+  return withTenant(db, orgId, async (tx) => {
+    const scan = await tx.scan.findUnique({
+      where: { id },
+      include: { findings: true, certificate: true, agentResults: true },
+    });
+    if (!scan) {
+      reply.code(404).send({ error: "Scan not found" });
+      return;
+    }
+    return {
+      status: scan.status,
+      assessment: scan.status === "completed" ? scan : undefined,
+    };
+  });
 });
 
 // --- Findings ---
@@ -150,6 +162,7 @@ app.get("/v1/findings", { preHandler: authHook }, async (request) => {
         take: Number(limit),
         skip: Number(offset),
         orderBy: { createdAt: "desc" },
+        include: { scan: { select: { projectId: true } } },
       }),
       tx.finding.count({ where }),
     ]);
@@ -161,7 +174,7 @@ app.get("/v1/findings/:id", { preHandler: authHook }, async (request, reply) => 
   const orgId = (request as any).orgId ?? "default";
   const { id } = request.params as { id: string };
   return withTenant(db, orgId, async (tx) => {
-    const finding = await tx.finding.findUnique({ where: { id } });
+    const finding = await tx.finding.findUnique({ where: { id }, include: { scan: { select: { projectId: true } } } });
     if (!finding) {
       reply.code(404).send({ error: "Finding not found" });
       return;
@@ -180,6 +193,7 @@ app.get("/v1/certificates", { preHandler: authHook }, async (request) => {
         take: Number(limit),
         skip: Number(offset),
         orderBy: { issuedAt: "desc" },
+        include: { scan: { select: { commitHash: true, branch: true } } },
       }),
       tx.certificate.count(),
     ]);
@@ -191,7 +205,7 @@ app.get("/v1/certificates/:id", { preHandler: authHook }, async (request, reply)
   const orgId = (request as any).orgId ?? "default";
   const { id } = request.params as { id: string };
   return withTenant(db, orgId, async (tx) => {
-    const cert = await tx.certificate.findUnique({ where: { id } });
+    const cert = await tx.certificate.findUnique({ where: { id }, include: { scan: { select: { commitHash: true, branch: true } } } });
     if (!cert) {
       reply.code(404).send({ error: "Certificate not found" });
       return;
@@ -303,6 +317,7 @@ app.get("/v1/projects/:id/findings", { preHandler: authHook }, async (request) =
         take: Number(limit),
         skip: Number(offset),
         orderBy: { createdAt: "desc" },
+        include: { scan: { select: { projectId: true } } },
       }),
       tx.finding.count({ where }),
     ]);
@@ -315,6 +330,19 @@ app.get("/v1/policies", { preHandler: authHook }, async (request) => {
   const orgId = (request as any).orgId ?? "default";
   return withTenant(db, orgId, async (tx) => {
     return tx.policy.findMany({ orderBy: { createdAt: "desc" } });
+  });
+});
+
+app.get("/v1/policies/:id", { preHandler: authHook }, async (request, reply) => {
+  const orgId = (request as any).orgId ?? "default";
+  const { id } = request.params as { id: string };
+  return withTenant(db, orgId, async (tx) => {
+    const policy = await tx.policy.findUnique({ where: { id } });
+    if (!policy) {
+      reply.code(404).send({ error: "Policy not found" });
+      return;
+    }
+    return policy;
   });
 });
 

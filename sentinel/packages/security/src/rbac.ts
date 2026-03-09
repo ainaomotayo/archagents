@@ -21,6 +21,7 @@ export const API_PERMISSIONS: EndpointPermission[] = [
   { method: "GET", path: "/v1/projects/:id", roles: ["admin", "manager", "developer", "viewer"] },
   { method: "GET", path: "/v1/projects/:id/findings", roles: ["admin", "manager", "developer", "viewer"] },
   { method: "GET", path: "/v1/policies", roles: ["admin", "manager", "developer", "viewer"] },
+  { method: "GET", path: "/v1/policies/:id", roles: ["admin", "manager", "developer", "viewer"] },
   { method: "POST", path: "/v1/policies", roles: ["admin", "manager"] },
   { method: "PUT", path: "/v1/policies/:id", roles: ["admin", "manager"] },
   { method: "DELETE", path: "/v1/policies/:id", roles: ["admin"] },

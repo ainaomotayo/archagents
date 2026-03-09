@@ -149,7 +149,7 @@ export async function getFindings(): Promise<Finding[]> {
     const data = await apiGet<{ findings: any[] }>("/v1/findings", { limit: "100" });
     return (data.findings ?? []).map((f: any) => ({
       id: f.id,
-      projectId: f.orgId,
+      projectId: f.scan?.projectId ?? f.orgId,
       scanId: f.scanId,
       title: f.title ?? f.type,
       description: f.description ?? "",
@@ -173,7 +173,7 @@ export async function getFindingById(id: string): Promise<Finding | null> {
     const f = await apiGet<any>(`/v1/findings/${id}`);
     return {
       id: f.id,
-      projectId: f.orgId,
+      projectId: f.scan?.projectId ?? f.orgId,
       scanId: f.scanId,
       title: f.title ?? f.type,
       description: f.description ?? "",
@@ -201,8 +201,8 @@ export async function getCertificates(): Promise<Certificate[]> {
       id: c.id,
       projectId: c.orgId,
       scanId: c.scanId,
-      commit: "",
-      branch: "",
+      commit: c.scan?.commitHash ?? "",
+      branch: c.scan?.branch ?? "",
       status: c.revokedAt ? "revoked" : new Date(c.expiresAt) < new Date() ? "expired" : "active",
       riskScore: c.riskScore,
       issuedAt: c.issuedAt,
@@ -222,8 +222,8 @@ export async function getCertificateById(
       id: c.id,
       projectId: c.orgId,
       scanId: c.scanId,
-      commit: "",
-      branch: "",
+      commit: c.scan?.commitHash ?? "",
+      branch: c.scan?.branch ?? "",
       status: c.revokedAt ? "revoked" : new Date(c.expiresAt) < new Date() ? "expired" : "active",
       riskScore: c.riskScore,
       issuedAt: c.issuedAt,
@@ -252,8 +252,7 @@ export async function getPolicies() {
 export async function getPolicyById(id: string) {
   return tryApi(async () => {
     const { apiGet } = await import("./api-client");
-    const policies = await apiGet<any[]>("/v1/policies");
-    return policies.find((p: any) => p.id === id) ?? null;
+    return apiGet<any>(`/v1/policies/${id}`);
   }, null);
 }
 
