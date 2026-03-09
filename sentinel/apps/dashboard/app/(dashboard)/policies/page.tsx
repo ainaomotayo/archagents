@@ -1,16 +1,26 @@
 import Link from "next/link";
 import { getPolicies } from "@/lib/api";
 import { PageHeader } from "@/components/page-header";
-import { IconPlus } from "@/components/icons";
+import { IconPlus, IconShield } from "@/components/icons";
+
+function formatDate(iso: string): string {
+  return new Date(iso).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+}
 
 export default async function PoliciesPage() {
   const policies = await getPolicies();
+
+  const activeCount = policies.filter((p) => p.enabled).length;
 
   return (
     <div className="space-y-6">
       <PageHeader
         title="Policies"
-        description="Manage scanning and compliance policies for your organization."
+        description={`${activeCount} active / ${policies.length} total policies`}
         action={
           <Link
             href="/policies/new"
@@ -22,24 +32,42 @@ export default async function PoliciesPage() {
         }
       />
 
-      <div className="animate-fade-up overflow-hidden rounded-xl border border-border bg-surface-1" style={{ animationDelay: "0.05s" }}>
-        <table className="w-full text-left text-[13px]">
-          <thead>
-            <tr className="border-b border-border bg-surface-2">
-              <th scope="col" className="px-5 py-3 text-[10px] font-semibold uppercase tracking-widest text-text-tertiary">Name</th>
-              <th scope="col" className="px-5 py-3 text-[10px] font-semibold uppercase tracking-widest text-text-tertiary">Status</th>
-              <th scope="col" className="px-5 py-3 text-[10px] font-semibold uppercase tracking-widest text-text-tertiary">Rules</th>
-              <th scope="col" className="px-5 py-3 text-[10px] font-semibold uppercase tracking-widest text-text-tertiary">Updated</th>
-              <th scope="col" className="px-5 py-3 text-[10px] font-semibold uppercase tracking-widest text-text-tertiary">Actions</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-border-subtle">
-            {policies.map((policy) => (
-              <tr key={policy.id} className="table-row-hover transition-colors">
-                <td className="px-5 py-3.5 font-medium text-text-primary">
-                  {policy.name}
-                </td>
-                <td className="px-5 py-3.5">
+      {policies.length === 0 ? (
+        <div className="flex h-48 items-center justify-center rounded-xl border border-dashed border-border bg-surface-1">
+          <div className="text-center">
+            <IconShield className="mx-auto h-8 w-8 text-text-tertiary" />
+            <p className="mt-3 text-[14px] font-semibold text-text-primary">
+              No policies configured
+            </p>
+            <p className="mt-1 text-[12px] text-text-tertiary">
+              Create your first policy to start governing AI-generated code.
+            </p>
+          </div>
+        </div>
+      ) : (
+        <div className="grid gap-3">
+          {policies.map((policy, i) => (
+            <div
+              key={policy.id}
+              className="animate-fade-up group rounded-xl border border-border bg-surface-1 p-5 transition-all duration-150 hover:border-border-accent hover:bg-surface-2"
+              style={{ animationDelay: `${0.04 * i}s` }}
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-surface-2 transition-colors group-hover:bg-surface-3">
+                    <IconShield className="h-4 w-4 text-text-tertiary group-hover:text-accent transition-colors" />
+                  </div>
+                  <div>
+                    <h2 className="text-[14px] font-semibold text-text-primary group-hover:text-accent transition-colors">
+                      {policy.name}
+                    </h2>
+                    <p className="mt-0.5 text-[11px] text-text-tertiary">
+                      Updated {formatDate(policy.updatedAt)}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-5">
                   <span
                     className={`inline-flex items-center gap-1.5 rounded-md border px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wider ${
                       policy.enabled
@@ -47,33 +75,39 @@ export default async function PoliciesPage() {
                         : "bg-surface-3 text-text-tertiary border-border"
                     }`}
                   >
-                    <span className={`h-1.5 w-1.5 rounded-full ${policy.enabled ? "bg-status-pass" : "bg-text-tertiary"}`} />
+                    <span
+                      className={`h-1.5 w-1.5 rounded-full ${
+                        policy.enabled ? "bg-status-pass" : "bg-text-tertiary"
+                      }`}
+                    />
                     {policy.enabled ? "Active" : "Disabled"}
                   </span>
-                </td>
-                <td className="px-5 py-3.5 text-text-secondary">
-                  {policy.ruleCount} rules
-                </td>
-                <td className="px-5 py-3.5 text-xs text-text-tertiary">
-                  {new Date(policy.updatedAt).toLocaleDateString("en-US", {
-                    month: "short",
-                    day: "numeric",
-                    year: "numeric",
-                  })}
-                </td>
-                <td className="px-5 py-3.5">
+
+                  <div className="h-6 w-px bg-border" />
+
+                  <div className="text-right">
+                    <p className="text-lg font-bold text-text-primary">
+                      {policy.ruleCount}
+                    </p>
+                    <p className="text-[9px] uppercase tracking-wider text-text-tertiary">
+                      rules
+                    </p>
+                  </div>
+
+                  <div className="h-6 w-px bg-border" />
+
                   <Link
                     href={`/policies/${policy.id}`}
                     className="text-[13px] font-medium text-accent hover:brightness-110 focus-ring rounded"
                   >
                     Edit
                   </Link>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

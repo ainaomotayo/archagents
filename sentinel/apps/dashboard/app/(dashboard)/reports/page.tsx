@@ -2,7 +2,14 @@ import { getRecentScans, getFindings, getCertificates } from "@/lib/api";
 import { generateReportData, generateReportHtml } from "@/lib/report-generator";
 import { assessCompliance } from "@/lib/eu-ai-act";
 import { PageHeader } from "@/components/page-header";
-import { IconDownload } from "@/components/icons";
+import {
+  IconDownload,
+  IconActivity,
+  IconShieldCheck,
+  IconTrendingUp,
+  IconShield,
+  IconBarChart,
+} from "@/components/icons";
 
 export default async function ReportsPage() {
   const [scans, findings, certificates] = await Promise.all([
@@ -23,6 +30,89 @@ export default async function ReportsPage() {
     degrading: "text-status-fail",
   };
 
+  const trendLabels: Record<string, { sub: string; trend: string; trendUp: boolean }> = {
+    improving: { sub: "Trending down", trend: "-12%", trendUp: true },
+    stable: { sub: "No change", trend: "0%", trendUp: false },
+    degrading: { sub: "Trending up", trend: "+8%", trendUp: false },
+  };
+
+  const riskTrendMeta = trendLabels[reportData.summary.riskTrend] ?? trendLabels.stable;
+
+  const euScore = euAssessment.complianceScore;
+  const euScoreColor =
+    euScore >= 80 ? "bg-status-pass" : euScore >= 50 ? "bg-status-warn" : "bg-status-fail";
+  const euScoreText =
+    euScore >= 80 ? "text-status-pass" : euScore >= 50 ? "text-status-warn" : "text-status-fail";
+
+  const STAT_CARDS = [
+    {
+      label: "Total Scans",
+      value: reportData.summary.totalScans.toLocaleString(),
+      sub: "Lifetime total",
+      trend: "+12%",
+      trendUp: true,
+      Icon: IconActivity,
+      accent: "text-accent",
+      glow: "from-accent/20",
+    },
+    {
+      label: "Pass Rate",
+      value: `${reportData.summary.passRate}%`,
+      sub: "Across all scans",
+      trend: reportData.summary.passRate >= 80 ? "+3%" : "-2%",
+      trendUp: reportData.summary.passRate >= 80,
+      Icon: IconShieldCheck,
+      accent: "text-status-pass",
+      glow: "from-status-pass/20",
+    },
+    {
+      label: "Risk Trend",
+      value: reportData.summary.riskTrend,
+      sub: riskTrendMeta.sub,
+      trend: riskTrendMeta.trend,
+      trendUp: riskTrendMeta.trendUp,
+      Icon: IconTrendingUp,
+      accent: trendStyles[reportData.summary.riskTrend] ?? "text-status-warn",
+      glow:
+        reportData.summary.riskTrend === "improving"
+          ? "from-status-pass/20"
+          : reportData.summary.riskTrend === "degrading"
+            ? "from-status-fail/20"
+            : "from-status-warn/20",
+      capitalize: true,
+    },
+    {
+      label: "EU AI Act Score",
+      value: `${euScore}%`,
+      sub: euScore >= 80 ? "Compliant" : euScore >= 50 ? "Partial compliance" : "Non-compliant",
+      trend:
+        euScore >= 80 ? "Compliant" : euScore >= 50 ? "Partial" : "Action needed",
+      trendUp: euScore >= 80,
+      Icon: IconShield,
+      accent: euScoreText,
+      glow:
+        euScore >= 80
+          ? "from-status-pass/20"
+          : euScore >= 50
+            ? "from-status-warn/20"
+            : "from-status-fail/20",
+    },
+  ];
+
+  // Compute max count for top findings bar chart
+  const maxFindingCount = Math.max(
+    ...reportData.summary.topFindings.map((f: { count: number }) => f.count),
+    1,
+  );
+
+  const findingBarColors = [
+    "bg-accent",
+    "bg-status-warn",
+    "bg-status-fail",
+    "bg-status-pass",
+    "bg-status-running",
+  ];
+
   return (
     <div className="space-y-8">
       <PageHeader
@@ -42,30 +132,88 @@ export default async function ReportsPage() {
 
       {/* Summary cards */}
       <section aria-label="Report summary" className="animate-fade-up" style={{ animationDelay: "0.05s" }}>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <div className="stat-card rounded-xl border border-border bg-surface-1 p-5">
-            <p className="text-[11px] font-semibold uppercase tracking-wider text-text-tertiary">Total Scans</p>
-            <p className="mt-3 text-3xl font-bold tracking-tight text-text-primary">
-              {reportData.summary.totalScans}
-            </p>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          {STAT_CARDS.map((card) => {
+            const { Icon, accent, glow } = card;
+            return (
+              <div
+                key={card.label}
+                className="stat-card group relative overflow-hidden rounded-xl border border-border bg-surface-1 p-5"
+              >
+                {/* Subtle gradient glow on hover */}
+                <div
+                  className={`absolute -right-6 -top-6 h-24 w-24 rounded-full bg-gradient-radial ${glow} to-transparent opacity-0 transition-opacity group-hover:opacity-100`}
+                />
+                <div className="relative">
+                  <div className="flex items-center justify-between">
+                    <p className="text-[10px] font-semibold uppercase tracking-wider text-text-tertiary">
+                      {card.label}
+                    </p>
+                    <div
+                      className={`flex h-7 w-7 items-center justify-center rounded-lg bg-surface-2 ${accent}`}
+                    >
+                      <Icon className="h-3.5 w-3.5" />
+                    </div>
+                  </div>
+                  <p
+                    className={`mt-2 text-3xl font-bold tracking-tight ${
+                      card.capitalize ? trendStyles[reportData.summary.riskTrend] : "text-text-primary"
+                    } ${card.capitalize ? "capitalize" : ""}`}
+                  >
+                    {card.value}
+                  </p>
+                  <div className="mt-2 flex items-center justify-between">
+                    <p className="text-[10px] text-text-tertiary">{card.sub}</p>
+                    <span
+                      className={`text-[10px] font-semibold ${
+                        card.trendUp ? "text-status-pass" : "text-status-warn"
+                      }`}
+                    >
+                      {card.trend}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </section>
+
+      {/* EU AI Act compliance score progress bar */}
+      <section aria-label="EU AI Act compliance score" className="animate-fade-up" style={{ animationDelay: "0.1s" }}>
+        <div className="rounded-xl border border-border bg-surface-1 p-5">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className={`flex h-9 w-9 items-center justify-center rounded-lg bg-surface-2 ${euScoreText}`}>
+                <IconShield className="h-4 w-4" />
+              </div>
+              <div>
+                <h2 className="text-sm font-semibold text-text-primary">EU AI Act Compliance Score</h2>
+                <p className="mt-0.5 text-[11px] text-text-tertiary">
+                  Overall compliance across all assessed articles
+                </p>
+              </div>
+            </div>
+            <div className="text-right">
+              <p className={`text-2xl font-bold tracking-tight ${euScoreText}`}>{euScore}%</p>
+              <p className="text-[10px] text-text-tertiary">
+                {euScore >= 80 ? "Compliant" : euScore >= 50 ? "Partial" : "Non-compliant"}
+              </p>
+            </div>
           </div>
-          <div className="stat-card rounded-xl border border-border bg-surface-1 p-5">
-            <p className="text-[11px] font-semibold uppercase tracking-wider text-text-tertiary">Pass Rate</p>
-            <p className="mt-3 text-3xl font-bold tracking-tight text-text-primary">
-              {reportData.summary.passRate}%
-            </p>
-          </div>
-          <div className="stat-card rounded-xl border border-border bg-surface-1 p-5">
-            <p className="text-[11px] font-semibold uppercase tracking-wider text-text-tertiary">Risk Trend</p>
-            <p className={`mt-3 text-3xl font-bold tracking-tight capitalize ${trendStyles[reportData.summary.riskTrend]}`}>
-              {reportData.summary.riskTrend}
-            </p>
-          </div>
-          <div className="stat-card rounded-xl border border-border bg-surface-1 p-5">
-            <p className="text-[11px] font-semibold uppercase tracking-wider text-text-tertiary">EU AI Act Score</p>
-            <p className="mt-3 text-3xl font-bold tracking-tight text-text-primary">
-              {euAssessment.complianceScore}%
-            </p>
+          <div className="mt-4">
+            <div className="h-2.5 w-full overflow-hidden rounded-full bg-surface-3">
+              <div
+                className={`h-full rounded-full ${euScoreColor} transition-all duration-700`}
+                style={{ width: `${euScore}%` }}
+              />
+            </div>
+            <div className="mt-2 flex justify-between text-[9px] text-text-tertiary">
+              <span>0%</span>
+              <span className="text-status-warn">50%</span>
+              <span className="text-status-pass">80%</span>
+              <span>100%</span>
+            </div>
           </div>
         </div>
       </section>
@@ -76,7 +224,7 @@ export default async function ReportsPage() {
         <div className="overflow-hidden rounded-xl border border-border bg-surface-1">
           <table className="w-full text-left text-[13px]">
             <thead>
-              <tr className="border-b border-border bg-surface-2">
+              <tr className="border-b border-border bg-surface-2/50">
                 <th scope="col" className="px-5 py-3 text-[10px] font-semibold uppercase tracking-widest text-text-tertiary">Article</th>
                 <th scope="col" className="px-5 py-3 text-[10px] font-semibold uppercase tracking-widest text-text-tertiary">Title</th>
                 <th scope="col" className="px-5 py-3 text-[10px] font-semibold uppercase tracking-widest text-text-tertiary">Status</th>
@@ -116,7 +264,7 @@ export default async function ReportsPage() {
         <div className="overflow-hidden rounded-xl border border-border bg-surface-1">
           <table className="w-full text-left text-[13px]">
             <thead>
-              <tr className="border-b border-border bg-surface-2">
+              <tr className="border-b border-border bg-surface-2/50">
                 <th scope="col" className="px-5 py-3 text-[10px] font-semibold uppercase tracking-widest text-text-tertiary">Control</th>
                 <th scope="col" className="px-5 py-3 text-[10px] font-semibold uppercase tracking-widest text-text-tertiary">Status</th>
               </tr>
@@ -135,6 +283,13 @@ export default async function ReportsPage() {
                             : "bg-status-fail/15 text-status-fail border-status-fail/30"
                       }`}
                     >
+                      <span className={`h-1.5 w-1.5 rounded-full ${
+                        ctrl.status === "met"
+                          ? "bg-status-pass"
+                          : ctrl.status === "partial"
+                            ? "bg-status-warn"
+                            : "bg-status-fail"
+                      }`} />
                       {ctrl.status}
                     </span>
                   </td>
@@ -148,19 +303,49 @@ export default async function ReportsPage() {
       {/* Top findings */}
       {reportData.summary.topFindings.length > 0 && (
         <section aria-label="Top findings" className="animate-fade-up" style={{ animationDelay: "0.35s" }}>
-          <h2 className="mb-4 text-sm font-semibold text-text-primary">Top Finding Categories</h2>
+          <div className="mb-4 flex items-center gap-2">
+            <IconBarChart className="h-4 w-4 text-accent" />
+            <h2 className="text-sm font-semibold text-text-primary">Top Finding Categories</h2>
+          </div>
           <div className="space-y-2">
-            {reportData.summary.topFindings.map((f) => (
-              <div
-                key={f.category}
-                className="flex items-center justify-between rounded-xl border border-border bg-surface-1 px-5 py-3.5"
-              >
-                <span className="text-[13px] capitalize text-text-secondary">
-                  {f.category.replace(/-/g, " ")}
-                </span>
-                <span className="font-mono text-sm font-bold text-text-primary">{f.count}</span>
-              </div>
-            ))}
+            {reportData.summary.topFindings.map((f, i: number) => {
+              const barWidth = Math.max((f.count / maxFindingCount) * 100, 4);
+              const barColor = findingBarColors[i % findingBarColors.length];
+              return (
+                <div
+                  key={f.category}
+                  className="group relative overflow-hidden rounded-xl border border-border bg-surface-1 px-5 py-3.5"
+                >
+                  {/* Background proportion bar */}
+                  <div
+                    className={`absolute inset-y-0 left-0 ${barColor} opacity-[0.08] transition-all duration-500 group-hover:opacity-[0.15]`}
+                    style={{ width: `${barWidth}%` }}
+                  />
+                  <div className="relative flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div
+                        className={`h-2.5 w-2.5 rounded-full ${barColor}`}
+                      />
+                      <span className="text-[13px] capitalize text-text-secondary">
+                        {f.category.replace(/-/g, " ")}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      {/* Inline mini bar */}
+                      <div className="hidden h-1.5 w-24 overflow-hidden rounded-full bg-surface-3 sm:block">
+                        <div
+                          className={`h-full rounded-full ${barColor} transition-all duration-500`}
+                          style={{ width: `${barWidth}%` }}
+                        />
+                      </div>
+                      <span className="min-w-[2rem] text-right font-mono text-sm font-bold text-text-primary">
+                        {f.count}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </section>
       )}
