@@ -1,13 +1,11 @@
 /**
- * Minimal type definitions for Prisma Client used before `prisma generate` runs.
- * Once the database is available and `prisma generate` executes, these can be
- * replaced with the real generated types from @prisma/client.
+ * Type definitions for Prisma Client transaction support.
+ * Uses the real Prisma generated types for full model access within transactions.
  */
 
-export interface TransactionClient {
-  $executeRawUnsafe(query: string, ...values: unknown[]): Promise<unknown>;
-}
+import type { PrismaClient } from "@prisma/client";
+import type { ITXClientDenyList } from "@prisma/client/runtime/library";
 
-export interface PrismaClientLike {
-  $transaction<T>(fn: (tx: TransactionClient) => Promise<T>): Promise<T>;
-}
+export type TransactionClient = Omit<PrismaClient, ITXClientDenyList>;
+
+export type PrismaClientLike = PrismaClient;

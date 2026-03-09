@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 import Fastify from "fastify";
 import { Redis } from "ioredis";
-import { getDb, disconnectDb } from "@sentinel/db";
+import { getDb, disconnectDb, withTenant } from "@sentinel/db";
 import { EventBus, getDlqDepth, readDlq } from "@sentinel/events";
 import { AuditLog } from "@sentinel/audit";
 import { verifyCertificate } from "@sentinel/assessor";
@@ -117,117 +117,147 @@ app.get("/v1/scans/:id/poll", { preHandler: authHook }, async (request, reply) =
 
 // --- Findings ---
 app.get("/v1/findings", { preHandler: authHook }, async (request) => {
+  const orgId = (request as any).orgId ?? "default";
   const { limit = "50", offset = "0", severity, category } = request.query as any;
-  const where: any = {};
-  if (severity) where.severity = severity;
-  if (category) where.category = category;
-  const [findings, total] = await Promise.all([
-    db.finding.findMany({
-      where,
-      take: Number(limit),
-      skip: Number(offset),
-      orderBy: { createdAt: "desc" },
-    }),
-    db.finding.count({ where }),
-  ]);
-  return { findings, total, limit: Number(limit), offset: Number(offset) };
+  return withTenant(db, orgId, async (tx) => {
+    const where: any = {};
+    if (severity) where.severity = severity;
+    if (category) where.category = category;
+    const [findings, total] = await Promise.all([
+      tx.finding.findMany({
+        where,
+        take: Number(limit),
+        skip: Number(offset),
+        orderBy: { createdAt: "desc" },
+      }),
+      tx.finding.count({ where }),
+    ]);
+    return { findings, total, limit: Number(limit), offset: Number(offset) };
+  });
 });
 
 app.get("/v1/findings/:id", { preHandler: authHook }, async (request, reply) => {
+  const orgId = (request as any).orgId ?? "default";
   const { id } = request.params as { id: string };
-  const finding = await db.finding.findUnique({ where: { id } });
-  if (!finding) {
-    reply.code(404).send({ error: "Finding not found" });
-    return;
-  }
-  return finding;
+  return withTenant(db, orgId, async (tx) => {
+    const finding = await tx.finding.findUnique({ where: { id } });
+    if (!finding) {
+      reply.code(404).send({ error: "Finding not found" });
+      return;
+    }
+    return finding;
+  });
 });
 
 // --- Certificates ---
 app.get("/v1/certificates", { preHandler: authHook }, async (request) => {
+  const orgId = (request as any).orgId ?? "default";
   const { limit = "50", offset = "0" } = request.query as any;
-  const [certificates, total] = await Promise.all([
-    db.certificate.findMany({
-      take: Number(limit),
-      skip: Number(offset),
-      orderBy: { issuedAt: "desc" },
-    }),
-    db.certificate.count(),
-  ]);
-  return { certificates, total, limit: Number(limit), offset: Number(offset) };
+  return withTenant(db, orgId, async (tx) => {
+    const [certificates, total] = await Promise.all([
+      tx.certificate.findMany({
+        take: Number(limit),
+        skip: Number(offset),
+        orderBy: { issuedAt: "desc" },
+      }),
+      tx.certificate.count(),
+    ]);
+    return { certificates, total, limit: Number(limit), offset: Number(offset) };
+  });
 });
 
 app.get("/v1/certificates/:id", { preHandler: authHook }, async (request, reply) => {
+  const orgId = (request as any).orgId ?? "default";
   const { id } = request.params as { id: string };
-  const cert = await db.certificate.findUnique({ where: { id } });
-  if (!cert) {
-    reply.code(404).send({ error: "Certificate not found" });
-    return;
-  }
-  return cert;
+  return withTenant(db, orgId, async (tx) => {
+    const cert = await tx.certificate.findUnique({ where: { id } });
+    if (!cert) {
+      reply.code(404).send({ error: "Certificate not found" });
+      return;
+    }
+    return cert;
+  });
 });
 
 app.post("/v1/certificates/:id/verify", { preHandler: authHook }, async (request, reply) => {
+  const orgId = (request as any).orgId ?? "default";
   const { id } = request.params as { id: string };
-  const cert = await db.certificate.findUnique({ where: { id } });
-  if (!cert) {
-    reply.code(404).send({ error: "Certificate not found" });
-    return;
-  }
-  const valid = verifyCertificate(
-    JSON.stringify(cert.verdict),
-    process.env.SENTINEL_SECRET!,
-  );
-  return { valid, certificateId: id };
+  return withTenant(db, orgId, async (tx) => {
+    const cert = await tx.certificate.findUnique({ where: { id } });
+    if (!cert) {
+      reply.code(404).send({ error: "Certificate not found" });
+      return;
+    }
+    const valid = verifyCertificate(
+      JSON.stringify(cert.verdict),
+      process.env.SENTINEL_SECRET!,
+    );
+    return { valid, certificateId: id };
+  });
 });
 
 // --- Projects ---
-app.get("/v1/projects", { preHandler: authHook }, async () => {
-  return db.project.findMany({
-    include: { _count: { select: { scans: true } } },
-    orderBy: { createdAt: "desc" },
+app.get("/v1/projects", { preHandler: authHook }, async (request) => {
+  const orgId = (request as any).orgId ?? "default";
+  return withTenant(db, orgId, async (tx) => {
+    return tx.project.findMany({
+      include: { _count: { select: { scans: true } } },
+      orderBy: { createdAt: "desc" },
+    });
   });
 });
 
 app.get("/v1/projects/:id", { preHandler: authHook }, async (request, reply) => {
+  const orgId = (request as any).orgId ?? "default";
   const { id } = request.params as { id: string };
-  const project = await db.project.findUnique({
-    where: { id },
-    include: {
-      _count: { select: { scans: true } },
-      scans: { take: 10, orderBy: { startedAt: "desc" }, include: { certificate: true } },
-    },
+  return withTenant(db, orgId, async (tx) => {
+    const project = await tx.project.findUnique({
+      where: { id },
+      include: {
+        _count: { select: { scans: true } },
+        scans: { take: 10, orderBy: { startedAt: "desc" }, include: { certificate: true } },
+      },
+    });
+    if (!project) {
+      reply.code(404).send({ error: "Project not found" });
+      return;
+    }
+    return project;
   });
-  if (!project) {
-    reply.code(404).send({ error: "Project not found" });
-    return;
-  }
-  return project;
 });
 
 // --- Policies ---
-app.get("/v1/policies", { preHandler: authHook }, async () => {
-  return db.policy.findMany({ orderBy: { createdAt: "desc" } });
+app.get("/v1/policies", { preHandler: authHook }, async (request) => {
+  const orgId = (request as any).orgId ?? "default";
+  return withTenant(db, orgId, async (tx) => {
+    return tx.policy.findMany({ orderBy: { createdAt: "desc" } });
+  });
 });
 
 app.post("/v1/policies", { preHandler: authHook }, async (request, reply) => {
+  const orgId = (request as any).orgId ?? "default";
   const body = request.body as any;
-  const policy = await db.policy.create({ data: body });
-  reply.code(201).send(policy);
+  return withTenant(db, orgId, async (tx) => {
+    const policy = await tx.policy.create({ data: body });
+    reply.code(201).send(policy);
+  });
 });
 
 // --- Audit log ---
 app.get("/v1/audit", { preHandler: authHook }, async (request) => {
+  const orgId = (request as any).orgId ?? "default";
   const { limit = "50", offset = "0" } = request.query as any;
-  const [events, total] = await Promise.all([
-    db.auditEvent.findMany({
-      take: Number(limit),
-      skip: Number(offset),
-      orderBy: { timestamp: "desc" },
-    }),
-    db.auditEvent.count(),
-  ]);
-  return { events, total, limit: Number(limit), offset: Number(offset) };
+  return withTenant(db, orgId, async (tx) => {
+    const [events, total] = await Promise.all([
+      tx.auditEvent.findMany({
+        take: Number(limit),
+        skip: Number(offset),
+        orderBy: { timestamp: "desc" },
+      }),
+      tx.auditEvent.count(),
+    ]);
+    return { events, total, limit: Number(limit), offset: Number(offset) };
+  });
 });
 
 // --- DLQ monitoring ---
