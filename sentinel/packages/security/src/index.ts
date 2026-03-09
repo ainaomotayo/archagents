@@ -54,3 +54,6 @@ export {
   validatePolicyStructure,
   type SelfScanConfig,
 } from "./self-scan-config.js";
+
+export type { ArchiveProvider, CloudProvider } from "./archive-provider.js";
+export { getCloudProvider, createArchiveProvider, createKmsProvider } from "./cloud-factory.js";
