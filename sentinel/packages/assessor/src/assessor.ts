@@ -25,6 +25,25 @@ export interface AssessInput {
   orgSecret: string;
 }
 
+export interface PersistenceStore {
+  saveAssessment(assessment: {
+    scanId: string;
+    orgId: string;
+    status: string;
+    riskScore: number;
+    categories: unknown;
+    findings: unknown;
+    agentResults: unknown;
+  }): Promise<void>;
+  saveCertificate(certificate: {
+    scanId: string;
+    orgId: string;
+    certificateJson: string;
+    signature: string;
+    expiresAt: string;
+  }): Promise<void>;
+}
+
 export interface AssessorConfig {
   /** Timeout in ms to wait for all agents (default 30_000) */
   timeoutMs?: number;
@@ -137,6 +156,42 @@ export class Assessor {
     updated.certificate = JSON.parse(certJson);
 
     return updated;
+  }
+
+  /**
+   * Persist an assessment and its certificate to external storage in a single
+   * logical transaction using the provided PersistenceStore (e.g. a
+   * `withTenant()` wrapper around the database layer).
+   */
+  async persist(
+    store: PersistenceStore,
+    assessment: ComplianceAssessment,
+    scanId: string,
+    orgId: string,
+  ): Promise<void> {
+    const certJson = assessment.certificate
+      ? JSON.stringify(assessment.certificate)
+      : "{}";
+    const signature = assessment.certificate?.signature ?? "";
+    const expiresAt = assessment.certificate?.expiresAt ?? "";
+
+    await store.saveAssessment({
+      scanId,
+      orgId,
+      status: assessment.status,
+      riskScore: assessment.riskScore,
+      categories: assessment.categories,
+      findings: assessment.findings,
+      agentResults: assessment.agentResults,
+    });
+
+    await store.saveCertificate({
+      scanId,
+      orgId,
+      certificateJson: certJson,
+      signature,
+      expiresAt,
+    });
   }
 
   // -----------------------------------------------------------------------

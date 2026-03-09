@@ -143,9 +143,10 @@ class FindingEvent:
     status: str  # "completed" | "error" | "timeout"
     duration_ms: int
     error_detail: str | None = None
+    extra: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        result = {
             "scanId": self.scan_id,
             "agentName": self.agent_name,
             "findings": [f.to_dict() for f in self.findings],
@@ -160,6 +161,9 @@ class FindingEvent:
                 "errorDetail": self.error_detail,
             },
         }
+        if self.extra:
+            result["extra"] = self.extra
+        return result
 
 
 @dataclass

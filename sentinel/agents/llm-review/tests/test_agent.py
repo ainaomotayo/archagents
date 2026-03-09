@@ -250,3 +250,32 @@ def test_agent_metadata():
     agent = LLMReviewAgent()
     assert agent.name == "llm-review"
     assert agent.version == "0.1.0"
+
+
+# ---------------------------------------------------------------------------
+# RE_EVALUATE signal
+# ---------------------------------------------------------------------------
+
+def test_run_scan_contains_re_evaluate_signal():
+    llm_fn = MagicMock(return_value=_mock_llm_response())
+    agent = LLMReviewAgent(llm_fn=llm_fn)
+    event = _make_event()
+
+    result = agent.run_scan(event)
+
+    assert "re_evaluate_event" in result.extra
+    re_eval = result.extra["re_evaluate_event"]
+    assert re_eval["type"] == "RE_EVALUATE"
+    assert re_eval["scanId"] == "scan-001"
+    assert re_eval["trigger"] == "llm-review-complete"
+
+
+def test_run_scan_re_evaluate_signal_present_even_with_no_findings():
+    llm_fn = MagicMock(return_value="[]")
+    agent = LLMReviewAgent(llm_fn=llm_fn)
+    event = _make_event()
+
+    result = agent.run_scan(event)
+
+    assert "re_evaluate_event" in result.extra
+    assert result.extra["re_evaluate_event"]["type"] == "RE_EVALUATE"

@@ -1,5 +1,6 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { Assessor } from "./assessor.js";
+import type { PersistenceStore } from "./assessor.js";
 import type { Finding, FindingEvent, SecurityFinding } from "@sentinel/shared";
 
 function makeSecurityFinding(
@@ -132,5 +133,73 @@ describe("Assessor", () => {
     expect(r1.riskScore).toBe(r2.riskScore);
     expect(r1.status).toBe(r2.status);
     expect(r1.findings.length).toBe(r2.findings.length);
+  });
+
+  it("persist calls saveAssessment and saveCertificate on the store", async () => {
+    const mockStore: PersistenceStore = {
+      saveAssessment: vi.fn().mockResolvedValue(undefined),
+      saveCertificate: vi.fn().mockResolvedValue(undefined),
+    };
+
+    const result = assessor.assess({
+      ...baseInput,
+      findingEvents: [makeFindingEvent("security-agent", [])],
+    });
+
+    await assessor.persist(mockStore, result, "scan-001", "org-1");
+
+    expect(mockStore.saveAssessment).toHaveBeenCalledOnce();
+    expect(mockStore.saveCertificate).toHaveBeenCalledOnce();
+
+    const assessmentArg = (mockStore.saveAssessment as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(assessmentArg.scanId).toBe("scan-001");
+    expect(assessmentArg.orgId).toBe("org-1");
+    expect(assessmentArg.status).toBe("full_pass");
+    expect(assessmentArg.riskScore).toBe(0);
+
+    const certArg = (mockStore.saveCertificate as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(certArg.scanId).toBe("scan-001");
+    expect(certArg.orgId).toBe("org-1");
+    expect(certArg.certificateJson).toBeTruthy();
+    expect(certArg.signature).toBeTruthy();
+    expect(certArg.expiresAt).toBeTruthy();
+  });
+
+  it("persist propagates store errors", async () => {
+    const mockStore: PersistenceStore = {
+      saveAssessment: vi.fn().mockRejectedValue(new Error("DB connection failed")),
+      saveCertificate: vi.fn().mockResolvedValue(undefined),
+    };
+
+    const result = assessor.assess({
+      ...baseInput,
+      findingEvents: [makeFindingEvent("security-agent", [])],
+    });
+
+    await expect(
+      assessor.persist(mockStore, result, "scan-001", "org-1"),
+    ).rejects.toThrow("DB connection failed");
+  });
+
+  it("persist handles assessment without certificate gracefully", async () => {
+    const mockStore: PersistenceStore = {
+      saveAssessment: vi.fn().mockResolvedValue(undefined),
+      saveCertificate: vi.fn().mockResolvedValue(undefined),
+    };
+
+    const result = assessor.assess({
+      ...baseInput,
+      findingEvents: [makeFindingEvent("security-agent", [])],
+    });
+
+    // Remove certificate to test fallback
+    delete (result as any).certificate;
+
+    await assessor.persist(mockStore, result, "scan-001", "org-1");
+
+    const certArg = (mockStore.saveCertificate as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(certArg.certificateJson).toBe("{}");
+    expect(certArg.signature).toBe("");
+    expect(certArg.expiresAt).toBe("");
   });
 });

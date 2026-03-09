@@ -11,7 +11,7 @@ import logging
 from typing import Any, Callable
 
 from sentinel_agents.base import BaseAgent
-from sentinel_agents.types import DiffEvent, DiffFile, Finding
+from sentinel_agents.types import DiffEvent, DiffFile, Finding, FindingEvent
 
 from sentinel_llm.cache import ReviewCache
 from sentinel_llm.prompt_builder import build_security_review_prompt, truncate_to_budget
@@ -77,6 +77,16 @@ class LLMReviewAgent(BaseAgent):
             all_findings.extend(findings)
 
         return all_findings
+
+    def run_scan(self, event: DiffEvent) -> FindingEvent:
+        """Override to attach a RE_EVALUATE signal after processing findings."""
+        result = super().run_scan(event)
+        result.extra["re_evaluate_event"] = {
+            "type": "RE_EVALUATE",
+            "scanId": event.scan_id,
+            "trigger": "llm-review-complete",
+        }
+        return result
 
     # ------------------------------------------------------------------
     # Internal helpers
