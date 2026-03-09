@@ -15,31 +15,28 @@ const LEVEL_STYLES: Record<
   { bg: string; text: string; label: string }
 > = {
   error: {
-    bg: "bg-red-900/30 border-red-800",
-    text: "text-red-300",
+    bg: "bg-status-fail/10 border-status-fail/30",
+    text: "text-status-fail",
     label: "Error",
   },
   warning: {
-    bg: "bg-yellow-900/30 border-yellow-800",
-    text: "text-yellow-300",
+    bg: "bg-status-warn/10 border-status-warn/30",
+    text: "text-status-warn",
     label: "Warning",
   },
   info: {
-    bg: "bg-blue-900/30 border-blue-800",
-    text: "text-blue-300",
+    bg: "bg-status-info/10 border-status-info/30",
+    text: "text-status-info",
     label: "Info",
   },
 };
 
-/**
- * Displays real-time validation results for a SENTINEL policy.
- */
 export function PolicyValidator({ messages }: PolicyValidatorProps) {
   if (messages.length === 0) {
     return (
-      <div className="rounded-lg border border-green-800 bg-green-900/20 px-4 py-3">
-        <p className="text-sm text-green-300">
-          Policy is valid — no issues found.
+      <div className="rounded-xl border border-status-pass/30 bg-status-pass/10 px-4 py-3">
+        <p className="text-[13px] text-status-pass">
+          Policy is valid \u2014 no issues found.
         </p>
       </div>
     );
@@ -50,38 +47,36 @@ export function PolicyValidator({ messages }: PolicyValidatorProps) {
 
   return (
     <div className="space-y-3">
-      {/* Summary */}
-      <div className="flex items-center gap-4 text-sm">
+      <div className="flex items-center gap-4 text-[11px] font-semibold">
         {errors > 0 && (
-          <span className="text-red-400">
+          <span className="text-status-fail">
             {errors} error{errors !== 1 ? "s" : ""}
           </span>
         )}
         {warnings > 0 && (
-          <span className="text-yellow-400">
+          <span className="text-status-warn">
             {warnings} warning{warnings !== 1 ? "s" : ""}
           </span>
         )}
       </div>
 
-      {/* Message list */}
       <div className="space-y-2">
         {messages.map((msg, i) => {
           const style = LEVEL_STYLES[msg.level];
           return (
             <div
               key={`${msg.level}-${msg.line}-${i}`}
-              className={`rounded border px-4 py-2 ${style.bg}`}
+              className={`rounded-lg border px-4 py-2.5 ${style.bg}`}
             >
-              <div className="flex items-center gap-2 text-xs">
-                <span className={`font-semibold uppercase ${style.text}`}>
+              <div className="flex items-center gap-2 text-[10px]">
+                <span className={`font-bold uppercase tracking-wider ${style.text}`}>
                   {style.label}
                 </span>
                 {msg.line !== null && (
-                  <span className="text-slate-400">Line {msg.line}</span>
+                  <span className="text-text-tertiary">Line {msg.line}</span>
                 )}
               </div>
-              <p className={`mt-1 text-sm ${style.text}`}>{msg.message}</p>
+              <p className={`mt-1 text-[13px] ${style.text}`}>{msg.message}</p>
             </div>
           );
         })}
@@ -90,12 +85,6 @@ export function PolicyValidator({ messages }: PolicyValidatorProps) {
   );
 }
 
-/**
- * Parse a YAML policy string and return validation messages.
- *
- * This is a lightweight heuristic validator — not a full YAML parser.
- * It checks for common SENTINEL policy structure issues.
- */
 export function validatePolicy(yaml: string): ValidationMessage[] {
   const messages: ValidationMessage[] = [];
   const lines = yaml.split("\n");
@@ -109,7 +98,6 @@ export function validatePolicy(yaml: string): ValidationMessage[] {
     return messages;
   }
 
-  // Check for required top-level keys
   const requiredKeys = ["version", "rules"];
   for (const key of requiredKeys) {
     const pattern = new RegExp(`^${key}\\s*:`, "m");
@@ -122,18 +110,16 @@ export function validatePolicy(yaml: string): ValidationMessage[] {
     }
   }
 
-  // Check for tab characters (YAML should use spaces)
   lines.forEach((line, i) => {
     if (line.includes("\t")) {
       messages.push({
         level: "error",
         line: i + 1,
-        message: "Tab character detected — YAML requires spaces for indentation.",
+        message: "Tab character detected \u2014 YAML requires spaces for indentation.",
       });
     }
   });
 
-  // Warn on lines with trailing whitespace
   lines.forEach((line, i) => {
     if (line.length > 0 && line !== line.trimEnd()) {
       messages.push({
@@ -144,7 +130,6 @@ export function validatePolicy(yaml: string): ValidationMessage[] {
     }
   });
 
-  // Info: check for severity thresholds
   if (yaml.includes("severity") && !yaml.includes("threshold")) {
     messages.push({
       level: "info",

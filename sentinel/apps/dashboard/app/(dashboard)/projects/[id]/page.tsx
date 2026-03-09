@@ -5,20 +5,10 @@ import {
   getProjectFindingCounts,
   getProjectCertificate,
 } from "@/lib/api";
-import type { ScanStatus, CertificateStatus } from "@/lib/types";
-
-const SCAN_STATUS_STYLES: Record<ScanStatus, string> = {
-  pass: "bg-green-900/50 text-green-300",
-  fail: "bg-red-900/50 text-red-300",
-  provisional: "bg-yellow-900/50 text-yellow-300",
-  running: "bg-blue-900/50 text-blue-300",
-};
-
-const CERT_STATUS_STYLES: Record<CertificateStatus, string> = {
-  active: "bg-green-900/50 text-green-300 border-green-700",
-  revoked: "bg-red-900/50 text-red-300 border-red-700",
-  expired: "bg-slate-800 text-slate-400 border-slate-600",
-};
+import { StatusBadge } from "@/components/status-badge";
+import { CertificateBadge } from "@/components/certificate-badge";
+import { PageHeader } from "@/components/page-header";
+import { IconChevronLeft } from "@/components/icons";
 
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString("en-US", {
@@ -47,7 +37,7 @@ export default async function ProjectDetailPage({
   if (!project) {
     return (
       <div className="flex h-64 items-center justify-center">
-        <p className="text-slate-400">Project not found.</p>
+        <p className="text-text-tertiary">Project not found.</p>
       </div>
     );
   }
@@ -55,63 +45,56 @@ export default async function ProjectDetailPage({
   return (
     <div className="space-y-8">
       {/* Header */}
-      <div>
+      <div className="animate-fade-up">
         <Link
           href="/dashboard/projects"
-          className="text-sm text-slate-400 hover:text-slate-200"
+          className="inline-flex items-center gap-1 text-[13px] text-text-tertiary hover:text-accent transition-colors focus-ring rounded"
           aria-label="Back to projects"
         >
-          &larr; Projects
+          <IconChevronLeft className="h-3.5 w-3.5" />
+          Projects
         </Link>
-        <h1 className="mt-2 text-3xl font-bold text-white">{project.name}</h1>
-        <p className="mt-1 text-sm text-slate-500">{project.repoUrl}</p>
+        <h1 className="mt-3 text-2xl font-bold tracking-tight text-text-primary">{project.name}</h1>
+        <p className="mt-1 font-mono text-[11px] text-text-tertiary">{project.repoUrl}</p>
       </div>
 
       {/* Certificate status */}
-      <section aria-label="Certificate status">
-        <h2 className="mb-3 text-lg font-semibold text-white">
-          Certificate Status
-        </h2>
+      <section aria-label="Certificate status" className="animate-fade-up" style={{ animationDelay: "0.05s" }}>
+        <h2 className="mb-3 text-sm font-semibold text-text-primary">Certificate Status</h2>
         {certificate ? (
-          <div className="rounded-lg border border-slate-800 bg-slate-900 p-5">
-            <div className="flex items-center gap-4">
-              <span
-                className={`inline-flex rounded-full border px-2.5 py-0.5 text-xs font-medium capitalize ${CERT_STATUS_STYLES[certificate.status]}`}
-              >
-                {certificate.status}
+          <div className="rounded-xl border border-border bg-surface-1 p-5">
+            <div className="flex items-center gap-4 flex-wrap">
+              <CertificateBadge status={certificate.status} />
+              <span className="text-[13px] text-text-secondary">
+                Risk Score: <span className="font-semibold text-text-primary">{certificate.riskScore}</span>
               </span>
-              <span className="text-sm text-slate-300">
-                Risk Score: {certificate.riskScore}
-              </span>
-              <span className="text-xs text-slate-500">
+              <span className="text-xs text-text-tertiary">
                 Issued {formatDate(certificate.issuedAt)}
               </span>
-              <span className="text-xs text-slate-500">
+              <span className="text-xs text-text-tertiary">
                 Expires {formatDate(certificate.expiresAt)}
               </span>
             </div>
           </div>
         ) : (
-          <p className="text-sm text-slate-500">
+          <p className="text-[13px] text-text-tertiary">
             No active certificate for this project.
           </p>
         )}
       </section>
 
       {/* Finding counts by category */}
-      <section aria-label="Findings by category">
-        <h2 className="mb-3 text-lg font-semibold text-white">
-          Findings by Category
-        </h2>
+      <section aria-label="Findings by category" className="animate-fade-up" style={{ animationDelay: "0.1s" }}>
+        <h2 className="mb-3 text-sm font-semibold text-text-primary">Findings by Category</h2>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
           {findingCounts.map((fc) => (
             <div
               key={fc.category}
-              className="rounded-lg border border-slate-800 bg-slate-900 p-4 text-center"
+              className="stat-card rounded-xl border border-border bg-surface-1 p-4 text-center"
             >
-              <p className="text-2xl font-bold text-white">{fc.count}</p>
-              <p className="mt-1 text-xs capitalize text-slate-400">
-                {fc.category}
+              <p className="text-2xl font-bold text-text-primary">{fc.count}</p>
+              <p className="mt-1 text-[10px] font-medium uppercase tracking-wider capitalize text-text-tertiary">
+                {fc.category.replace(/-/g, " ")}
               </p>
             </div>
           ))}
@@ -119,40 +102,44 @@ export default async function ProjectDetailPage({
       </section>
 
       {/* Scan history */}
-      <section aria-label="Scan history">
-        <h2 className="mb-3 text-lg font-semibold text-white">Scan History</h2>
+      <section aria-label="Scan history" className="animate-fade-up" style={{ animationDelay: "0.15s" }}>
+        <h2 className="mb-3 text-sm font-semibold text-text-primary">Scan History</h2>
         {scans.length === 0 ? (
-          <p className="text-sm text-slate-500">No scans recorded yet.</p>
+          <p className="text-[13px] text-text-tertiary">No scans recorded yet.</p>
         ) : (
-          <div className="overflow-x-auto rounded-lg border border-slate-800">
-            <table className="w-full text-left text-sm">
-              <thead className="border-b border-slate-800 bg-slate-900 text-xs uppercase text-slate-400">
-                <tr>
-                  <th scope="col" className="px-4 py-3">Commit</th>
-                  <th scope="col" className="px-4 py-3">Branch</th>
-                  <th scope="col" className="px-4 py-3">Status</th>
-                  <th scope="col" className="px-4 py-3">Risk</th>
-                  <th scope="col" className="px-4 py-3">Findings</th>
-                  <th scope="col" className="px-4 py-3">Date</th>
+          <div className="overflow-hidden rounded-xl border border-border bg-surface-1">
+            <table className="w-full text-left text-[13px]">
+              <thead>
+                <tr className="border-b border-border bg-surface-2">
+                  <th scope="col" className="px-5 py-3 text-[10px] font-semibold uppercase tracking-widest text-text-tertiary">Commit</th>
+                  <th scope="col" className="px-5 py-3 text-[10px] font-semibold uppercase tracking-widest text-text-tertiary">Branch</th>
+                  <th scope="col" className="px-5 py-3 text-[10px] font-semibold uppercase tracking-widest text-text-tertiary">Status</th>
+                  <th scope="col" className="px-5 py-3 text-[10px] font-semibold uppercase tracking-widest text-text-tertiary">Risk</th>
+                  <th scope="col" className="px-5 py-3 text-[10px] font-semibold uppercase tracking-widest text-text-tertiary">Findings</th>
+                  <th scope="col" className="px-5 py-3 text-[10px] font-semibold uppercase tracking-widest text-text-tertiary">Date</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-800">
+              <tbody className="divide-y divide-border-subtle">
                 {scans.map((scan) => (
-                  <tr key={scan.id} className="bg-slate-950 text-slate-300">
-                    <td className="px-4 py-3 font-mono text-xs">
-                      {scan.commit}
+                  <tr key={scan.id} className="table-row-hover transition-colors">
+                    <td className="px-5 py-3.5 font-mono text-xs text-accent">{scan.commit}</td>
+                    <td className="px-5 py-3.5 text-text-secondary">{scan.branch}</td>
+                    <td className="px-5 py-3.5">
+                      <StatusBadge status={scan.status} />
                     </td>
-                    <td className="px-4 py-3">{scan.branch}</td>
-                    <td className="px-4 py-3">
-                      <span
-                        className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium capitalize ${SCAN_STATUS_STYLES[scan.status]}`}
-                      >
-                        {scan.status}
+                    <td className="px-5 py-3.5">
+                      <span className={
+                        scan.riskScore >= 50
+                          ? "font-semibold text-status-fail"
+                          : scan.riskScore >= 25
+                            ? "font-semibold text-status-warn"
+                            : "text-text-secondary"
+                      }>
+                        {scan.riskScore}
                       </span>
                     </td>
-                    <td className="px-4 py-3">{scan.riskScore}</td>
-                    <td className="px-4 py-3">{scan.findingCount}</td>
-                    <td className="px-4 py-3 text-xs text-slate-500">
+                    <td className="px-5 py-3.5 text-text-secondary">{scan.findingCount}</td>
+                    <td className="px-5 py-3.5 text-xs text-text-tertiary">
                       {formatDate(scan.date)}
                     </td>
                   </tr>

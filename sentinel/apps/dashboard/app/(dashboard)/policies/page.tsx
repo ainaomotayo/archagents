@@ -1,78 +1,70 @@
 import Link from "next/link";
 import { MOCK_POLICIES } from "@/lib/mock-data";
+import { PageHeader } from "@/components/page-header";
+import { IconPlus } from "@/components/icons";
 
 export default function PoliciesPage() {
   const policies = MOCK_POLICIES;
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-white">Policies</h1>
-          <p className="mt-1 text-slate-400">
-            Manage SENTINEL scanning and compliance policies.
-          </p>
-        </div>
-        <Link
-          href="/dashboard/policies/new"
-          className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
-        >
-          New Policy
-        </Link>
-      </div>
+      <PageHeader
+        title="Policies"
+        description="Manage scanning and compliance policies for your organization."
+        action={
+          <Link
+            href="/dashboard/policies/new"
+            className="inline-flex items-center gap-2 rounded-lg bg-accent px-4 py-2.5 text-[13px] font-semibold text-text-inverse transition-all hover:brightness-110 focus-ring"
+          >
+            <IconPlus className="h-4 w-4" />
+            New Policy
+          </Link>
+        }
+      />
 
-      <div className="overflow-x-auto rounded-lg border border-slate-800">
-        <table className="w-full text-left text-sm">
-          <thead className="border-b border-slate-800 bg-slate-900 text-xs uppercase text-slate-400">
-            <tr>
-              <th scope="col" className="px-4 py-3">
-                Name
-              </th>
-              <th scope="col" className="px-4 py-3">
-                Status
-              </th>
-              <th scope="col" className="px-4 py-3">
-                Rules
-              </th>
-              <th scope="col" className="px-4 py-3">
-                Updated
-              </th>
-              <th scope="col" className="px-4 py-3">
-                Actions
-              </th>
+      <div className="animate-fade-up overflow-hidden rounded-xl border border-border bg-surface-1" style={{ animationDelay: "0.05s" }}>
+        <table className="w-full text-left text-[13px]">
+          <thead>
+            <tr className="border-b border-border bg-surface-2">
+              <th scope="col" className="px-5 py-3 text-[10px] font-semibold uppercase tracking-widest text-text-tertiary">Name</th>
+              <th scope="col" className="px-5 py-3 text-[10px] font-semibold uppercase tracking-widest text-text-tertiary">Status</th>
+              <th scope="col" className="px-5 py-3 text-[10px] font-semibold uppercase tracking-widest text-text-tertiary">Rules</th>
+              <th scope="col" className="px-5 py-3 text-[10px] font-semibold uppercase tracking-widest text-text-tertiary">Updated</th>
+              <th scope="col" className="px-5 py-3 text-[10px] font-semibold uppercase tracking-widest text-text-tertiary">Actions</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-800">
+          <tbody className="divide-y divide-border-subtle">
             {policies.map((policy) => (
-              <tr key={policy.id} className="bg-slate-950 text-slate-300">
-                <td className="px-4 py-3 font-medium text-white">
+              <tr key={policy.id} className="table-row-hover transition-colors">
+                <td className="px-5 py-3.5 font-medium text-text-primary">
                   {policy.name}
                 </td>
-                <td className="px-4 py-3">
+                <td className="px-5 py-3.5">
                   <span
-                    className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${
+                    className={`inline-flex items-center gap-1.5 rounded-md border px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wider ${
                       policy.enabled
-                        ? "bg-green-900/50 text-green-300"
-                        : "bg-slate-700 text-slate-400"
+                        ? "bg-status-pass/15 text-status-pass border-status-pass/30"
+                        : "bg-surface-3 text-text-tertiary border-border"
                     }`}
                   >
+                    <span className={`h-1.5 w-1.5 rounded-full ${policy.enabled ? "bg-status-pass" : "bg-text-tertiary"}`} />
                     {policy.enabled ? "Active" : "Disabled"}
                   </span>
                 </td>
-                <td className="px-4 py-3 text-slate-400">
+                <td className="px-5 py-3.5 text-text-secondary">
                   {policy.ruleCount} rules
                 </td>
-                <td className="px-4 py-3 text-xs text-slate-500">
+                <td className="px-5 py-3.5 text-xs text-text-tertiary">
                   {new Date(policy.updatedAt).toLocaleDateString("en-US", {
                     month: "short",
                     day: "numeric",
                     year: "numeric",
                   })}
                 </td>
-                <td className="px-4 py-3">
+                <td className="px-5 py-3.5">
                   <Link
                     href={`/dashboard/policies/${policy.id}`}
-                    className="text-sm text-blue-400 hover:text-blue-300"
+                    className="text-[13px] font-medium text-accent hover:brightness-110 focus-ring rounded"
                   >
                     Edit
                   </Link>
