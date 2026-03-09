@@ -1,1 +1,4 @@
 .worktrees/
+.turbo/
+.claude/settings.local.json
+firebase-debug.log

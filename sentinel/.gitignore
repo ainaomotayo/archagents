@@ -6,6 +6,7 @@ dist/
 .env.local
 __pycache__/
 *.pyc
+*.egg-info/
 .pytest_cache/
 .venv/
 coverage/
