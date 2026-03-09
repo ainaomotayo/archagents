@@ -1,7 +1,45 @@
 @import "tailwindcss";
+@source "../";
 @import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,100..1000;1,9..40,100..1000&family=JetBrains+Mono:wght@400;500;600&display=swap');
 
 @theme {
+  --font-sans: 'DM Sans', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+
+  --color-surface-0: #0a0e17;
+  --color-surface-1: #0f1420;
+  --color-surface-2: #151b2b;
+  --color-surface-3: #1c2438;
+  --color-surface-4: #232d45;
+
+  --color-border: #1e2740;
+  --color-border-subtle: #161d30;
+  --color-border-accent: #1a5c5c;
+
+  --color-text-primary: #e8ecf4;
+  --color-text-secondary: #8892a8;
+  --color-text-tertiary: #5a6478;
+  --color-text-inverse: #0a0e17;
+
+  --color-accent: #22d3c5;
+  --color-accent-muted: #0d4f4a;
+  --color-accent-subtle: #0a3330;
+
+  --color-status-pass: #34d399;
+  --color-status-fail: #f87171;
+  --color-status-warn: #fbbf24;
+  --color-status-info: #60a5fa;
+  --color-status-running: #a78bfa;
+
+  --color-severity-critical: #ef4444;
+  --color-severity-high: #f97316;
+  --color-severity-medium: #eab308;
+  --color-severity-low: #3b82f6;
+}
+
+/* Explicit :root fallback — @theme is consumed by Tailwind at build time
+   but may not emit :root custom properties in all build configurations. */
+:root {
   --font-sans: 'DM Sans', system-ui, sans-serif;
   --font-mono: 'JetBrains Mono', ui-monospace, monospace;
 
