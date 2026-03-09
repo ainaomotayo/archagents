@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "SENTINEL Dashboard",
-  description: "Security review dashboard for AI-generated code",
+  title: "SENTINEL | AI Code Governance",
+  description: "Enterprise compliance and security governance for AI-generated code",
 };
 
 export default function RootLayout({
@@ -13,7 +13,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" className="dark">
-      <body className="min-h-screen bg-slate-950 text-slate-100 antialiased">
+      <body className="noise-bg min-h-screen">
         {children}
       </body>
     </html>

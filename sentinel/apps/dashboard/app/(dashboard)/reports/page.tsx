@@ -1,6 +1,8 @@
 import { MOCK_SCANS, MOCK_FINDINGS, MOCK_CERTIFICATES } from "@/lib/mock-data";
 import { generateReportData, generateReportHtml } from "@/lib/report-generator";
 import { assessCompliance } from "@/lib/eu-ai-act";
+import { PageHeader } from "@/components/page-header";
+import { IconDownload } from "@/components/icons";
 
 export default function ReportsPage() {
   const reportData = generateReportData(
@@ -10,60 +12,56 @@ export default function ReportsPage() {
   );
   const euAssessment = assessCompliance(MOCK_SCANS, MOCK_CERTIFICATES);
 
-  // Pre-generate HTML for download (base64 data URI)
   const html = generateReportHtml(reportData);
   const dataUri = `data:text/html;charset=utf-8,${encodeURIComponent(html)}`;
 
   const trendStyles = {
-    improving: "text-green-400",
-    stable: "text-yellow-400",
-    degrading: "text-red-400",
+    improving: "text-status-pass",
+    stable: "text-status-warn",
+    degrading: "text-status-fail",
   };
 
   return (
     <div className="space-y-8">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-white">Reports</h1>
-          <p className="mt-1 text-slate-400">
-            Generate and download compliance reports.
-          </p>
-        </div>
-        <a
-          href={dataUri}
-          download="sentinel-compliance-report.html"
-          className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
-        >
-          Download Report (HTML)
-        </a>
-      </div>
+      <PageHeader
+        title="Reports"
+        description="Generate and download compliance reports for auditing."
+        action={
+          <a
+            href={dataUri}
+            download="sentinel-compliance-report.html"
+            className="inline-flex items-center gap-2 rounded-lg bg-accent px-4 py-2.5 text-[13px] font-semibold text-text-inverse transition-all hover:brightness-110 focus-ring"
+          >
+            <IconDownload className="h-4 w-4" />
+            Download Report
+          </a>
+        }
+      />
 
       {/* Summary cards */}
-      <section aria-label="Report summary">
+      <section aria-label="Report summary" className="animate-fade-up" style={{ animationDelay: "0.05s" }}>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <div className="rounded-lg border border-slate-800 bg-slate-900 p-6">
-            <p className="text-sm text-slate-400">Total Scans</p>
-            <p className="mt-2 text-2xl font-bold text-white">
+          <div className="stat-card rounded-xl border border-border bg-surface-1 p-5">
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-text-tertiary">Total Scans</p>
+            <p className="mt-3 text-3xl font-bold tracking-tight text-text-primary">
               {reportData.summary.totalScans}
             </p>
           </div>
-          <div className="rounded-lg border border-slate-800 bg-slate-900 p-6">
-            <p className="text-sm text-slate-400">Pass Rate</p>
-            <p className="mt-2 text-2xl font-bold text-white">
+          <div className="stat-card rounded-xl border border-border bg-surface-1 p-5">
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-text-tertiary">Pass Rate</p>
+            <p className="mt-3 text-3xl font-bold tracking-tight text-text-primary">
               {reportData.summary.passRate}%
             </p>
           </div>
-          <div className="rounded-lg border border-slate-800 bg-slate-900 p-6">
-            <p className="text-sm text-slate-400">Risk Trend</p>
-            <p
-              className={`mt-2 text-2xl font-bold capitalize ${trendStyles[reportData.summary.riskTrend]}`}
-            >
+          <div className="stat-card rounded-xl border border-border bg-surface-1 p-5">
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-text-tertiary">Risk Trend</p>
+            <p className={`mt-3 text-3xl font-bold tracking-tight capitalize ${trendStyles[reportData.summary.riskTrend]}`}>
               {reportData.summary.riskTrend}
             </p>
           </div>
-          <div className="rounded-lg border border-slate-800 bg-slate-900 p-6">
-            <p className="text-sm text-slate-400">EU AI Act Score</p>
-            <p className="mt-2 text-2xl font-bold text-white">
+          <div className="stat-card rounded-xl border border-border bg-surface-1 p-5">
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-text-tertiary">EU AI Act Score</p>
+            <p className="mt-3 text-3xl font-bold tracking-tight text-text-primary">
               {euAssessment.complianceScore}%
             </p>
           </div>
@@ -71,34 +69,35 @@ export default function ReportsPage() {
       </section>
 
       {/* EU AI Act */}
-      <section aria-label="EU AI Act compliance">
-        <h2 className="mb-4 text-lg font-semibold text-white">
-          EU AI Act Compliance
-        </h2>
-        <div className="overflow-x-auto rounded-lg border border-slate-800">
-          <table className="w-full text-left text-sm">
-            <thead className="border-b border-slate-800 bg-slate-900 text-xs uppercase text-slate-400">
-              <tr>
-                <th scope="col" className="px-4 py-3">Article</th>
-                <th scope="col" className="px-4 py-3">Title</th>
-                <th scope="col" className="px-4 py-3">Status</th>
+      <section aria-label="EU AI Act compliance" className="animate-fade-up" style={{ animationDelay: "0.15s" }}>
+        <h2 className="mb-4 text-sm font-semibold text-text-primary">EU AI Act Compliance</h2>
+        <div className="overflow-hidden rounded-xl border border-border bg-surface-1">
+          <table className="w-full text-left text-[13px]">
+            <thead>
+              <tr className="border-b border-border bg-surface-2">
+                <th scope="col" className="px-5 py-3 text-[10px] font-semibold uppercase tracking-widest text-text-tertiary">Article</th>
+                <th scope="col" className="px-5 py-3 text-[10px] font-semibold uppercase tracking-widest text-text-tertiary">Title</th>
+                <th scope="col" className="px-5 py-3 text-[10px] font-semibold uppercase tracking-widest text-text-tertiary">Status</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-800">
+            <tbody className="divide-y divide-border-subtle">
               {euAssessment.requirements.map((req) => (
-                <tr key={req.article} className="bg-slate-950 text-slate-300">
-                  <td className="px-4 py-3 font-mono text-xs">{req.article}</td>
-                  <td className="px-4 py-3">{req.title}</td>
-                  <td className="px-4 py-3">
+                <tr key={req.article} className="table-row-hover transition-colors">
+                  <td className="px-5 py-3.5 font-mono text-xs text-accent">{req.article}</td>
+                  <td className="px-5 py-3.5 text-text-secondary">{req.title}</td>
+                  <td className="px-5 py-3.5">
                     <span
-                      className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium capitalize ${
+                      className={`inline-flex items-center gap-1.5 rounded-md border px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wider ${
                         req.status === "compliant"
-                          ? "bg-green-900/50 text-green-300"
+                          ? "bg-status-pass/15 text-status-pass border-status-pass/30"
                           : req.status === "partial"
-                            ? "bg-yellow-900/50 text-yellow-300"
-                            : "bg-slate-700 text-slate-400"
+                            ? "bg-status-warn/15 text-status-warn border-status-warn/30"
+                            : "bg-surface-3 text-text-tertiary border-border"
                       }`}
                     >
+                      <span className={`h-1.5 w-1.5 rounded-full ${
+                        req.status === "compliant" ? "bg-status-pass" : req.status === "partial" ? "bg-status-warn" : "bg-text-tertiary"
+                      }`} />
                       {req.status}
                     </span>
                   </td>
@@ -110,30 +109,28 @@ export default function ReportsPage() {
       </section>
 
       {/* SOC 2 */}
-      <section aria-label="SOC 2 controls">
-        <h2 className="mb-4 text-lg font-semibold text-white">
-          SOC 2 Control Mapping
-        </h2>
-        <div className="overflow-x-auto rounded-lg border border-slate-800">
-          <table className="w-full text-left text-sm">
-            <thead className="border-b border-slate-800 bg-slate-900 text-xs uppercase text-slate-400">
-              <tr>
-                <th scope="col" className="px-4 py-3">Control</th>
-                <th scope="col" className="px-4 py-3">Status</th>
+      <section aria-label="SOC 2 controls" className="animate-fade-up" style={{ animationDelay: "0.25s" }}>
+        <h2 className="mb-4 text-sm font-semibold text-text-primary">SOC 2 Control Mapping</h2>
+        <div className="overflow-hidden rounded-xl border border-border bg-surface-1">
+          <table className="w-full text-left text-[13px]">
+            <thead>
+              <tr className="border-b border-border bg-surface-2">
+                <th scope="col" className="px-5 py-3 text-[10px] font-semibold uppercase tracking-widest text-text-tertiary">Control</th>
+                <th scope="col" className="px-5 py-3 text-[10px] font-semibold uppercase tracking-widest text-text-tertiary">Status</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-800">
+            <tbody className="divide-y divide-border-subtle">
               {reportData.compliance.soc2Controls.map((ctrl) => (
-                <tr key={ctrl.control} className="bg-slate-950 text-slate-300">
-                  <td className="px-4 py-3">{ctrl.control}</td>
-                  <td className="px-4 py-3">
+                <tr key={ctrl.control} className="table-row-hover transition-colors">
+                  <td className="px-5 py-3.5 text-text-secondary">{ctrl.control}</td>
+                  <td className="px-5 py-3.5">
                     <span
-                      className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium uppercase ${
+                      className={`inline-flex items-center gap-1.5 rounded-md border px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wider ${
                         ctrl.status === "met"
-                          ? "bg-green-900/50 text-green-300"
+                          ? "bg-status-pass/15 text-status-pass border-status-pass/30"
                           : ctrl.status === "partial"
-                            ? "bg-yellow-900/50 text-yellow-300"
-                            : "bg-red-900/50 text-red-300"
+                            ? "bg-status-warn/15 text-status-warn border-status-warn/30"
+                            : "bg-status-fail/15 text-status-fail border-status-fail/30"
                       }`}
                     >
                       {ctrl.status}
@@ -148,20 +145,18 @@ export default function ReportsPage() {
 
       {/* Top findings */}
       {reportData.summary.topFindings.length > 0 && (
-        <section aria-label="Top findings">
-          <h2 className="mb-4 text-lg font-semibold text-white">
-            Top Finding Categories
-          </h2>
+        <section aria-label="Top findings" className="animate-fade-up" style={{ animationDelay: "0.35s" }}>
+          <h2 className="mb-4 text-sm font-semibold text-text-primary">Top Finding Categories</h2>
           <div className="space-y-2">
             {reportData.summary.topFindings.map((f) => (
               <div
                 key={f.category}
-                className="flex items-center justify-between rounded-lg border border-slate-800 bg-slate-900 px-4 py-3"
+                className="flex items-center justify-between rounded-xl border border-border bg-surface-1 px-5 py-3.5"
               >
-                <span className="text-sm text-slate-300 capitalize">
+                <span className="text-[13px] capitalize text-text-secondary">
                   {f.category.replace(/-/g, " ")}
                 </span>
-                <span className="text-sm font-bold text-white">{f.count}</span>
+                <span className="font-mono text-sm font-bold text-text-primary">{f.count}</span>
               </div>
             ))}
           </div>

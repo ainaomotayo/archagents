@@ -1,10 +1,17 @@
 import type { Severity } from "@/lib/types";
 
 const SEVERITY_STYLES: Record<Severity, string> = {
-  critical: "bg-red-900/50 text-red-300 border-red-700",
-  high: "bg-orange-900/50 text-orange-300 border-orange-700",
-  medium: "bg-yellow-900/50 text-yellow-300 border-yellow-700",
-  low: "bg-blue-900/50 text-blue-300 border-blue-700",
+  critical: "bg-severity-critical/15 text-severity-critical border-severity-critical/30",
+  high: "bg-severity-high/15 text-severity-high border-severity-high/30",
+  medium: "bg-severity-medium/15 text-severity-medium border-severity-medium/30",
+  low: "bg-severity-low/15 text-severity-low border-severity-low/30",
+};
+
+const SEVERITY_DOT: Record<Severity, string> = {
+  critical: "bg-severity-critical",
+  high: "bg-severity-high",
+  medium: "bg-severity-medium",
+  low: "bg-severity-low",
 };
 
 interface SeverityBadgeProps {
@@ -14,9 +21,10 @@ interface SeverityBadgeProps {
 export function SeverityBadge({ severity }: SeverityBadgeProps) {
   return (
     <span
-      className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium capitalize ${SEVERITY_STYLES[severity]}`}
+      className={`inline-flex items-center gap-1.5 rounded-md border px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wider ${SEVERITY_STYLES[severity]}`}
       aria-label={`Severity: ${severity}`}
     >
+      <span className={`h-1.5 w-1.5 rounded-full ${SEVERITY_DOT[severity]}`} />
       {severity}
     </span>
   );

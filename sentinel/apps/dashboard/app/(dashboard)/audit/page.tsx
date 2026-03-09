@@ -1,11 +1,12 @@
 import { MOCK_AUDIT_LOG } from "@/lib/mock-data";
+import { PageHeader } from "@/components/page-header";
 
 const ACTION_STYLES: Record<string, string> = {
-  scan: "bg-blue-900/50 text-blue-300",
-  certificate: "bg-green-900/50 text-green-300",
-  revocation: "bg-red-900/50 text-red-300",
-  policy: "bg-purple-900/50 text-purple-300",
-  finding: "bg-yellow-900/50 text-yellow-300",
+  scan: "bg-status-info/15 text-status-info border-status-info/30",
+  certificate: "bg-status-pass/15 text-status-pass border-status-pass/30",
+  revocation: "bg-status-fail/15 text-status-fail border-status-fail/30",
+  policy: "bg-status-running/15 text-status-running border-status-running/30",
+  finding: "bg-status-warn/15 text-status-warn border-status-warn/30",
 };
 
 function formatDate(iso: string): string {
@@ -22,42 +23,40 @@ export default function AuditLogPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold text-white">Audit Log</h1>
-        <p className="mt-1 text-slate-400">
-          Chronological record of all SENTINEL platform events.
-        </p>
-      </div>
+      <PageHeader
+        title="Audit Log"
+        description="Chronological record of all platform events for compliance tracking."
+      />
 
-      <div className="overflow-x-auto rounded-lg border border-slate-800">
-        <table className="w-full text-left text-sm">
-          <thead className="border-b border-slate-800 bg-slate-900 text-xs uppercase text-slate-400">
-            <tr>
-              <th scope="col" className="px-4 py-3">Timestamp</th>
-              <th scope="col" className="px-4 py-3">Action</th>
-              <th scope="col" className="px-4 py-3">Actor</th>
-              <th scope="col" className="px-4 py-3">Resource</th>
-              <th scope="col" className="px-4 py-3">Details</th>
+      <div className="animate-fade-up overflow-hidden rounded-xl border border-border bg-surface-1" style={{ animationDelay: "0.05s" }}>
+        <table className="w-full text-left text-[13px]">
+          <thead>
+            <tr className="border-b border-border bg-surface-2">
+              <th scope="col" className="px-5 py-3 text-[10px] font-semibold uppercase tracking-widest text-text-tertiary">Timestamp</th>
+              <th scope="col" className="px-5 py-3 text-[10px] font-semibold uppercase tracking-widest text-text-tertiary">Action</th>
+              <th scope="col" className="px-5 py-3 text-[10px] font-semibold uppercase tracking-widest text-text-tertiary">Actor</th>
+              <th scope="col" className="px-5 py-3 text-[10px] font-semibold uppercase tracking-widest text-text-tertiary">Resource</th>
+              <th scope="col" className="px-5 py-3 text-[10px] font-semibold uppercase tracking-widest text-text-tertiary">Details</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-800">
+          <tbody className="divide-y divide-border-subtle">
             {events.map((event) => (
-              <tr key={event.id} className="bg-slate-950 text-slate-300">
-                <td className="px-4 py-3 text-xs text-slate-500 whitespace-nowrap">
+              <tr key={event.id} className="table-row-hover transition-colors">
+                <td className="px-5 py-3.5 whitespace-nowrap text-xs text-text-tertiary">
                   {formatDate(event.timestamp)}
                 </td>
-                <td className="px-4 py-3">
+                <td className="px-5 py-3.5">
                   <span
-                    className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium capitalize ${ACTION_STYLES[event.action] ?? "bg-slate-700 text-slate-400"}`}
+                    className={`inline-flex items-center rounded-md border px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wider ${ACTION_STYLES[event.action] ?? "bg-surface-3 text-text-tertiary border-border"}`}
                   >
                     {event.action}
                   </span>
                 </td>
-                <td className="px-4 py-3 text-sm">{event.actor}</td>
-                <td className="px-4 py-3 font-mono text-xs text-slate-400">
+                <td className="px-5 py-3.5 text-text-secondary">{event.actor}</td>
+                <td className="px-5 py-3.5 font-mono text-xs text-accent">
                   {event.resource}
                 </td>
-                <td className="px-4 py-3 text-xs text-slate-400">
+                <td className="px-5 py-3.5 text-xs text-text-tertiary">
                   {event.details}
                 </td>
               </tr>

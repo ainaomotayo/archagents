@@ -1,13 +1,7 @@
 import Link from "next/link";
 import { getProjects } from "@/lib/api";
-import type { ScanStatus } from "@/lib/types";
-
-const STATUS_STYLES: Record<ScanStatus, string> = {
-  pass: "bg-green-900/50 text-green-300 border-green-700",
-  fail: "bg-red-900/50 text-red-300 border-red-700",
-  provisional: "bg-yellow-900/50 text-yellow-300 border-yellow-700",
-  running: "bg-blue-900/50 text-blue-300 border-blue-700",
-};
+import { PageHeader } from "@/components/page-header";
+import { StatusBadge } from "@/components/status-badge";
 
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString("en-US", {
@@ -22,52 +16,47 @@ export default async function ProjectsPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold text-white">Projects</h1>
-        <p className="mt-1 text-slate-400">
-          All monitored repositories and their scan status.
-        </p>
-      </div>
+      <PageHeader
+        title="Projects"
+        description="All monitored repositories and their compliance status."
+      />
 
-      <div className="grid gap-4">
-        {projects.map((project) => (
+      <div className="grid gap-3">
+        {projects.map((project, i) => (
           <Link
             key={project.id}
-            href={`/dashboard/projects/${project.id}`}
-            className="block rounded-lg border border-slate-800 bg-slate-900 p-5 transition-colors hover:border-slate-700 hover:bg-slate-800/50"
+            href={`/projects/${project.id}`}
+            className="animate-fade-up group block rounded-xl border border-border bg-surface-1 p-5 transition-all duration-150 hover:border-border-accent hover:bg-surface-2 focus-ring"
+            style={{ animationDelay: `${0.05 * i}s` }}
             aria-label={`View project ${project.name}`}
           >
             <div className="flex items-center justify-between">
               <div>
-                <h2 className="text-lg font-semibold text-white">
+                <h2 className="text-[15px] font-semibold text-text-primary group-hover:text-accent transition-colors">
                   {project.name}
                 </h2>
-                <p className="mt-1 text-xs text-slate-500">
+                <p className="mt-1 text-[11px] text-text-tertiary">
                   {project.lastScanDate
                     ? `Last scan: ${formatDate(project.lastScanDate)}`
                     : "No scans yet"}
                 </p>
               </div>
 
-              <div className="flex items-center gap-4">
+              <div className="flex items-center gap-6">
                 {project.lastScanStatus && (
-                  <span
-                    className={`inline-flex rounded-full border px-2.5 py-0.5 text-xs font-medium capitalize ${STATUS_STYLES[project.lastScanStatus]}`}
-                  >
-                    {project.lastScanStatus}
-                  </span>
+                  <StatusBadge status={project.lastScanStatus} />
                 )}
                 <div className="text-right">
-                  <p className="text-sm font-medium text-white">
+                  <p className="text-lg font-bold text-text-primary">
                     {project.findingCount}
                   </p>
-                  <p className="text-xs text-slate-500">findings</p>
+                  <p className="text-[10px] uppercase tracking-wider text-text-tertiary">findings</p>
                 </div>
                 <div className="text-right">
-                  <p className="text-sm font-medium text-white">
+                  <p className="text-lg font-bold text-text-primary">
                     {project.scanCount}
                   </p>
-                  <p className="text-xs text-slate-500">scans</p>
+                  <p className="text-[10px] uppercase tracking-wider text-text-tertiary">scans</p>
                 </div>
               </div>
             </div>

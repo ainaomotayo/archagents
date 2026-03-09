@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback } from "react";
+import Link from "next/link";
 import { PolicyEditor } from "@/components/policy-editor";
 import {
   PolicyValidator,
@@ -8,6 +9,7 @@ import {
   type ValidationMessage,
 } from "@/components/policy-validator";
 import { MOCK_POLICIES } from "@/lib/mock-data";
+import { IconChevronLeft } from "@/components/icons";
 
 const DEFAULT_POLICY = `version: "1.0"
 rules:
@@ -41,8 +43,6 @@ export default function PolicyEditorPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  // In a real app, we'd use `use(params)` or a loader; for the MVP we
-  // resolve synchronously since mock data is static.
   const resolvedParams =
     typeof (params as unknown as { id: string }).id === "string"
       ? (params as unknown as { id: string })
@@ -66,22 +66,28 @@ export default function PolicyEditorPage({
     const errors = messages.filter((m) => m.level === "error");
     if (errors.length > 0) return;
     setSaved(true);
-    // In a real app, persist via API call
   }, [messages]);
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-white">{policyName}</h1>
-          <p className="mt-1 text-slate-400">
+          <Link
+            href="/policies"
+            className="inline-flex items-center gap-1 text-[13px] text-text-tertiary hover:text-accent transition-colors focus-ring rounded"
+          >
+            <IconChevronLeft className="h-3.5 w-3.5" />
+            Policies
+          </Link>
+          <h1 className="mt-3 text-2xl font-bold tracking-tight text-text-primary">{policyName}</h1>
+          <p className="mt-1.5 text-[13px] text-text-secondary">
             Edit the policy YAML below. Validation runs in real-time.
           </p>
         </div>
         <button
           onClick={handleSave}
           disabled={messages.some((m) => m.level === "error")}
-          className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+          className="rounded-lg bg-accent px-4 py-2.5 text-[13px] font-semibold text-text-inverse transition-all hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-40 focus-ring"
         >
           {saved ? "Saved" : "Save Policy"}
         </button>
@@ -92,7 +98,7 @@ export default function PolicyEditorPage({
           <PolicyEditor initialValue={initialYaml} onChange={handleChange} />
         </div>
         <div>
-          <h2 className="mb-3 text-sm font-semibold uppercase text-slate-400">
+          <h2 className="mb-3 text-[10px] font-semibold uppercase tracking-widest text-text-tertiary">
             Validation
           </h2>
           <PolicyValidator messages={messages} />

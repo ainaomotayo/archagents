@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import { MOCK_WEBHOOKS } from "@/lib/mock-data";
+import { PageHeader } from "@/components/page-header";
+import { IconPlus, IconGlobe } from "@/components/icons";
 
 interface Webhook {
   id: string;
@@ -28,46 +30,45 @@ export default function WebhooksPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-white">Webhooks</h1>
-          <p className="mt-1 text-slate-400">
-            Configure webhook endpoints for SENTINEL events.
-          </p>
-        </div>
-        <button
-          onClick={() => setShowForm(!showForm)}
-          className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
-        >
-          {showForm ? "Cancel" : "Add Webhook"}
-        </button>
-      </div>
+      <PageHeader
+        title="Webhooks"
+        description="Configure webhook endpoints for SENTINEL events."
+        action={
+          <button
+            onClick={() => setShowForm(!showForm)}
+            className="inline-flex items-center gap-2 rounded-lg bg-accent px-4 py-2.5 text-[13px] font-semibold text-text-inverse transition-all hover:brightness-110 focus-ring"
+          >
+            <IconPlus className="h-4 w-4" />
+            {showForm ? "Cancel" : "Add Webhook"}
+          </button>
+        }
+      />
 
       {/* New webhook form */}
       {showForm && (
-        <div className="rounded-lg border border-slate-700 bg-slate-900 p-6 space-y-4">
+        <div className="animate-fade-up rounded-xl border border-border bg-surface-1 p-6 space-y-5">
           <div>
-            <label className="block text-sm font-medium text-slate-300 mb-1">
+            <label className="block text-[11px] font-semibold uppercase tracking-wider text-text-tertiary mb-2">
               Name
             </label>
             <input
               type="text"
               placeholder="e.g., Slack Notifications"
-              className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-200 placeholder:text-slate-600 outline-none focus:border-blue-500"
+              className="w-full rounded-lg border border-border bg-surface-0 px-4 py-2.5 text-[13px] text-text-primary placeholder:text-text-tertiary outline-none focus:border-accent transition-colors"
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-slate-300 mb-1">
+            <label className="block text-[11px] font-semibold uppercase tracking-wider text-text-tertiary mb-2">
               URL
             </label>
             <input
               type="url"
               placeholder="https://hooks.slack.com/services/..."
-              className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-200 placeholder:text-slate-600 outline-none focus:border-blue-500"
+              className="w-full rounded-lg border border-border bg-surface-0 px-4 py-2.5 font-mono text-[13px] text-text-primary placeholder:text-text-tertiary outline-none focus:border-accent transition-colors"
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-slate-300 mb-1">
+            <label className="block text-[11px] font-semibold uppercase tracking-wider text-text-tertiary mb-2">
               Events
             </label>
             <div className="flex flex-wrap gap-2">
@@ -80,15 +81,15 @@ export default function WebhooksPage() {
               ].map((event) => (
                 <label
                   key={event}
-                  className="flex items-center gap-1.5 rounded border border-slate-700 px-2 py-1 text-xs text-slate-300"
+                  className="flex items-center gap-2 rounded-lg border border-border bg-surface-2 px-3 py-2 text-[11px] text-text-secondary cursor-pointer hover:border-border-accent transition-colors"
                 >
-                  <input type="checkbox" className="rounded" />
+                  <input type="checkbox" className="rounded accent-accent" />
                   {event}
                 </label>
               ))}
             </div>
           </div>
-          <button className="rounded-lg bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700">
+          <button className="rounded-lg bg-status-pass px-4 py-2.5 text-[13px] font-semibold text-text-inverse transition-all hover:brightness-110 focus-ring">
             Save Webhook
           </button>
         </div>
@@ -96,49 +97,56 @@ export default function WebhooksPage() {
 
       {/* Webhook list */}
       <div className="space-y-3">
-        {webhooks.map((wh) => (
+        {webhooks.map((wh, i) => (
           <div
             key={wh.id}
-            className="rounded-lg border border-slate-800 bg-slate-900 p-4"
+            className="animate-fade-up rounded-xl border border-border bg-surface-1 p-5 transition-all hover:border-border-accent"
+            style={{ animationDelay: `${0.05 * i}s` }}
           >
             <div className="flex items-center justify-between">
-              <div>
-                <h3 className="font-medium text-white">{wh.name}</h3>
-                <p className="mt-1 text-xs font-mono text-slate-400 truncate max-w-md">
-                  {wh.url}
-                </p>
+              <div className="flex items-center gap-3">
+                <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-surface-3">
+                  <IconGlobe className="h-4 w-4 text-text-tertiary" />
+                </div>
+                <div>
+                  <h3 className="text-[13px] font-semibold text-text-primary">{wh.name}</h3>
+                  <p className="mt-0.5 max-w-md truncate font-mono text-[11px] text-text-tertiary">
+                    {wh.url}
+                  </p>
+                </div>
               </div>
               <div className="flex items-center gap-3">
                 <button
                   onClick={() => toggleEnabled(wh.id)}
-                  className={`rounded-full px-3 py-1 text-xs font-medium ${
+                  className={`inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wider transition-colors ${
                     wh.enabled
-                      ? "bg-green-900/50 text-green-300"
-                      : "bg-slate-700 text-slate-400"
+                      ? "bg-status-pass/15 text-status-pass border-status-pass/30"
+                      : "bg-surface-3 text-text-tertiary border-border"
                   }`}
                 >
+                  <span className={`h-1.5 w-1.5 rounded-full ${wh.enabled ? "bg-status-pass" : "bg-text-tertiary"}`} />
                   {wh.enabled ? "Active" : "Disabled"}
                 </button>
                 <button
                   onClick={() => deleteWebhook(wh.id)}
-                  className="text-xs text-red-400 hover:text-red-300"
+                  className="text-[11px] font-medium text-status-fail hover:brightness-110 focus-ring rounded px-2 py-1"
                 >
                   Delete
                 </button>
               </div>
             </div>
-            <div className="mt-2 flex flex-wrap gap-1.5">
+            <div className="mt-3 flex flex-wrap gap-1.5">
               {wh.events.map((e) => (
                 <span
                   key={e}
-                  className="rounded bg-slate-800 px-2 py-0.5 text-xs text-slate-400"
+                  className="rounded-md bg-surface-3 px-2 py-0.5 text-[10px] font-medium text-text-tertiary"
                 >
                   {e}
                 </span>
               ))}
             </div>
             {wh.lastTriggered && (
-              <p className="mt-2 text-xs text-slate-500">
+              <p className="mt-3 text-[11px] text-text-tertiary">
                 Last triggered:{" "}
                 {new Date(wh.lastTriggered).toLocaleDateString("en-US", {
                   month: "short",
@@ -152,10 +160,9 @@ export default function WebhooksPage() {
         ))}
 
         {webhooks.length === 0 && (
-          <div className="rounded-lg border border-dashed border-slate-700 bg-slate-900/50 px-6 py-12 text-center">
-            <p className="text-sm text-slate-500">
-              No webhooks configured. Click &quot;Add Webhook&quot; to get
-              started.
+          <div className="rounded-xl border border-dashed border-border bg-surface-1 px-6 py-16 text-center">
+            <p className="text-[13px] text-text-tertiary">
+              No webhooks configured. Click &quot;Add Webhook&quot; to get started.
             </p>
           </div>
         )}
