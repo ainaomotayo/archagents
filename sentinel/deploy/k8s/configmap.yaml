@@ -9,3 +9,4 @@ data:
   LOG_LEVEL: "info"
   CORS_ORIGIN: "https://sentinel.example.com"
   RATE_LIMIT_MAX: "100"
+  CLOUD_PROVIDER: ""

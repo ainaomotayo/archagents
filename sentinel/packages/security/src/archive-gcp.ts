@@ -32,7 +32,7 @@ export class GcpArchiveProvider implements ArchiveProvider {
 
     // Set retention on the object (requires bucket-level retention policy)
     try {
-      await file.setRetention({
+      await (file as any).setRetention({
         mode: "Locked",
         retainUntilTime: retainUntil.toISOString(),
       });

@@ -98,9 +98,9 @@ async function finalizeScan(scanId: string, hasTimeouts: boolean) {
           assessment.certificate.id,
           JSON.stringify(assessment.certificate),
         );
-        logger.info({ scanId, certificateId: assessment.certificate.id }, "Certificate archived to S3");
+        logger.info({ scanId, certificateId: assessment.certificate.id }, "Certificate archived to cloud storage");
       } catch (archiveErr) {
-        logger.error({ scanId, err: archiveErr }, "Failed to archive certificate to S3");
+        logger.error({ scanId, err: archiveErr }, "Failed to archive certificate to cloud storage");
         // Don't fail the scan — archival is best-effort
       }
     }
