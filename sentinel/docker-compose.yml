@@ -127,7 +127,13 @@ services:
     environment:
       REDIS_URL: redis://redis:6379
       SELF_SCAN_ENABLED: ${SELF_SCAN_ENABLED:-true}
+      SCHEDULER_PORT: "9091"
     command: ["node", "apps/api/dist/scheduler.js"]
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:9091/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
 
   # Analysis Agents (uncomment when running full pipeline)
   # agent-security:
