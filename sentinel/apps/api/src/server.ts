@@ -86,21 +86,24 @@ app.get("/metrics", { config: { rateLimit: false } }, async (_request, reply) =>
 
 // --- Scans ---
 app.get("/v1/scans", { preHandler: authHook }, async (request) => {
+  const orgId = (request as any).orgId ?? "default";
   const { limit = "50", offset = "0", status, projectId } = request.query as any;
-  const where: any = {};
-  if (status) where.status = status;
-  if (projectId) where.projectId = projectId;
-  const [scans, total] = await Promise.all([
-    db.scan.findMany({
-      where,
-      take: Number(limit),
-      skip: Number(offset),
-      orderBy: { startedAt: "desc" },
-      include: { certificate: true, _count: { select: { findings: true } } },
-    }),
-    db.scan.count({ where }),
-  ]);
-  return { scans, total, limit: Number(limit), offset: Number(offset) };
+  return withTenant(db, orgId, async (tx) => {
+    const where: any = {};
+    if (status) where.status = status;
+    if (projectId) where.projectId = projectId;
+    const [scans, total] = await Promise.all([
+      tx.scan.findMany({
+        where,
+        take: Number(limit),
+        skip: Number(offset),
+        orderBy: { startedAt: "desc" },
+        include: { certificate: true, _count: { select: { findings: true } } },
+      }),
+      tx.scan.count({ where }),
+    ]);
+    return { scans, total, limit: Number(limit), offset: Number(offset) };
+  });
 });
 
 app.post("/v1/scans", { preHandler: authHook }, async (request, reply) => {
@@ -224,34 +227,36 @@ app.post("/v1/certificates/:id/revoke", { preHandler: authHook }, async (request
     return;
   }
 
-  const cert = await db.certificate.findUnique({ where: { id } });
-  if (!cert) {
-    reply.code(404).send({ error: "Certificate not found" });
-    return;
-  }
+  return withTenant(db, orgId, async (tx) => {
+    const cert = await tx.certificate.findUnique({ where: { id } });
+    if (!cert) {
+      reply.code(404).send({ error: "Certificate not found" });
+      return;
+    }
 
-  if (cert.revokedAt) {
-    reply.code(409).send({ error: "Certificate already revoked" });
-    return;
-  }
+    if (cert.revokedAt) {
+      reply.code(409).send({ error: "Certificate already revoked" });
+      return;
+    }
 
-  const now = new Date();
-  await db.certificate.update({
-    where: { id },
-    data: {
-      revokedAt: now,
-      revocationReason: reason,
-    },
+    const now = new Date();
+    await tx.certificate.update({
+      where: { id },
+      data: {
+        revokedAt: now,
+        revocationReason: reason,
+      },
+    });
+
+    await auditLog.append(orgId, {
+      actor: { type: "api", id: "cli", name: "SENTINEL CLI" },
+      action: "certificate.revoked",
+      resource: { type: "certificate", id },
+      detail: { reason },
+    });
+
+    return { id, status: "revoked", revokedAt: now.toISOString() };
   });
-
-  await auditLog.append(orgId, {
-    actor: { type: "api", id: "cli", name: "SENTINEL CLI" },
-    action: "certificate.revoked",
-    resource: { type: "certificate", id },
-    detail: { reason },
-  });
-
-  return { id, status: "revoked", revokedAt: now.toISOString() };
 });
 
 // --- Projects ---

@@ -40,7 +40,7 @@ export async function getOverviewStats(): Promise<OverviewStats> {
   return tryApi(async () => {
     const { apiGet } = await import("./api-client");
     const [scansData, findingsData, certsData] = await Promise.all([
-      apiGet<{ total: number }>("/v1/findings", { limit: "0" }),
+      apiGet<{ total: number }>("/v1/scans", { limit: "0" }),
       apiGet<{ total: number }>("/v1/findings", { limit: "0" }),
       apiGet<{ certificates: any[]; total: number }>("/v1/certificates", { limit: "100" }),
     ]);
