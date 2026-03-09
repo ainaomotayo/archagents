@@ -5,7 +5,7 @@ import { getDb, disconnectDb } from "@sentinel/db";
 import { EventBus, getDlqDepth, readDlq } from "@sentinel/events";
 import { AuditLog } from "@sentinel/audit";
 import { verifyCertificate } from "@sentinel/assessor";
-import { createLogger, withCorrelationId, registry, httpRequestDuration } from "@sentinel/telemetry";
+import { createLogger, withCorrelationId, registry, httpRequestDuration, dlqDepthGauge } from "@sentinel/telemetry";
 import { configureGitHubApp } from "@sentinel/github";
 import { createAuthHook } from "./middleware/auth.js";
 import { buildScanRoutes } from "./routes/scans.js";
@@ -233,6 +233,7 @@ app.get("/v1/audit", { preHandler: authHook }, async (request) => {
 // --- DLQ monitoring ---
 app.get("/v1/admin/dlq", { preHandler: authHook }, async () => {
   const depth = await getDlqDepth(redis, "sentinel.findings.dlq");
+  dlqDepthGauge.set(depth);
   const messages = await readDlq(redis, "sentinel.findings.dlq");
   return { depth, messages };
 });
