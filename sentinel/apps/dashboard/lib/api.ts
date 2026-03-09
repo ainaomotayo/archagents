@@ -25,10 +25,27 @@ import {
 
 const USE_MOCK = !process.env.SENTINEL_API_URL;
 
-async function tryApi<T>(fn: () => Promise<T>, fallback: T): Promise<T> {
+async function getSessionHeaders(): Promise<Record<string, string>> {
+  try {
+    const { getServerSession } = await import("next-auth");
+    const { authOptions } = await import("./auth");
+    const session = await getServerSession(authOptions);
+    if (session?.user) {
+      const headers: Record<string, string> = {};
+      if ((session.user as any).role) headers["X-Sentinel-Role"] = (session.user as any).role;
+      return headers;
+    }
+  } catch {
+    // During build or when auth is unavailable, skip
+  }
+  return {};
+}
+
+async function tryApi<T>(fn: (headers: Record<string, string>) => Promise<T>, fallback: T): Promise<T> {
   if (USE_MOCK) return fallback;
   try {
-    return await fn();
+    const headers = await getSessionHeaders();
+    return await fn(headers);
   } catch {
     return fallback;
   }
@@ -37,12 +54,12 @@ async function tryApi<T>(fn: () => Promise<T>, fallback: T): Promise<T> {
 // ── Overview ──────────────────────────────────────────────────────────
 
 export async function getOverviewStats(): Promise<OverviewStats> {
-  return tryApi(async () => {
+  return tryApi(async (headers) => {
     const { apiGet } = await import("./api-client");
     const [scansData, findingsData, certsData] = await Promise.all([
-      apiGet<{ total: number }>("/v1/scans", { limit: "0" }),
-      apiGet<{ total: number }>("/v1/findings", { limit: "0" }),
-      apiGet<{ certificates: any[]; total: number }>("/v1/certificates", { limit: "100" }),
+      apiGet<{ total: number }>("/v1/scans", { limit: "0" }, headers),
+      apiGet<{ total: number }>("/v1/findings", { limit: "0" }, headers),
+      apiGet<{ certificates: any[]; total: number }>("/v1/certificates", { limit: "100" }, headers),
     ]);
     const certs = certsData.certificates ?? [];
     const revoked = certs.filter((c: any) => c.status === "revoked").length;
@@ -57,9 +74,9 @@ export async function getOverviewStats(): Promise<OverviewStats> {
 }
 
 export async function getRecentScans(limit = 5): Promise<Scan[]> {
-  return tryApi(async () => {
+  return tryApi(async (headers) => {
     const { apiGet } = await import("./api-client");
-    const data = await apiGet<{ scans: any[] }>("/v1/scans", { limit: String(limit) });
+    const data = await apiGet<{ scans: any[] }>("/v1/scans", { limit: String(limit) }, headers);
     return (data.scans ?? []).map((s: any) => ({
       id: s.id,
       projectId: s.projectId,
@@ -78,9 +95,9 @@ export async function getRecentScans(limit = 5): Promise<Scan[]> {
 // ── Projects ──────────────────────────────────────────────────────────
 
 export async function getProjects(): Promise<Project[]> {
-  return tryApi(async () => {
+  return tryApi(async (headers) => {
     const { apiGet } = await import("./api-client");
-    const data = await apiGet<any[]>("/v1/projects");
+    const data = await apiGet<any[]>("/v1/projects", undefined, headers);
     return data.map((p: any) => ({
       id: p.id,
       name: p.name,
@@ -94,9 +111,9 @@ export async function getProjects(): Promise<Project[]> {
 }
 
 export async function getProjectById(id: string): Promise<Project | null> {
-  return tryApi(async () => {
+  return tryApi(async (headers) => {
     const { apiGet } = await import("./api-client");
-    const p = await apiGet<any>(`/v1/projects/${id}`);
+    const p = await apiGet<any>(`/v1/projects/${id}`, undefined, headers);
     return {
       id: p.id,
       name: p.name,
@@ -110,9 +127,9 @@ export async function getProjectById(id: string): Promise<Project | null> {
 }
 
 export async function getProjectScans(projectId: string): Promise<Scan[]> {
-  return tryApi(async () => {
+  return tryApi(async (headers) => {
     const { apiGet } = await import("./api-client");
-    const p = await apiGet<any>(`/v1/projects/${projectId}`);
+    const p = await apiGet<any>(`/v1/projects/${projectId}`, undefined, headers);
     return (p.scans ?? []).map((s: any) => ({
       id: s.id,
       projectId: s.projectId,
@@ -129,9 +146,9 @@ export async function getProjectScans(projectId: string): Promise<Scan[]> {
 export async function getProjectFindingCounts(
   projectId: string,
 ): Promise<FindingCountByCategory[]> {
-  return tryApi(async () => {
+  return tryApi(async (headers) => {
     const { apiGet } = await import("./api-client");
-    const data = await apiGet<{ findings: any[] }>(`/v1/projects/${projectId}/findings`, { limit: "500" });
+    const data = await apiGet<{ findings: any[] }>(`/v1/projects/${projectId}/findings`, { limit: "500" }, headers);
     const counts = new Map<string, number>();
     for (const f of data.findings ?? []) {
       const cat = f.category ?? f.type ?? "other";
@@ -144,9 +161,9 @@ export async function getProjectFindingCounts(
 // ── Findings ──────────────────────────────────────────────────────────
 
 export async function getFindings(): Promise<Finding[]> {
-  return tryApi(async () => {
+  return tryApi(async (headers) => {
     const { apiGet } = await import("./api-client");
-    const data = await apiGet<{ findings: any[] }>("/v1/findings", { limit: "100" });
+    const data = await apiGet<{ findings: any[] }>("/v1/findings", { limit: "100" }, headers);
     return (data.findings ?? []).map((f: any) => ({
       id: f.id,
       projectId: f.scan?.projectId ?? f.orgId,
@@ -168,9 +185,9 @@ export async function getFindings(): Promise<Finding[]> {
 }
 
 export async function getFindingById(id: string): Promise<Finding | null> {
-  return tryApi(async () => {
+  return tryApi(async (headers) => {
     const { apiGet } = await import("./api-client");
-    const f = await apiGet<any>(`/v1/findings/${id}`);
+    const f = await apiGet<any>(`/v1/findings/${id}`, undefined, headers);
     return {
       id: f.id,
       projectId: f.scan?.projectId ?? f.orgId,
@@ -194,9 +211,9 @@ export async function getFindingById(id: string): Promise<Finding | null> {
 // ── Certificates ──────────────────────────────────────────────────────
 
 export async function getCertificates(): Promise<Certificate[]> {
-  return tryApi(async () => {
+  return tryApi(async (headers) => {
     const { apiGet } = await import("./api-client");
-    const data = await apiGet<{ certificates: any[] }>("/v1/certificates", { limit: "100" });
+    const data = await apiGet<{ certificates: any[] }>("/v1/certificates", { limit: "100" }, headers);
     return (data.certificates ?? []).map((c: any) => ({
       id: c.id,
       projectId: c.orgId,
@@ -215,9 +232,9 @@ export async function getCertificates(): Promise<Certificate[]> {
 export async function getCertificateById(
   id: string,
 ): Promise<Certificate | null> {
-  return tryApi(async () => {
+  return tryApi(async (headers) => {
     const { apiGet } = await import("./api-client");
-    const c = await apiGet<any>(`/v1/certificates/${id}`);
+    const c = await apiGet<any>(`/v1/certificates/${id}`, undefined, headers);
     return {
       id: c.id,
       projectId: c.orgId,
@@ -243,25 +260,25 @@ export async function getProjectCertificate(
 // ── Policies ──────────────────────────────────────────────────────────
 
 export async function getPolicies() {
-  return tryApi(async () => {
+  return tryApi(async (headers) => {
     const { apiGet } = await import("./api-client");
-    return apiGet<any[]>("/v1/policies");
+    return apiGet<any[]>("/v1/policies", undefined, headers);
   }, []);
 }
 
 export async function getPolicyById(id: string) {
-  return tryApi(async () => {
+  return tryApi(async (headers) => {
     const { apiGet } = await import("./api-client");
-    return apiGet<any>(`/v1/policies/${id}`);
+    return apiGet<any>(`/v1/policies/${id}`, undefined, headers);
   }, null);
 }
 
 // ── Audit Log ─────────────────────────────────────────────────────────
 
 export async function getAuditLog(limit = 50) {
-  return tryApi(async () => {
+  return tryApi(async (headers) => {
     const { apiGet } = await import("./api-client");
-    const data = await apiGet<{ events: any[] }>("/v1/audit", { limit: String(limit) });
+    const data = await apiGet<{ events: any[] }>("/v1/audit", { limit: String(limit) }, headers);
     return data.events ?? [];
   }, []);
 }
