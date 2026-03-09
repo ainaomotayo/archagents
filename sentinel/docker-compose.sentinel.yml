@@ -141,7 +141,7 @@ services:
     environment:
       REDIS_URL: ${REDIS_URL}
     healthcheck:
-      test: ["CMD-SHELL", "python -c 'import sentinel_ip_license; print(\"ok\")' || exit 1"]
+      test: ["CMD-SHELL", "python -c 'import sentinel_license; print(\"ok\")' || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -183,7 +183,7 @@ services:
     environment:
       REDIS_URL: ${REDIS_URL}
     healthcheck:
-      test: ["CMD-SHELL", "python -c 'import sentinel_ai_detector; print(\"ok\")' || exit 1"]
+      test: ["CMD-SHELL", "python -c 'import sentinel_aidetector; print(\"ok\")' || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -252,7 +252,7 @@ services:
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
       LLM_TOKEN_BUDGET: ${LLM_TOKEN_BUDGET:-50000}
     healthcheck:
-      test: ["CMD-SHELL", "python -c 'import sentinel_llm_review; print(\"ok\")' || exit 1"]
+      test: ["CMD-SHELL", "python -c 'import sentinel_llm; print(\"ok\")' || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3

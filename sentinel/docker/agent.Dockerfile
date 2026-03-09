@@ -7,4 +7,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends curl && rm -rf 
 COPY agents/framework/ ./framework/
 COPY agents/${AGENT_NAME}/ ./agent/
 RUN pip install --no-cache-dir ./framework ./agent
-CMD ["sh", "-c", "python -m sentinel_$(echo ${AGENT_NAME} | tr '-' '_')"]
+# Discover the installed module name from the agent package
+RUN AGENT_MODULE=$(find /app/agent -maxdepth 1 -name "sentinel_*" -type d ! -name "*.egg-info" -exec basename {} \; | head -1) \
+    && echo "$AGENT_MODULE" > /app/.agent_module
+CMD ["sh", "-c", "python -m $(cat /app/.agent_module)"]
