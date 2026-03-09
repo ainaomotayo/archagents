@@ -1,0 +1,13 @@
+pyproject.toml
+sentinel_dependency/__init__.py
+sentinel_dependency/__main__.py
+sentinel_dependency/agent.py
+sentinel_dependency/drift_detector.py
+sentinel_dependency/typosquat.py
+sentinel_dependency_agent.egg-info/PKG-INFO
+sentinel_dependency_agent.egg-info/SOURCES.txt
+sentinel_dependency_agent.egg-info/dependency_links.txt
+sentinel_dependency_agent.egg-info/requires.txt
+sentinel_dependency_agent.egg-info/top_level.txt
+tests/test_drift.py
+tests/test_typosquat.py
