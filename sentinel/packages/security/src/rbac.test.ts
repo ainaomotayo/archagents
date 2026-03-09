@@ -39,9 +39,9 @@ describe("rbac", () => {
     expect(isAuthorized("viewer", "DELETE", "/v1/policies/:id")).toBe(false);
   });
 
-  it("should restrict purge to admin only", () => {
-    expect(isAuthorized("admin", "POST", "/v1/orgs/purge")).toBe(true);
-    expect(isAuthorized("manager", "POST", "/v1/orgs/purge")).toBe(false);
+  it("should restrict DLQ to admin only", () => {
+    expect(isAuthorized("admin", "GET", "/v1/admin/dlq")).toBe(true);
+    expect(isAuthorized("manager", "GET", "/v1/admin/dlq")).toBe(false);
   });
 
   it("should allow manager to manage policies and certificates", () => {

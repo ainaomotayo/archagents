@@ -22,7 +22,7 @@ function formatDate(iso: string): string {
 function riskColor(score: number): string {
   if (score >= 50) return "bg-status-fail";
   if (score >= 25) return "bg-status-warn";
-  return "bg-emerald-500";
+  return "bg-status-pass";
 }
 
 function riskTextColor(score: number): string {
@@ -32,9 +32,9 @@ function riskTextColor(score: number): string {
 }
 
 function countIndicatorColor(count: number): string {
-  if (count > 10) return "bg-red-500";
-  if (count > 5) return "bg-yellow-500";
-  return "bg-emerald-500";
+  if (count > 10) return "bg-status-fail";
+  if (count > 5) return "bg-status-warn";
+  return "bg-status-pass";
 }
 
 interface ProjectDetailPageProps {

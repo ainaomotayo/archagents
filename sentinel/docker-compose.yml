@@ -56,6 +56,11 @@ services:
       AZURE_ARCHIVE_CONTAINER: ${AZURE_ARCHIVE_CONTAINER:-}
       AZURE_KEY_VAULT_URL: ${AZURE_KEY_VAULT_URL:-}
       AZURE_KEY_NAME: ${AZURE_KEY_NAME:-sentinel-master}
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:8080/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
 
   dashboard:
     build:
