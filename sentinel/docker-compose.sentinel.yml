@@ -155,6 +155,22 @@ services:
       AZURE_KEY_NAME: ${AZURE_KEY_NAME:-sentinel-master}
     command: ["node", "apps/api/dist/worker.js"]
 
+  scheduler:
+    build:
+      context: .
+      dockerfile: docker/api.Dockerfile
+    restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - sentinel-internal
+    environment:
+      REDIS_URL: ${REDIS_URL}
+      SELF_SCAN_ENABLED: ${SELF_SCAN_ENABLED:-true}
+      NODE_ENV: production
+    command: ["node", "apps/api/dist/scheduler.js"]
+
   # ---------- Analysis Agents ----------
 
   security-agent:
