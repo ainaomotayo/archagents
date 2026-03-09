@@ -9,6 +9,7 @@ import { createLogger, withCorrelationId, registry, httpRequestDuration } from "
 import { createAuthHook } from "./middleware/auth.js";
 import { buildScanRoutes } from "./routes/scans.js";
 import { createScanStore, createAuditEventStore } from "./stores.js";
+import { registerSecurityPlugins } from "./plugins/security.js";
 
 const app = Fastify({ logger: createLogger({ name: "sentinel-api" }) });
 
@@ -32,6 +33,9 @@ const scanRoutes = buildScanRoutes({
   auditLog,
 });
 
+// --- Security plugins ---
+await registerSecurityPlugins(app, { redis });
+
 // --- Observability hooks ---
 app.addHook("onRequest", async (request) => {
   (request as any).correlationId = crypto.randomUUID();
@@ -51,15 +55,15 @@ app.addHook("onResponse", async (request, reply) => {
   );
 });
 
-// --- Health (no auth) ---
-app.get("/health", async () => ({
+// --- Health (no auth, no rate limit) ---
+app.get("/health", { config: { rateLimit: false } }, async () => ({
   status: "ok",
   version: "0.1.0",
   uptime: process.uptime(),
 }));
 
-// --- Metrics (no auth) ---
-app.get("/metrics", async (_request, reply) => {
+// --- Metrics (no auth, no rate limit) ---
+app.get("/metrics", { config: { rateLimit: false } }, async (_request, reply) => {
   const metrics = await registry.metrics();
   reply.type("text/plain").send(metrics);
 });
