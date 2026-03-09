@@ -2,6 +2,16 @@ import Link from "next/link";
 import { getFindingById } from "@/lib/api";
 import { SeverityBadge } from "@/components/severity-badge";
 
+// TODO: Integrate real-time scan status updates.
+// When this page is converted to a client component (or a client wrapper is
+// added), use the useScanStatus hook to show live progress:
+//
+//   import { useScanStatus } from "@/lib/use-scan-status";
+//   const { status, connected, error } = useScanStatus(finding.scanId);
+//
+// Then render a <ScanProgressBar status={status} /> component in the header
+// section to display real-time agent progress during an active scan.
+
 interface FindingDetailPageProps {
   params: Promise<{ id: string }>;
 }
