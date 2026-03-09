@@ -11,12 +11,18 @@
     "lint": "echo 'lint placeholder'"
   },
   "dependencies": {
-    "@sentinel/shared": "workspace:*",
-    "@sentinel/events": "workspace:*",
-    "@sentinel/auth": "workspace:*",
-    "@sentinel/audit": "workspace:*",
-    "@sentinel/db": "workspace:*",
+    "@fastify/cors": "^11.2.0",
+    "@fastify/helmet": "^13.0.2",
+    "@fastify/rate-limit": "^10.3.0",
     "@sentinel/assessor": "workspace:*",
+    "@sentinel/audit": "workspace:*",
+    "@sentinel/auth": "workspace:*",
+    "@sentinel/db": "workspace:*",
+    "@sentinel/events": "workspace:*",
+    "@sentinel/security": "workspace:*",
+    "@sentinel/github": "workspace:*",
+    "@sentinel/shared": "workspace:*",
+    "@sentinel/telemetry": "workspace:*",
     "fastify": "^5.2",
     "ioredis": "^5.6"
   },

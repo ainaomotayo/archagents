@@ -1,0 +1,52 @@
+{{- if .Values.ingress.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: sentinel-ingress
+  namespace: {{ .Values.global.namespace }}
+  annotations:
+    cert-manager.io/cluster-issuer: {{ .Values.ingress.clusterIssuer }}
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+  labels:
+    {{- include "sentinel.labels" . | nindent 4 }}
+spec:
+  ingressClassName: nginx
+  {{- if .Values.ingress.tls }}
+  tls:
+    - hosts:
+        - {{ .Values.ingress.host }}
+      secretName: sentinel-tls
+  {{- end }}
+  rules:
+    - host: {{ .Values.ingress.host }}
+      http:
+        paths:
+          - path: /v1
+            pathType: Prefix
+            backend:
+              service:
+                name: sentinel-api
+                port:
+                  number: {{ .Values.api.port }}
+          - path: /webhooks
+            pathType: Prefix
+            backend:
+              service:
+                name: sentinel-api
+                port:
+                  number: {{ .Values.api.port }}
+          - path: /metrics
+            pathType: Prefix
+            backend:
+              service:
+                name: sentinel-api
+                port:
+                  number: {{ .Values.api.port }}
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: sentinel-dashboard
+                port:
+                  number: {{ .Values.dashboard.port }}
+{{- end }}

@@ -1,8 +1,18 @@
 import { Redis } from "ioredis";
-import { EventBus } from "@sentinel/events";
+import { EventBus, withRetry } from "@sentinel/events";
 import { Assessor } from "@sentinel/assessor";
 import { getDb, disconnectDb } from "@sentinel/db";
+import {
+  createLogger,
+  findingsTotal,
+  agentResultsTotal,
+  pendingScansGauge,
+  scanDuration,
+} from "@sentinel/telemetry";
+import { isArchiveEnabled, archiveToS3, getArchiveConfig } from "@sentinel/security";
 import { createAssessmentStore } from "./stores.js";
+
+const logger = createLogger({ name: "sentinel-worker" });
 
 const redis = new Redis(process.env.REDIS_URL ?? "redis://localhost:6379");
 const eventBus = new EventBus(redis);
@@ -17,6 +27,7 @@ interface PendingScan {
   findings: any[];
   agents: Set<string>;
   timer: ReturnType<typeof setTimeout>;
+  startedAt: number;
 }
 
 const pendingScans = new Map<string, PendingScan>();
@@ -30,12 +41,24 @@ async function handleFinding(_id: string, data: Record<string, unknown>) {
       findings: [],
       agents: new Set(),
       timer: setTimeout(() => finalizeScan(scanId, true), AGENT_TIMEOUT_MS),
+      startedAt: performance.now(),
     };
     pendingScans.set(scanId, pending);
+    pendingScansGauge.set(pendingScans.size);
   }
 
   pending.findings.push({ scanId, agentName, findings, agentResult });
   pending.agents.add(agentName);
+
+  // Track per-finding metrics
+  if (Array.isArray(findings)) {
+    for (const f of findings) {
+      findingsTotal.inc({ severity: f.severity ?? "unknown", agent: agentName });
+    }
+  }
+  agentResultsTotal.inc({ agent: agentName, status: "received" });
+
+  logger.info({ scanId, agentName, findingsCount: Array.isArray(findings) ? findings.length : 0 }, "Agent finding received");
 
   if (EXPECTED_AGENTS.every((a) => pending!.agents.has(a))) {
     clearTimeout(pending.timer);
@@ -47,10 +70,11 @@ async function finalizeScan(scanId: string, hasTimeouts: boolean) {
   const pending = pendingScans.get(scanId);
   if (!pending) return;
   pendingScans.delete(scanId);
+  pendingScansGauge.set(pendingScans.size);
 
   const scan = await db.scan.findUnique({ where: { id: scanId } });
   if (!scan) {
-    console.error(`Scan ${scanId} not found, skipping assessment`);
+    logger.error({ scanId }, "Scan not found, skipping assessment");
     return;
   }
 
@@ -66,6 +90,21 @@ async function finalizeScan(scanId: string, hasTimeouts: boolean) {
 
     await assessor.persist(store, assessment, scanId, scan.orgId);
 
+    if (isArchiveEnabled() && assessment.certificate) {
+      try {
+        await archiveToS3(
+          getArchiveConfig(),
+          scan.orgId,
+          assessment.certificate.id,
+          JSON.stringify(assessment.certificate),
+        );
+        logger.info({ scanId, certificateId: assessment.certificate.id }, "Certificate archived to S3");
+      } catch (archiveErr) {
+        logger.error({ scanId, err: archiveErr }, "Failed to archive certificate to S3");
+        // Don't fail the scan — archival is best-effort
+      }
+    }
+
     await eventBus.publish("sentinel.results", {
       scanId,
       status: assessment.status,
@@ -73,9 +112,12 @@ async function finalizeScan(scanId: string, hasTimeouts: boolean) {
       certificateId: assessment.certificate?.id,
     });
 
-    console.log(`Scan ${scanId} assessed: ${assessment.status} (score: ${assessment.riskScore})`);
+    const durationSec = (performance.now() - pending.startedAt) / 1000;
+    scanDuration.observe({ status: assessment.status }, durationSec);
+
+    logger.info({ scanId, status: assessment.status, riskScore: assessment.riskScore, durationSec }, "Scan assessed");
   } catch (err) {
-    console.error(`Failed to assess scan ${scanId}:`, err);
+    logger.error({ scanId, err }, "Failed to assess scan");
     await db.scan.update({
       where: { id: scanId },
       data: { status: "failed", completedAt: new Date() },
@@ -85,7 +127,7 @@ async function finalizeScan(scanId: string, hasTimeouts: boolean) {
 
 // Graceful shutdown
 const shutdown = async () => {
-  console.log("Assessor worker shutting down...");
+  logger.info("Assessor worker shutting down...");
   for (const [scanId, pending] of pendingScans) {
     clearTimeout(pending.timer);
     await finalizeScan(scanId, true);
@@ -97,12 +139,18 @@ const shutdown = async () => {
 process.on("SIGTERM", shutdown);
 process.on("SIGINT", shutdown);
 
+// Wrap handler with retry + DLQ logic
+const wrappedHandler = withRetry(redis, "sentinel.findings", handleFinding, {
+  maxRetries: 3,
+  baseDelayMs: 1000,
+});
+
 // Start consuming
 eventBus.subscribe(
   "sentinel.findings",
   "assessors",
   `assessor-${process.pid}`,
-  handleFinding,
+  wrappedHandler,
 );
 
-console.log("Assessor worker started, consuming sentinel.findings...");
+logger.info("Assessor worker started, consuming sentinel.findings...");

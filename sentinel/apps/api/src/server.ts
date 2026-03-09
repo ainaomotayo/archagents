@@ -1,14 +1,19 @@
+import crypto from "node:crypto";
 import Fastify from "fastify";
 import { Redis } from "ioredis";
 import { getDb, disconnectDb } from "@sentinel/db";
-import { EventBus } from "@sentinel/events";
+import { EventBus, getDlqDepth, readDlq } from "@sentinel/events";
 import { AuditLog } from "@sentinel/audit";
 import { verifyCertificate } from "@sentinel/assessor";
+import { createLogger, withCorrelationId, registry, httpRequestDuration } from "@sentinel/telemetry";
+import { configureGitHubApp } from "@sentinel/github";
 import { createAuthHook } from "./middleware/auth.js";
 import { buildScanRoutes } from "./routes/scans.js";
+import { registerWebhookRoutes } from "./routes/webhooks.js";
 import { createScanStore, createAuditEventStore } from "./stores.js";
+import { registerSecurityPlugins } from "./plugins/security.js";
 
-const app = Fastify({ logger: true });
+const app = Fastify({ logger: createLogger({ name: "sentinel-api" }) });
 
 // --- Infrastructure ---
 const db = getDb();
@@ -30,12 +35,54 @@ const scanRoutes = buildScanRoutes({
   auditLog,
 });
 
-// --- Health (no auth) ---
-app.get("/health", async () => ({
+// --- Security plugins ---
+await registerSecurityPlugins(app, { redis });
+
+// --- GitHub App configuration ---
+if (process.env.GITHUB_APP_ID && process.env.GITHUB_PRIVATE_KEY) {
+  configureGitHubApp({
+    appId: process.env.GITHUB_APP_ID,
+    privateKey: process.env.GITHUB_PRIVATE_KEY,
+  });
+}
+
+// Register webhook routes (no HMAC auth — uses GitHub signature verification)
+const webhookSecret = process.env.GITHUB_WEBHOOK_SECRET ?? "";
+if (webhookSecret) {
+  registerWebhookRoutes(app, { eventBus, webhookSecret, db });
+}
+
+// --- Observability hooks ---
+app.addHook("onRequest", async (request) => {
+  (request as any).correlationId = crypto.randomUUID();
+  (request as any).startTime = performance.now();
+  request.log = withCorrelationId(request.log as any, (request as any).correlationId) as any;
+});
+
+app.addHook("onResponse", async (request, reply) => {
+  const durationSec = (performance.now() - (request as any).startTime) / 1000;
+  httpRequestDuration.observe(
+    {
+      method: request.method,
+      route: request.routeOptions?.url ?? request.url,
+      status_code: String(reply.statusCode),
+    },
+    durationSec,
+  );
+});
+
+// --- Health (no auth, no rate limit) ---
+app.get("/health", { config: { rateLimit: false } }, async () => ({
   status: "ok",
   version: "0.1.0",
   uptime: process.uptime(),
 }));
+
+// --- Metrics (no auth, no rate limit) ---
+app.get("/metrics", { config: { rateLimit: false } }, async (_request, reply) => {
+  const metrics = await registry.metrics();
+  reply.type("text/plain").send(metrics);
+});
 
 // --- Scans ---
 app.post("/v1/scans", { preHandler: authHook }, async (request, reply) => {
@@ -181,6 +228,13 @@ app.get("/v1/audit", { preHandler: authHook }, async (request) => {
     db.auditEvent.count(),
   ]);
   return { events, total, limit: Number(limit), offset: Number(offset) };
+});
+
+// --- DLQ monitoring ---
+app.get("/v1/admin/dlq", { preHandler: authHook }, async () => {
+  const depth = await getDlqDepth(redis, "sentinel.findings.dlq");
+  const messages = await readDlq(redis, "sentinel.findings.dlq");
+  return { depth, messages };
 });
 
 // --- Graceful shutdown ---

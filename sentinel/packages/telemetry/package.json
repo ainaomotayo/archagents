@@ -1,5 +1,5 @@
 {
-  "name": "@sentinel/github",
+  "name": "@sentinel/telemetry",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -7,16 +7,13 @@
   "types": "dist/index.d.ts",
   "scripts": {
     "build": "tsc",
-    "test": "vitest run",
-    "lint": "echo 'lint placeholder'"
+    "test": "vitest run"
   },
   "dependencies": {
-    "@octokit/auth-app": "^8.2.0",
-    "@octokit/rest": "^22.0.1",
-    "@sentinel/shared": "workspace:*"
+    "pino": "^10.3",
+    "prom-client": "^15.1"
   },
   "devDependencies": {
-    "@types/node": "^25.3.5",
     "typescript": "^5.7",
     "vitest": "^3.0"
   }

@@ -34,6 +34,10 @@ export {
   type ArchiveResult,
 } from "./s3-archive.js";
 
+export { archiveToS3, isArchiveEnabled, getArchiveConfig } from "./s3-client.js";
+
+export { AwsKmsKeyStore } from "./kms-aws.js";
+
 export {
   parsePnpmLockfile,
   parsePipRequirements,

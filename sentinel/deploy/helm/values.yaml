@@ -1,0 +1,60 @@
+global:
+  namespace: sentinel
+  imageTag: latest
+
+api:
+  replicas: 2
+  image: sentinel/api
+  port: 8080
+  resources:
+    requests:
+      cpu: 250m
+      memory: 256Mi
+    limits:
+      cpu: "1"
+      memory: 512Mi
+
+worker:
+  replicas: 1
+  image: sentinel/api
+
+dashboard:
+  replicas: 2
+  image: sentinel/dashboard
+  port: 3000
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
+
+ingress:
+  enabled: true
+  host: sentinel.example.com
+  tls: true
+  clusterIssuer: letsencrypt-prod
+
+autoscaling:
+  enabled: true
+  api:
+    minReplicas: 2
+    maxReplicas: 10
+    targetCPUUtilization: 70
+  dashboard:
+    minReplicas: 2
+    maxReplicas: 5
+    targetCPUUtilization: 80
+
+config:
+  nodeEnv: production
+  logLevel: info
+  corsOrigin: "https://sentinel.example.com"
+  rateLimitMax: "100"
+
+secrets:
+  databaseUrl: ""
+  redisUrl: ""
+  sentinelSecret: ""
+  nextauthSecret: ""

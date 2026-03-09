@@ -14,5 +14,9 @@
     "@types/node": "^25.3.5",
     "typescript": "^5.7",
     "vitest": "^3.0"
+  },
+  "dependencies": {
+    "@aws-sdk/client-kms": "^3.1004.0",
+    "@aws-sdk/client-s3": "^3.1004.0"
   }
 }
