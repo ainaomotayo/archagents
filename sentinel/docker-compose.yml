@@ -57,6 +57,34 @@ services:
       AZURE_KEY_VAULT_URL: ${AZURE_KEY_VAULT_URL:-}
       AZURE_KEY_NAME: ${AZURE_KEY_NAME:-sentinel-master}
 
+  dashboard:
+    build:
+      context: .
+      dockerfile: docker/dashboard.Dockerfile
+    ports:
+      - "3000:3000"
+    depends_on:
+      api:
+        condition: service_healthy
+    environment:
+      NEXTAUTH_URL: http://localhost:3000
+      NEXTAUTH_SECRET: dev-secret-change-in-production
+      GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID:-}
+      GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET:-}
+      SENTINEL_API_URL: http://api:8080
+      SENTINEL_SECRET: dev-secret-change-in-production
+      GITLAB_CLIENT_ID: ${GITLAB_CLIENT_ID:-}
+      GITLAB_CLIENT_SECRET: ${GITLAB_CLIENT_SECRET:-}
+      GITLAB_URL: ${GITLAB_URL:-https://gitlab.com}
+      OIDC_CLIENT_ID: ${OIDC_CLIENT_ID:-}
+      OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET:-}
+      OIDC_ISSUER: ${OIDC_ISSUER:-}
+      OIDC_PROVIDER_NAME: ${OIDC_PROVIDER_NAME:-SSO}
+      SAML_JACKSON_URL: ${SAML_JACKSON_URL:-}
+      SAML_JACKSON_PRODUCT: ${SAML_JACKSON_PRODUCT:-sentinel}
+      SAML_CLIENT_ID: ${SAML_CLIENT_ID:-dummy}
+      SAML_CLIENT_SECRET: ${SAML_CLIENT_SECRET:-dummy}
+
   assessor-worker:
     build:
       context: .

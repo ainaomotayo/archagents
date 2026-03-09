@@ -79,3 +79,16 @@ secrets:
   azureArchiveContainer: ""
   azureKeyVaultUrl: ""
   azureKeyName: "sentinel-master"
+
+sso:
+  gitlabClientId: ""
+  gitlabClientSecret: ""
+  gitlabUrl: "https://gitlab.com"
+  oidcClientId: ""
+  oidcClientSecret: ""
+  oidcIssuer: ""
+  oidcProviderName: "SSO"
+  samlJacksonUrl: ""
+  samlJacksonProduct: "sentinel"
+  samlClientId: "dummy"
+  samlClientSecret: "dummy"
