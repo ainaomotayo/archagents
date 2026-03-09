@@ -25,6 +25,37 @@ services:
       timeout: 5s
       retries: 5
 
+  api:
+    build:
+      context: .
+      dockerfile: docker/api.Dockerfile
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://sentinel:sentinel_dev@postgres:5432/sentinel
+      REDIS_URL: redis://redis:6379
+      SENTINEL_SECRET: dev-secret-change-in-production
+
+  assessor-worker:
+    build:
+      context: .
+      dockerfile: docker/api.Dockerfile
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://sentinel:sentinel_dev@postgres:5432/sentinel
+      REDIS_URL: redis://redis:6379
+      SENTINEL_SECRET: dev-secret-change-in-production
+    command: ["node", "apps/api/dist/worker.js"]
+
   # Analysis Agents (uncomment when running full pipeline)
   # agent-security:
   #   build:

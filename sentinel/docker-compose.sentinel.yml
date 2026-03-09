@@ -95,13 +95,33 @@ services:
       NEXTAUTH_SECRET: ${NEXTAUTH_SECRET}
       GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID}
       GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET}
-      NEXT_PUBLIC_API_URL: http://api:8080
+      SENTINEL_API_URL: http://api:8080
+      SENTINEL_SECRET: ${SENTINEL_SECRET}
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:3000/api/health || exit 1"]
       interval: 15s
       timeout: 5s
       retries: 3
       start_period: 30s
+
+  assessor-worker:
+    build:
+      context: .
+      dockerfile: docker/api.Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - sentinel-internal
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: ${REDIS_URL}
+      SENTINEL_SECRET: ${SENTINEL_SECRET}
+      NODE_ENV: production
+    command: ["node", "apps/api/dist/worker.js"]
 
   # ---------- Analysis Agents ----------
 

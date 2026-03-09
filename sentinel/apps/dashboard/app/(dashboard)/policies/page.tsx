@@ -1,10 +1,10 @@
 import Link from "next/link";
-import { MOCK_POLICIES } from "@/lib/mock-data";
+import { getPolicies } from "@/lib/api";
 import { PageHeader } from "@/components/page-header";
 import { IconPlus } from "@/components/icons";
 
-export default function PoliciesPage() {
-  const policies = MOCK_POLICIES;
+export default async function PoliciesPage() {
+  const policies = await getPolicies();
 
   return (
     <div className="space-y-6">

@@ -15,7 +15,10 @@
     "@sentinel/events": "workspace:*",
     "@sentinel/auth": "workspace:*",
     "@sentinel/audit": "workspace:*",
-    "fastify": "^5.2"
+    "@sentinel/db": "workspace:*",
+    "@sentinel/assessor": "workspace:*",
+    "fastify": "^5.2",
+    "ioredis": "^5.6"
   },
   "devDependencies": {
     "tsx": "^4.19",

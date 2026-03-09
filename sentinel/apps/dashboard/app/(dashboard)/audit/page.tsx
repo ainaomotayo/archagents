@@ -1,4 +1,4 @@
-import { MOCK_AUDIT_LOG } from "@/lib/mock-data";
+import { getAuditLog } from "@/lib/api";
 import { PageHeader } from "@/components/page-header";
 
 const ACTION_STYLES: Record<string, string> = {
@@ -18,8 +18,8 @@ function formatDate(iso: string): string {
   });
 }
 
-export default function AuditLogPage() {
-  const events = MOCK_AUDIT_LOG;
+export default async function AuditLogPage() {
+  const events = await getAuditLog();
 
   return (
     <div className="space-y-6">

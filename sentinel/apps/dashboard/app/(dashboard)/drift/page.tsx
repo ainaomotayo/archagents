@@ -1,8 +1,9 @@
-import { MOCK_SCANS } from "@/lib/mock-data";
+import { getRecentScans } from "@/lib/api";
 import { PageHeader } from "@/components/page-header";
 
-export default function DriftPage() {
-  const sorted = [...MOCK_SCANS].sort(
+export default async function DriftPage() {
+  const scans = await getRecentScans(20);
+  const sorted = [...scans].sort(
     (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime(),
   );
 
