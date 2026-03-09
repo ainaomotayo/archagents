@@ -1,5 +1,5 @@
 import { describe, test, expect } from "vitest";
-import { buildSchedulerConfig, shouldTriggerScan, RETENTION_SCHEDULE } from "../scheduler.js";
+import { buildSchedulerConfig, shouldTriggerScan, RETENTION_SCHEDULE, SchedulerMetrics } from "../scheduler.js";
 
 describe("scheduler", () => {
   test("buildSchedulerConfig returns valid config from SELF_SCAN_CONFIG", () => {
@@ -34,5 +34,30 @@ describe("scheduler", () => {
 
   test("RETENTION_SCHEDULE is a valid daily cron expression", () => {
     expect(RETENTION_SCHEDULE).toBe("0 4 * * *");
+  });
+});
+
+describe("SchedulerMetrics", () => {
+  test("tracks trigger counts", () => {
+    const metrics = new SchedulerMetrics();
+    metrics.recordTrigger("self_scan");
+    metrics.recordTrigger("self_scan");
+    metrics.recordTrigger("retention");
+    expect(metrics.getTriggerCount("self_scan")).toBe(2);
+    expect(metrics.getTriggerCount("retention")).toBe(1);
+  });
+
+  test("tracks errors", () => {
+    const metrics = new SchedulerMetrics();
+    metrics.recordError("self_scan");
+    expect(metrics.getErrorCount("self_scan")).toBe(1);
+  });
+
+  test("formats Prometheus output", () => {
+    const metrics = new SchedulerMetrics();
+    metrics.recordTrigger("self_scan");
+    const output = metrics.toPrometheus();
+    expect(output).toContain("sentinel_scheduler_triggers_total");
+    expect(output).toContain('type="self_scan"');
   });
 });
