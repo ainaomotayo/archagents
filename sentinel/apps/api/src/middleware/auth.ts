@@ -37,10 +37,17 @@ export function createAuthHook(options: AuthHookOptions) {
 
     // Store on request for downstream use
     (request as any).role = role;
+
+    // Read org from dashboard header
+    const orgHeader = request.headers["x-sentinel-org-id"] as string | undefined;
+    if (orgHeader) {
+      (request as any).orgId = orgHeader;
+    }
     (request as any).orgId = (request as any).orgId ?? "default";
 
     // RBAC check — use Fastify route pattern for matching
-    const routePath = request.routeOptions?.url ?? request.url;
+    const rawPath = request.routeOptions?.url ?? request.url;
+    const routePath = rawPath.length > 1 ? rawPath.replace(/\/+$/, "") : rawPath;
     if (!isAuthorized(role, request.method, routePath)) {
       reply.code(403).send({ error: "Forbidden: insufficient permissions" });
       return;

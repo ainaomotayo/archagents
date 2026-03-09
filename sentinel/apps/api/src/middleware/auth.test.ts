@@ -62,6 +62,81 @@ describe("createAuthHook", () => {
     });
   });
 
+  it("passes RBAC for trailing-slash path (viewer GET /v1/scans/)", async () => {
+    const hook = createAuthHook({
+      getOrgSecret: async () => SECRET,
+    });
+
+    const body = JSON.stringify({ projectId: "p1" });
+    const signature = signRequest(body, SECRET);
+
+    const request = mockRequest(
+      {
+        "x-sentinel-signature": signature,
+        "x-sentinel-api-key": "key-1",
+        "x-sentinel-role": "viewer",
+      },
+      body,
+      { method: "GET", url: "/v1/scans/" },
+    );
+    const reply = mockReply();
+
+    await hook(request, reply);
+
+    expect(reply.code).not.toHaveBeenCalled();
+    expect(reply.send).not.toHaveBeenCalled();
+  });
+
+  it("reads X-Sentinel-Role header for dashboard client", async () => {
+    const hook = createAuthHook({
+      getOrgSecret: async () => SECRET,
+    });
+
+    const body = "";
+    const signature = signRequest(body, SECRET);
+
+    const request = mockRequest(
+      {
+        "x-sentinel-signature": signature,
+        "x-sentinel-api-key": "dashboard",
+        "x-sentinel-role": "manager",
+      },
+      body,
+      { method: "GET", url: "/v1/policies" },
+    );
+    const reply = mockReply();
+
+    await hook(request, reply);
+
+    expect((request as any).role).toBe("manager");
+    expect(reply.code).not.toHaveBeenCalledWith(403);
+  });
+
+  it("reads X-Sentinel-Org-Id header for dashboard client", async () => {
+    const hook = createAuthHook({
+      getOrgSecret: async () => SECRET,
+    });
+
+    const body = "";
+    const signature = signRequest(body, SECRET);
+
+    const request = mockRequest(
+      {
+        "x-sentinel-signature": signature,
+        "x-sentinel-api-key": "dashboard",
+        "x-sentinel-role": "admin",
+        "x-sentinel-org-id": "org-123",
+      },
+      body,
+      { method: "GET", url: "/v1/scans" },
+    );
+    const reply = mockReply();
+
+    await hook(request, reply);
+
+    expect((request as any).orgId).toBe("org-123");
+  });
+
   it("rejects request with invalid API key", async () => {
     const hook = createAuthHook({
       getOrgSecret: async () => null,

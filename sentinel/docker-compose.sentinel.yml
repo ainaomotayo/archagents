@@ -180,8 +180,32 @@ services:
     environment:
       REDIS_URL: ${REDIS_URL}
       SELF_SCAN_ENABLED: ${SELF_SCAN_ENABLED:-true}
+      SCHEDULER_PORT: "9091"
       NODE_ENV: production
     command: ["node", "apps/api/dist/scheduler.js"]
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:9091/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+  saml-jackson:
+    image: boxyhq/jackson:latest
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - sentinel-internal
+    environment:
+      JACKSON_URL: http://saml-jackson:5225
+      DB_ENGINE: sql
+      DB_TYPE: postgres
+      DB_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      NEXTAUTH_URL: ${NEXTAUTH_URL:-http://dashboard:3000}
+    ports:
+      - "5225:5225"
 
   # ---------- Analysis Agents ----------
 
