@@ -59,22 +59,26 @@ export async function runRetentionCleanup(
     scan: ChunkableModel;
   },
   retentionDays: number = DEFAULT_RETENTION_DAYS,
+  orgId?: string,
 ): Promise<{ deletedFindings: number; deletedAgentResults: number; deletedScans: number }> {
   const { cutoffDate } = buildRetentionQuery(retentionDays);
 
+  const orgFilter = orgId ? { scan: { project: { orgId } } } : {};
+  const scanOrgFilter = orgId ? { project: { orgId } } : {};
+
   const deletedFindings = await chunkedDelete(
     db.finding,
-    { createdAt: { lt: cutoffDate } },
+    { createdAt: { lt: cutoffDate }, ...orgFilter },
   );
 
   const deletedAgentResults = await chunkedDelete(
     db.agentResult,
-    { scan: { startedAt: { lt: cutoffDate } } },
+    { scan: { startedAt: { lt: cutoffDate }, ...scanOrgFilter } },
   );
 
   const deletedScans = await chunkedDelete(
     db.scan,
-    { startedAt: { lt: cutoffDate }, certificate: null },
+    { startedAt: { lt: cutoffDate }, certificate: null, ...scanOrgFilter },
   );
 
   return { deletedFindings, deletedAgentResults, deletedScans };

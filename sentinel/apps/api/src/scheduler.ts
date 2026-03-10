@@ -173,7 +173,7 @@ if (process.env.NODE_ENV !== "test") {
       const orgs = await db.organization.findMany({ select: { id: true, settings: true } });
       for (const org of orgs) {
         const retentionDays = (org.settings as any)?.retentionDays ?? DEFAULT_RETENTION_DAYS;
-        const result = await runRetentionCleanup(db, retentionDays);
+        const result = await runRetentionCleanup(db, retentionDays, org.id);
         if (result.deletedFindings + result.deletedAgentResults + result.deletedScans > 0) {
           logger.info({ orgId: org.id, retentionDays, ...result }, "Org retention cleanup completed");
         }
