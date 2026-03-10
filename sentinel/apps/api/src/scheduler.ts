@@ -5,6 +5,7 @@ import { EventBus } from "@sentinel/events";
 import { SELF_SCAN_CONFIG, validateSelfScanConfig, runRetentionCleanup, DEFAULT_RETENTION_DAYS } from "@sentinel/security";
 import { getDb } from "@sentinel/db";
 import { createLogger } from "@sentinel/telemetry";
+import { BUILT_IN_FRAMEWORKS, scoreFramework, type FindingInput } from "@sentinel/compliance";
 import { CronExpressionParser } from "cron-parser";
 
 const logger = createLogger({ name: "sentinel-scheduler" });
@@ -20,6 +21,7 @@ export interface SchedulerConfig {
 }
 
 export const RETENTION_SCHEDULE = "0 4 * * *";
+export const COMPLIANCE_SNAPSHOT_SCHEDULE = "0 5 * * *";
 
 export function buildSchedulerConfig(): SchedulerConfig {
   const enabled = process.env.SELF_SCAN_ENABLED !== "false";
@@ -143,6 +145,38 @@ export function createHealthServer(metrics: SchedulerMetrics, port: number): htt
   return server;
 }
 
+async function generateComplianceSnapshots(db: any) {
+  const orgs = await db.organization.findMany({ select: { id: true } });
+  const today = new Date();
+  today.setUTCHours(0, 0, 0, 0);
+  let generated = 0;
+
+  for (const org of orgs) {
+    const findings = await db.finding.findMany({
+      where: { orgId: org.id, suppressed: false },
+      orderBy: { createdAt: "desc" },
+      take: 5000,
+    });
+    const inputs: FindingInput[] = findings.map((f: any) => ({
+      id: f.id, agentName: f.agentName, severity: f.severity, category: f.category, suppressed: f.suppressed,
+    }));
+
+    for (const fw of BUILT_IN_FRAMEWORKS) {
+      const result = scoreFramework(fw.controls, inputs);
+      await db.complianceSnapshot.upsert({
+        where: { orgId_frameworkId_date: { orgId: org.id, frameworkId: fw.slug, date: today } },
+        update: { score: result.score, controlBreakdown: result.controlScores },
+        create: { orgId: org.id, frameworkId: fw.slug, date: today, score: result.score, controlBreakdown: result.controlScores },
+      });
+      await db.complianceAssessment.create({
+        data: { orgId: org.id, frameworkId: fw.slug, score: result.score, verdict: result.verdict, controlScores: result.controlScores },
+      });
+      generated++;
+    }
+  }
+  logger.info({ generated }, "Compliance snapshots generated");
+}
+
 // --- Main entrypoint (when run as standalone process) ---
 if (process.env.NODE_ENV !== "test") {
   const config = buildSchedulerConfig();
@@ -208,6 +242,18 @@ if (process.env.NODE_ENV !== "test") {
       logger.error({ err }, "Data retention cleanup failed");
     }
   });
+
+  // Compliance snapshot generation — daily at 5 AM
+  cron.schedule(COMPLIANCE_SNAPSHOT_SCHEDULE, async () => {
+    logger.info("Running daily compliance snapshot generation...");
+    try {
+      const db = getDb();
+      await generateComplianceSnapshots(db);
+    } catch (err) {
+      logger.error({ err }, "Compliance snapshot generation failed");
+    }
+  });
+  logger.info({ schedule: COMPLIANCE_SNAPSHOT_SCHEDULE }, "Compliance snapshot cron registered");
 
   const shutdown = async () => {
     logger.info("Scheduler shutting down...");
