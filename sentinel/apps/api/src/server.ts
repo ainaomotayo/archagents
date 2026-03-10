@@ -5,13 +5,17 @@ import { getDb, disconnectDb, withTenant } from "@sentinel/db";
 import { EventBus, getDlqDepth, readDlq } from "@sentinel/events";
 import { AuditLog } from "@sentinel/audit";
 import { verifyCertificate } from "@sentinel/assessor";
-import { withCorrelationId, registry, httpRequestDuration, dlqDepthGauge } from "@sentinel/telemetry";
+import { withCorrelationId, registry, httpRequestDuration, dlqDepthGauge, initTracing, shutdownTracing } from "@sentinel/telemetry";
 import { configureGitHubApp } from "@sentinel/github";
 import { createAuthHook } from "./middleware/auth.js";
 import { buildScanRoutes } from "./routes/scans.js";
 import { registerWebhookRoutes } from "./routes/webhooks.js";
 import { createScanStore, createAuditEventStore } from "./stores.js";
 import { registerSecurityPlugins } from "./plugins/security.js";
+
+if (process.env.OTEL_EXPORTER_OTLP_ENDPOINT && process.env.NODE_ENV !== "test") {
+  initTracing({ serviceName: "sentinel-api" });
+}
 
 const app = Fastify({
   logger: {
@@ -560,6 +564,7 @@ const shutdown = async () => {
   app.log.info("Shutting down...");
   await app.close();
   await eventBus.disconnect();
+  if (process.env.NODE_ENV !== "test") await shutdownTracing();
   await disconnectDb();
   process.exit(0);
 };

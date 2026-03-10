@@ -3,9 +3,13 @@ import { Redis } from "ioredis";
 import { EventBus, withRetry } from "@sentinel/events";
 import { getDb, disconnectDb } from "@sentinel/db";
 import { configureGitHubApp, getInstallationOctokit, isGitHubAppConfigured } from "@sentinel/github";
-import { createLogger } from "@sentinel/telemetry";
+import { createLogger, initTracing, shutdownTracing } from "@sentinel/telemetry";
 import { handleScanTrigger } from "./github/trigger-consumer.js";
 import { handleScanResult } from "./github/results-consumer.js";
+
+if (process.env.OTEL_EXPORTER_OTLP_ENDPOINT) {
+  initTracing({ serviceName: "github-bridge" });
+}
 
 const logger = createLogger({ name: "github-bridge" });
 
@@ -99,6 +103,7 @@ const shutdown = async () => {
   await resultsBus.disconnect();
   await publishBus.disconnect();
   redis.disconnect();
+  await shutdownTracing();
   await disconnectDb();
   process.exit(0);
 };

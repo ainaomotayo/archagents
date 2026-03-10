@@ -8,10 +8,16 @@ import {
   agentResultsTotal,
   pendingScansGauge,
   scanDuration,
+  initTracing,
+  shutdownTracing,
 } from "@sentinel/telemetry";
 import { isArchiveEnabled, archiveToS3, getArchiveConfig } from "@sentinel/security";
 import http from "node:http";
 import { createAssessmentStore } from "./stores.js";
+
+if (process.env.OTEL_EXPORTER_OTLP_ENDPOINT) {
+  initTracing({ serviceName: "sentinel-worker" });
+}
 
 const logger = createLogger({ name: "sentinel-worker" });
 
@@ -153,6 +159,7 @@ const shutdown = async () => {
     await finalizeScan(scanId, true);
   }
   await eventBus.disconnect();
+  await shutdownTracing();
   await disconnectDb();
   process.exit(0);
 };
