@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { MOCK_WEBHOOKS } from "@/lib/mock-data";
 import { PageHeader } from "@/components/page-header";
 import { IconPlus, IconGlobe } from "@/components/icons";
@@ -12,6 +12,35 @@ interface Webhook {
   events: string[];
   enabled: boolean;
   lastTriggered: string | null;
+}
+
+const STORAGE_KEY = "sentinel_webhooks";
+
+const ALL_EVENTS = [
+  "scan.completed",
+  "scan.failed",
+  "finding.created",
+  "certificate.issued",
+  "certificate.revoked",
+] as const;
+
+function loadWebhooks(): Webhook[] {
+  if (typeof window === "undefined") return MOCK_WEBHOOKS;
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY);
+    if (stored) return JSON.parse(stored);
+  } catch {
+    // ignore parse errors
+  }
+  return MOCK_WEBHOOKS;
+}
+
+function saveWebhooks(webhooks: Webhook[]) {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(webhooks));
+  } catch {
+    // ignore storage errors
+  }
 }
 
 function getRelativeTime(dateString: string): string {
@@ -33,15 +62,80 @@ function getRelativeTime(dateString: string): string {
 export default function WebhooksPage() {
   const [webhooks, setWebhooks] = useState<Webhook[]>(MOCK_WEBHOOKS);
   const [showForm, setShowForm] = useState(false);
+  const [formName, setFormName] = useState("");
+  const [formUrl, setFormUrl] = useState("");
+  const [formEvents, setFormEvents] = useState<string[]>([]);
+  const [feedback, setFeedback] = useState<{ type: "success" | "error"; message: string } | null>(null);
+
+  // Load from localStorage on mount
+  useEffect(() => {
+    setWebhooks(loadWebhooks());
+  }, []);
+
+  // Persist whenever webhooks change (skip initial render with loaded data)
+  const updateWebhooks = (next: Webhook[]) => {
+    setWebhooks(next);
+    saveWebhooks(next);
+  };
 
   const toggleEnabled = (id: string) => {
-    setWebhooks((prev) =>
-      prev.map((w) => (w.id === id ? { ...w, enabled: !w.enabled } : w)),
+    const next = webhooks.map((w) =>
+      w.id === id ? { ...w, enabled: !w.enabled } : w,
     );
+    updateWebhooks(next);
   };
 
   const deleteWebhook = (id: string) => {
-    setWebhooks((prev) => prev.filter((w) => w.id !== id));
+    const next = webhooks.filter((w) => w.id !== id);
+    updateWebhooks(next);
+  };
+
+  const toggleFormEvent = (event: string) => {
+    setFormEvents((prev) =>
+      prev.includes(event) ? prev.filter((e) => e !== event) : [...prev, event],
+    );
+  };
+
+  const resetForm = () => {
+    setFormName("");
+    setFormUrl("");
+    setFormEvents([]);
+  };
+
+  const handleSave = () => {
+    if (!formName.trim()) {
+      setFeedback({ type: "error", message: "Webhook name is required." });
+      return;
+    }
+    if (!formUrl.trim()) {
+      setFeedback({ type: "error", message: "Webhook URL is required." });
+      return;
+    }
+    try {
+      new URL(formUrl);
+    } catch {
+      setFeedback({ type: "error", message: "Please enter a valid URL." });
+      return;
+    }
+    if (formEvents.length === 0) {
+      setFeedback({ type: "error", message: "Select at least one event." });
+      return;
+    }
+
+    const newWebhook: Webhook = {
+      id: `wh-${Date.now()}`,
+      name: formName.trim(),
+      url: formUrl.trim(),
+      events: formEvents,
+      enabled: true,
+      lastTriggered: null,
+    };
+
+    updateWebhooks([newWebhook, ...webhooks]);
+    resetForm();
+    setShowForm(false);
+    setFeedback({ type: "success", message: `Webhook "${newWebhook.name}" created successfully.` });
+    setTimeout(() => setFeedback(null), 4000);
   };
 
   return (
@@ -60,6 +154,19 @@ export default function WebhooksPage() {
         }
       />
 
+      {/* Feedback banner */}
+      {feedback && (
+        <div
+          className={`animate-fade-up rounded-lg border px-4 py-3 text-[13px] font-medium ${
+            feedback.type === "success"
+              ? "border-status-pass/30 bg-status-pass/10 text-status-pass"
+              : "border-status-fail/30 bg-status-fail/10 text-status-fail"
+          }`}
+        >
+          {feedback.message}
+        </div>
+      )}
+
       {/* New webhook form */}
       {showForm && (
         <div className="animate-fade-up rounded-xl border border-border bg-surface-1 p-6 space-y-5">
@@ -76,6 +183,8 @@ export default function WebhooksPage() {
             <input
               type="text"
               placeholder="e.g., Slack Notifications"
+              value={formName}
+              onChange={(e) => setFormName(e.target.value)}
               className="w-full rounded-lg border border-border bg-surface-0 px-4 py-2.5 text-[13px] text-text-primary placeholder:text-text-tertiary outline-none focus:border-accent transition-colors"
             />
           </div>
@@ -86,6 +195,8 @@ export default function WebhooksPage() {
             <input
               type="url"
               placeholder="https://hooks.slack.com/services/..."
+              value={formUrl}
+              onChange={(e) => setFormUrl(e.target.value)}
               className="w-full rounded-lg border border-border bg-surface-0 px-4 py-2.5 font-mono text-[13px] text-text-primary placeholder:text-text-tertiary outline-none focus:border-accent transition-colors"
             />
           </div>
@@ -94,25 +205,31 @@ export default function WebhooksPage() {
               Events
             </label>
             <div className="flex flex-wrap gap-2">
-              {[
-                "scan.completed",
-                "scan.failed",
-                "finding.created",
-                "certificate.issued",
-                "certificate.revoked",
-              ].map((event) => (
+              {ALL_EVENTS.map((event) => (
                 <label
                   key={event}
-                  className="flex items-center gap-2 rounded-lg border border-border bg-surface-2 px-3 py-2 text-[11px] text-text-secondary cursor-pointer hover:border-border-accent transition-colors"
+                  className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-[11px] text-text-secondary cursor-pointer transition-colors ${
+                    formEvents.includes(event)
+                      ? "border-accent bg-accent/10"
+                      : "border-border bg-surface-2 hover:border-border-accent"
+                  }`}
                 >
-                  <input type="checkbox" className="rounded accent-accent" />
+                  <input
+                    type="checkbox"
+                    className="rounded accent-accent"
+                    checked={formEvents.includes(event)}
+                    onChange={() => toggleFormEvent(event)}
+                  />
                   {event}
                 </label>
               ))}
             </div>
           </div>
           <div className="border-t border-border pt-5">
-            <button className="rounded-lg bg-status-pass px-4 py-2.5 text-[13px] font-semibold text-text-inverse transition-all hover:brightness-110 active:scale-[0.98] focus-ring">
+            <button
+              onClick={handleSave}
+              className="rounded-lg bg-status-pass px-4 py-2.5 text-[13px] font-semibold text-text-inverse transition-all hover:brightness-110 active:scale-[0.98] focus-ring"
+            >
               Save Webhook
             </button>
           </div>

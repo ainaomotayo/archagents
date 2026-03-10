@@ -9,61 +9,28 @@ import {
   validatePolicy,
   type ValidationMessage,
 } from "@/components/policy-validator";
-import { MOCK_POLICIES } from "@/lib/mock-data";
 import { IconChevronLeft } from "@/components/icons";
-import { updatePolicy, createPolicy } from "./actions";
+import { createPolicy } from "../[id]/actions";
 
 const DEFAULT_POLICY = `version: "1.0"
 rules:
-  - id: secret-detection
-    severity: critical
-    enabled: true
-    description: "Detect hard-coded secrets and API keys"
-    threshold: 0
-
-  - id: ai-code-review
-    severity: high
-    enabled: true
-    description: "Flag AI-generated code without review markers"
-    threshold: 5
-
-  - id: dependency-audit
+  - id: example-rule
     severity: medium
     enabled: true
-    description: "Check for vulnerable dependencies"
-    threshold: 10
-
-  - id: pii-scanner
-    severity: high
-    enabled: true
-    description: "Identify PII exposure in source code"
+    description: "Describe what this rule checks"
     threshold: 0
 `;
 
-export default function PolicyEditorPage({
-  params,
-}: {
-  params: Promise<{ id: string }>;
-}) {
-  const resolvedParams =
-    typeof (params as unknown as { id: string }).id === "string"
-      ? (params as unknown as { id: string })
-      : { id: "new" };
-
-  const existing = MOCK_POLICIES.find((p) => p.id === resolvedParams.id);
-  const policyName = existing?.name ?? "New Policy";
-  const initialYaml = existing?.yaml ?? DEFAULT_POLICY;
-
+export default function NewPolicyPage() {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
-  const yamlRef = useRef(initialYaml);
+  const yamlRef = useRef(DEFAULT_POLICY);
+  const [policyName, setPolicyName] = useState("New Policy");
   const [messages, setMessages] = useState<ValidationMessage[]>(() =>
-    validatePolicy(initialYaml),
+    validatePolicy(DEFAULT_POLICY),
   );
   const [saved, setSaved] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
-
-  const isNew = resolvedParams.id === "new";
 
   const handleChange = useCallback((value: string) => {
     yamlRef.current = value;
@@ -78,22 +45,19 @@ export default function PolicyEditorPage({
     startTransition(async () => {
       try {
         const payload = { name: policyName, rules: yamlRef.current };
-        if (isNew) {
-          const result = await createPolicy(payload);
-          setSaved(true);
-          if (result && (result as any).id) {
-            setTimeout(() => router.push(`/policies/${(result as any).id}`), 1000);
-          }
-        } else {
-          await updatePolicy(resolvedParams.id, payload);
-          setSaved(true);
-        }
+        const result = await createPolicy(payload);
+        setSaved(true);
         setSaveError(null);
+        if (result && (result as any).id) {
+          setTimeout(() => router.push(`/policies/${(result as any).id}`), 1000);
+        } else {
+          setTimeout(() => router.push("/policies"), 1000);
+        }
       } catch (err) {
         setSaveError(err instanceof Error ? err.message : "Save failed");
       }
     });
-  }, [messages, isNew, policyName, resolvedParams.id, router]);
+  }, [messages, policyName, router]);
 
   const errorCount = messages.filter((m) => m.level === "error").length;
   const hasErrors = errorCount > 0;
@@ -109,9 +73,17 @@ export default function PolicyEditorPage({
             <IconChevronLeft className="h-3.5 w-3.5" />
             Policies
           </Link>
-          <h1 className="mt-3 text-xl font-bold tracking-tight text-text-primary">{policyName}</h1>
+          <div className="mt-3">
+            <input
+              type="text"
+              value={policyName}
+              onChange={(e) => setPolicyName(e.target.value)}
+              className="text-xl font-bold tracking-tight text-text-primary bg-transparent border-none outline-none focus:ring-1 focus:ring-accent rounded px-1 -ml-1"
+              placeholder="Policy name"
+            />
+          </div>
           <p className="mt-1.5 text-[13px] text-text-secondary">
-            Edit the policy YAML below. Validation runs in real-time.
+            Create a new policy. Enter the YAML below and save.
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -131,19 +103,19 @@ export default function PolicyEditorPage({
           <button
             onClick={handleSave}
             disabled={hasErrors || isPending}
-            aria-label={saved ? "Policy saved" : "Save policy"}
+            aria-label={saved ? "Policy created" : "Create policy"}
             className={`rounded-lg px-4 py-2.5 text-[13px] font-semibold text-text-inverse transition-all hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-40 focus-ring ${
               saved ? "bg-status-pass" : saveError ? "bg-status-fail" : "bg-accent"
             }`}
           >
-            {isPending ? "Saving..." : saved ? "\u2713 Saved" : saveError ? "Retry Save" : "Save Policy"}
+            {isPending ? "Creating..." : saved ? "\u2713 Created" : saveError ? "Retry" : "Create Policy"}
           </button>
         </div>
       </div>
 
       <div className="animate-fade-up grid gap-6 lg:grid-cols-3" style={{ animationDelay: "0.05s" }}>
         <div className="lg:col-span-2 rounded-lg border border-accent/20 shadow-[0_0_12px_rgba(34,211,197,0.06)]">
-          <PolicyEditor initialValue={initialYaml} onChange={handleChange} />
+          <PolicyEditor initialValue={DEFAULT_POLICY} onChange={handleChange} />
         </div>
         <div>
           <h2 className="mb-3 text-[10px] font-semibold uppercase tracking-widest text-text-tertiary">

@@ -90,7 +90,7 @@ export default function LandingPage() {
           </p>
           <div className="mt-10 flex flex-col items-center justify-center gap-4 sm:flex-row">
             <a
-              href="/"
+              href="/login"
               className="group rounded-xl bg-accent px-8 py-3.5 text-[14px] font-semibold text-text-inverse shadow-lg shadow-accent/20 transition-all hover:brightness-110 hover:shadow-accent/30 hover:shadow-xl active:scale-[0.98]"
             >
               Get Started Free
@@ -169,7 +169,7 @@ export default function LandingPage() {
             Start scanning in minutes. No credit card required.
           </p>
           <a
-            href="/"
+            href="/login"
             className="mt-8 inline-block rounded-xl bg-accent px-10 py-3.5 text-[14px] font-semibold text-text-inverse shadow-lg shadow-accent/20 transition-all hover:brightness-110 active:scale-[0.98]"
           >
             Get Started Free

@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { getAuditLog } from "@/lib/api";
 import { PageHeader } from "@/components/page-header";
 
@@ -45,6 +46,22 @@ function formatRelative(iso: string): string {
   if (days < 30) return `${days}d ago`;
   const months = Math.floor(days / 30);
   return `${months}mo ago`;
+}
+
+function getResourceHref(action: string, resource: string): string | null {
+  switch (action) {
+    case "certificate":
+    case "revocation":
+      return `/certificates/${resource}`;
+    case "scan":
+      return "/projects";
+    case "finding":
+      return `/findings/${resource}`;
+    case "policy":
+      return `/policies/${resource}`;
+    default:
+      return null;
+  }
 }
 
 export default async function AuditLogPage() {
@@ -203,11 +220,23 @@ export default async function AuditLogPage() {
                       {event.actor}
                     </td>
 
-                    {/* Resource - clickable-looking */}
+                    {/* Resource */}
                     <td className="px-4 py-3.5">
-                      <span className="cursor-pointer font-mono text-xs text-accent underline decoration-accent/30 underline-offset-2 transition-colors hover:text-accent/80 hover:decoration-accent/50">
-                        {event.resource}
-                      </span>
+                      {(() => {
+                        const href = getResourceHref(event.action, event.resource);
+                        return href ? (
+                          <Link
+                            href={href}
+                            className="font-mono text-xs text-accent underline decoration-accent/30 underline-offset-2 transition-colors hover:text-accent/80 hover:decoration-accent/50"
+                          >
+                            {event.resource}
+                          </Link>
+                        ) : (
+                          <span className="font-mono text-xs text-text-secondary">
+                            {event.resource}
+                          </span>
+                        );
+                      })()}
                     </td>
 
                     {/* Details - more prominent */}

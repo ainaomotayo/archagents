@@ -199,6 +199,32 @@ app.get("/v1/findings/:id", { preHandler: authHook }, async (request, reply) => 
   });
 });
 
+app.patch("/v1/findings/:id", { preHandler: authHook }, async (request, reply) => {
+  const orgId = (request as any).orgId ?? "default";
+  const { id } = request.params as { id: string };
+  const body = request.body as any;
+  return withTenant(db, orgId, async (tx) => {
+    const finding = await tx.finding.findUnique({ where: { id } });
+    if (!finding) {
+      reply.code(404).send({ error: "Finding not found" });
+      return;
+    }
+    const data: any = {};
+    if (body.status !== undefined) data.status = body.status;
+    if (body.suppressed === true) {
+      data.suppressed = true;
+      data.suppressedBy = body.suppressedBy ?? null;
+      data.suppressedAt = new Date();
+    } else if (body.suppressed === false) {
+      data.suppressed = false;
+      data.suppressedBy = null;
+      data.suppressedAt = null;
+    }
+    const updated = await tx.finding.update({ where: { id }, data });
+    return updated;
+  });
+});
+
 // --- Certificates ---
 app.get("/v1/certificates", { preHandler: authHook }, async (request) => {
   const orgId = (request as any).orgId ?? "default";
@@ -308,7 +334,7 @@ app.get("/v1/projects/:id", { preHandler: authHook }, async (request, reply) => 
       where: { id },
       include: {
         _count: { select: { scans: true } },
-        scans: { take: 10, orderBy: { startedAt: "desc" }, include: { certificate: true } },
+        scans: { take: 10, orderBy: { startedAt: "desc" }, include: { certificate: true, _count: { select: { findings: true } } } },
       },
     });
     if (!project) {
