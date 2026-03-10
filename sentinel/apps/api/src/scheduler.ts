@@ -2,7 +2,7 @@ import cron from "node-cron";
 import http from "node:http";
 import { Redis } from "ioredis";
 import { EventBus } from "@sentinel/events";
-import { SELF_SCAN_CONFIG, validateSelfScanConfig, runRetentionCleanup } from "@sentinel/security";
+import { SELF_SCAN_CONFIG, validateSelfScanConfig, runRetentionCleanup, DEFAULT_RETENTION_DAYS } from "@sentinel/security";
 import { getDb } from "@sentinel/db";
 import { createLogger } from "@sentinel/telemetry";
 
@@ -170,9 +170,16 @@ if (process.env.NODE_ENV !== "test") {
   cron.schedule(RETENTION_SCHEDULE, async () => {
     try {
       const db = getDb();
-      const result = await runRetentionCleanup(db);
+      const orgs = await db.organization.findMany({ select: { id: true, settings: true } });
+      for (const org of orgs) {
+        const retentionDays = (org.settings as any)?.retentionDays ?? DEFAULT_RETENTION_DAYS;
+        const result = await runRetentionCleanup(db, retentionDays);
+        if (result.deletedFindings + result.deletedAgentResults + result.deletedScans > 0) {
+          logger.info({ orgId: org.id, retentionDays, ...result }, "Org retention cleanup completed");
+        }
+      }
       metrics.recordTrigger("retention");
-      logger.info(result, "Data retention cleanup completed");
+      logger.info("Data retention cleanup completed for all orgs");
     } catch (err) {
       metrics.recordError("retention");
       logger.error({ err }, "Data retention cleanup failed");
