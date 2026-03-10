@@ -53,6 +53,8 @@ model Scan {
   riskScore   Int?      @map("risk_score")
   scanLevel   String    @default("standard") @map("scan_level")
   metadata    Json      @default("{}")
+  triggerType String?   @map("trigger_type")
+  triggerMeta Json      @default("{}") @map("trigger_meta")
   startedAt   DateTime  @default(now()) @map("started_at")
   completedAt DateTime? @map("completed_at")
 
