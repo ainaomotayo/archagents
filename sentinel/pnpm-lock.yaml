@@ -35,6 +35,9 @@ importers:
       '@sentinel/auth':
         specifier: workspace:*
         version: link:../../packages/auth
+      '@sentinel/compliance':
+        specifier: workspace:*
+        version: link:../../packages/compliance
       '@sentinel/db':
         specifier: workspace:*
         version: link:../../packages/db

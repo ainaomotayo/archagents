@@ -16,6 +16,7 @@
     "@fastify/rate-limit": "^10.3.0",
     "@sentinel/assessor": "workspace:*",
     "@sentinel/audit": "workspace:*",
+    "@sentinel/compliance": "workspace:*",
     "@sentinel/auth": "workspace:*",
     "@sentinel/db": "workspace:*",
     "@sentinel/events": "workspace:*",

@@ -7,6 +7,14 @@ import { AuditLog } from "@sentinel/audit";
 import { verifyCertificate } from "@sentinel/assessor";
 import { withCorrelationId, registry, httpRequestDuration, dlqDepthGauge, initTracing, shutdownTracing } from "@sentinel/telemetry";
 import { configureGitHubApp } from "@sentinel/github";
+import {
+  BUILT_IN_FRAMEWORKS,
+  FRAMEWORK_MAP,
+  scoreFramework,
+  computeEvidenceHash,
+  verifyEvidenceChain,
+  type FindingInput,
+} from "@sentinel/compliance";
 import { createAuthHook } from "./middleware/auth.js";
 import { buildScanRoutes } from "./routes/scans.js";
 import { registerWebhookRoutes } from "./routes/webhooks.js";
@@ -557,6 +565,180 @@ app.get("/v1/admin/dlq", { preHandler: authHook }, async () => {
   dlqDepthGauge.set(depth);
   const messages = await readDlq(redis, "sentinel.findings.dlq");
   return { depth, messages };
+});
+
+// --- Compliance ---
+
+app.get("/v1/compliance/frameworks", { preHandler: authHook }, async (request) => {
+  const orgId = (request as any).orgId ?? "default";
+  const custom = await withTenant(db, orgId, async (tx) => {
+    return tx.complianceFramework.findMany({ where: { orgId }, include: { controls: true } });
+  });
+  const builtIn = BUILT_IN_FRAMEWORKS.map((f) => ({ ...f, id: f.slug, orgId: null, createdAt: null }));
+  return [...builtIn, ...custom];
+});
+
+app.get("/v1/compliance/frameworks/:id", { preHandler: authHook }, async (request, reply) => {
+  const { id } = request.params as { id: string };
+  const builtIn = FRAMEWORK_MAP.get(id);
+  if (builtIn) return { ...builtIn, id: builtIn.slug, orgId: null };
+  const orgId = (request as any).orgId ?? "default";
+  const custom = await withTenant(db, orgId, async (tx) => {
+    return tx.complianceFramework.findUnique({ where: { id }, include: { controls: true } });
+  });
+  if (!custom) { reply.code(404).send({ error: "Framework not found" }); return; }
+  return custom;
+});
+
+app.post("/v1/compliance/frameworks", { preHandler: authHook }, async (request, reply) => {
+  const orgId = (request as any).orgId ?? "default";
+  const { slug, name, version, controls } = request.body as any;
+  if (FRAMEWORK_MAP.has(slug)) { reply.code(409).send({ error: "Cannot create framework with built-in slug" }); return; }
+  const framework = await db.complianceFramework.create({
+    data: { orgId, slug, name, version, controls: { create: controls } },
+    include: { controls: true },
+  });
+  reply.code(201).send(framework);
+});
+
+app.put("/v1/compliance/frameworks/:id", { preHandler: authHook }, async (request, reply) => {
+  const { id } = request.params as { id: string };
+  const fw = await db.complianceFramework.findUnique({ where: { id } });
+  if (!fw) { reply.code(404).send({ error: "Framework not found" }); return; }
+  if (!fw.orgId) { reply.code(403).send({ error: "Cannot modify built-in framework" }); return; }
+  const { name, version } = request.body as any;
+  const updated = await db.complianceFramework.update({ where: { id }, data: { name, version } });
+  return updated;
+});
+
+app.delete("/v1/compliance/frameworks/:id", { preHandler: authHook }, async (request, reply) => {
+  const { id } = request.params as { id: string };
+  const fw = await db.complianceFramework.findUnique({ where: { id } });
+  if (!fw) { reply.code(404).send({ error: "Framework not found" }); return; }
+  if (!fw.orgId) { reply.code(403).send({ error: "Cannot delete built-in framework" }); return; }
+  await db.complianceFramework.delete({ where: { id } });
+  reply.code(204).send();
+});
+
+app.post("/v1/compliance/controls/:id/override", { preHandler: authHook }, async (request, reply) => {
+  const orgId = (request as any).orgId ?? "default";
+  const { id: controlId } = request.params as { id: string };
+  const { matchRules, weight, enabled } = request.body as any;
+  const override = await db.complianceControlOverride.upsert({
+    where: { orgId_controlId: { orgId, controlId } },
+    update: { matchRules, weight, enabled },
+    create: { orgId, controlId, matchRules, weight, enabled },
+  });
+  reply.code(200).send(override);
+});
+
+app.delete("/v1/compliance/controls/:id/override", { preHandler: authHook }, async (request, reply) => {
+  const orgId = (request as any).orgId ?? "default";
+  const { id: controlId } = request.params as { id: string };
+  await db.complianceControlOverride.deleteMany({ where: { orgId, controlId } });
+  reply.code(204).send();
+});
+
+app.get("/v1/compliance/assess/:frameworkId", { preHandler: authHook }, async (request, reply) => {
+  const orgId = (request as any).orgId ?? "default";
+  const { frameworkId } = request.params as { frameworkId: string };
+  const fw = FRAMEWORK_MAP.get(frameworkId);
+  if (!fw) { reply.code(404).send({ error: "Framework not found" }); return; }
+  const findings = await withTenant(db, orgId, async (tx) => {
+    return tx.finding.findMany({ where: { suppressed: false }, orderBy: { createdAt: "desc" }, take: 5000 });
+  });
+  const inputs: FindingInput[] = findings.map((f: any) => ({
+    id: f.id, agentName: f.agentName, severity: f.severity, category: f.category, suppressed: f.suppressed,
+  }));
+  const result = scoreFramework(fw.controls, inputs);
+  return { frameworkSlug: frameworkId, ...result };
+});
+
+app.get("/v1/compliance/scores", { preHandler: authHook }, async (request) => {
+  const orgId = (request as any).orgId ?? "default";
+  const assessments = await withTenant(db, orgId, async (tx) => {
+    return tx.complianceAssessment.findMany({ orderBy: { assessedAt: "desc" }, distinct: ["frameworkId"], take: 50 });
+  });
+  return assessments;
+});
+
+app.get("/v1/compliance/trends/:frameworkId", { preHandler: authHook }, async (request) => {
+  const orgId = (request as any).orgId ?? "default";
+  const { frameworkId } = request.params as { frameworkId: string };
+  const snapshots = await withTenant(db, orgId, async (tx) => {
+    return tx.complianceSnapshot.findMany({
+      where: { frameworkId },
+      orderBy: { date: "desc" },
+      take: 90,
+    });
+  });
+  return snapshots;
+});
+
+// --- Evidence ---
+app.get("/v1/evidence", { preHandler: authHook }, async (request) => {
+  const orgId = (request as any).orgId ?? "default";
+  const { limit = "50", offset = "0" } = request.query as any;
+  return withTenant(db, orgId, async (tx) => {
+    const [records, total] = await Promise.all([
+      tx.evidenceRecord.findMany({ take: Number(limit), skip: Number(offset), orderBy: { createdAt: "desc" } }),
+      tx.evidenceRecord.count(),
+    ]);
+    return { records, total, limit: Number(limit), offset: Number(offset) };
+  });
+});
+
+app.get("/v1/evidence/:id", { preHandler: authHook }, async (request, reply) => {
+  const orgId = (request as any).orgId ?? "default";
+  const { id } = request.params as { id: string };
+  const record = await withTenant(db, orgId, async (tx) => {
+    return tx.evidenceRecord.findUnique({ where: { id } });
+  });
+  if (!record) { reply.code(404).send({ error: "Evidence record not found" }); return; }
+  return record;
+});
+
+app.get("/v1/evidence/verify", { preHandler: authHook }, async (request) => {
+  const orgId = (request as any).orgId ?? "default";
+  const records = await withTenant(db, orgId, async (tx) => {
+    return tx.evidenceRecord.findMany({ orderBy: { createdAt: "asc" } });
+  });
+  const chain = records.map((r: any) => ({ data: r.data, hash: r.hash, prevHash: r.prevHash }));
+  const result = verifyEvidenceChain(chain);
+  return { ...result, totalRecords: records.length };
+});
+
+// --- Reports ---
+app.post("/v1/reports", { preHandler: authHook }, async (request, reply) => {
+  const orgId = (request as any).orgId ?? "default";
+  const { type, frameworkId, parameters } = request.body as any;
+  const report = await db.report.create({
+    data: { orgId, type, frameworkId, parameters: parameters ?? {}, requestedBy: "api" },
+  });
+  await eventBus.publish("sentinel.reports", { reportId: report.id, orgId, type, frameworkId, parameters });
+  reply.code(202).send(report);
+});
+
+app.get("/v1/reports", { preHandler: authHook }, async (request) => {
+  const orgId = (request as any).orgId ?? "default";
+  const { limit = "50", offset = "0" } = request.query as any;
+  return withTenant(db, orgId, async (tx) => {
+    const [reports, total] = await Promise.all([
+      tx.report.findMany({ take: Number(limit), skip: Number(offset), orderBy: { createdAt: "desc" } }),
+      tx.report.count(),
+    ]);
+    return { reports, total, limit: Number(limit), offset: Number(offset) };
+  });
+});
+
+app.get("/v1/reports/:id", { preHandler: authHook }, async (request, reply) => {
+  const orgId = (request as any).orgId ?? "default";
+  const { id } = request.params as { id: string };
+  const report = await withTenant(db, orgId, async (tx) => {
+    return tx.report.findUnique({ where: { id } });
+  });
+  if (!report) { reply.code(404).send({ error: "Report not found" }); return; }
+  return report;
 });
 
 // --- Graceful shutdown ---
