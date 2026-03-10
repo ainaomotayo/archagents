@@ -14,5 +14,9 @@ export const EU_AI_ACT: FrameworkDefinition = {
     { code: "AIA-17", name: "Quality Management System", weight: 1.0, matchRules: [{ agent: "quality" }] },
     { code: "AIA-52", name: "Transparency for General-Purpose AI", weight: 2.0, matchRules: [{ agent: "ai-detector" }] },
     { code: "AIA-9", name: "Risk Management System", weight: 2.0, matchRules: [{ severity: ["critical", "high", "medium"] }] },
+    { code: "AIA-12", name: "Record-Keeping", weight: 2.0, matchRules: [{ agent: "quality", category: "quality/*" }] },
+    { code: "AIA-16", name: "Obligations of Providers", weight: 2.0, matchRules: [{ agent: "ai-detector", severity: ["critical", "high", "medium"] }] },
+    { code: "AIA-53", name: "Model Evaluation", weight: 2.0, matchRules: [{ agent: "ai-detector" }] },
+    { code: "AIA-61", name: "Post-Market Monitoring", weight: 1.0, matchRules: [{ severity: ["critical", "high"] }] },
   ],
 };

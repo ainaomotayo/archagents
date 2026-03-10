@@ -13,5 +13,8 @@ export const OPENSSF: FrameworkDefinition = {
     { code: "OSS-REV", name: "Code Review", weight: 2.0, matchRules: [{ agent: "quality", category: "quality/review*" }] },
     { code: "OSS-MNT", name: "Maintained", weight: 1.0, matchRules: [{ agent: "dependency" }] },
     { code: "OSS-PIN", name: "Pinned Dependencies", weight: 2.0, matchRules: [{ agent: "dependency", category: "dependency/unpinned*" }] },
+    { code: "OSS-BRN", name: "Branch Protection", weight: 2.0, matchRules: [{ agent: "security", category: "vulnerability/supply-chain*" }] },
+    { code: "OSS-FUZ", name: "Fuzzing", weight: 1.0, matchRules: [{ agent: "quality", category: "quality/review*" }] },
+    { code: "OSS-SAT", name: "SAST", weight: 2.0, matchRules: [{ agent: "security" }] },
   ],
 };

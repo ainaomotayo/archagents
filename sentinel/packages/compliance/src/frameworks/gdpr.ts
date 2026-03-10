@@ -12,5 +12,7 @@ export const GDPR: FrameworkDefinition = {
     { code: "GDPR-32.b", name: "Confidentiality and Integrity", weight: 2.0, matchRules: [{ agent: "security" }] },
     { code: "GDPR-32.c", name: "Availability and Resilience", weight: 1.0, matchRules: [{ agent: "dependency", severity: ["critical"] }] },
     { code: "GDPR-32.d", name: "Testing and Evaluation", weight: 2.0, matchRules: [{ agent: "quality" }] },
+    { code: "GDPR-25.3", name: "Data Minimization", weight: 2.0, matchRules: [{ category: "vulnerability/exposure*" }] },
+    { code: "GDPR-32.e", name: "Regular Security Assessments", weight: 2.0, matchRules: [{ agent: "security", severity: ["critical", "high", "medium"] }] },
   ],
 };

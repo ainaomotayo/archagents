@@ -12,5 +12,7 @@ export const SLSA: FrameworkDefinition = {
     { code: "SLSA-L2.2", name: "Provenance - Authenticated", weight: 3.0, matchRules: [{ agent: "security", category: "vulnerability/supply-chain*" }] },
     { code: "SLSA-L3.1", name: "Build - Hardened Builds", weight: 3.0, matchRules: [{ category: "vulnerability/*", severity: ["critical"] }] },
     { code: "SLSA-L3.2", name: "Provenance - Unforgeable", weight: 3.0, matchRules: [{ agent: "ip-license" }] },
+    { code: "SLSA-L1.3", name: "Source - Version Controlled", weight: 2.0, matchRules: [{ agent: "quality", category: "quality/signing*" }] },
+    { code: "SLSA-L2.3", name: "Build - Isolated", weight: 2.0, matchRules: [{ agent: "security", severity: ["critical", "high"] }] },
   ],
 };

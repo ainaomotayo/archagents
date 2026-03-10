@@ -13,5 +13,13 @@ export const CIS_SSC: FrameworkDefinition = {
     { code: "CIS-SC-3.2", name: "Vulnerability Scanning", weight: 3.0, matchRules: [{ agent: "security" }] },
     { code: "CIS-SC-4.1", name: "Artifact Integrity", weight: 2.0, matchRules: [{ agent: "ip-license" }] },
     { code: "CIS-SC-5.1", name: "Deployment Security", weight: 2.0, matchRules: [{ severity: ["critical"] }] },
+    { code: "CIS-SC-1.3", name: "Branch Protection Rules", weight: 2.0, matchRules: [{ agent: "security", category: "vulnerability/supply-chain*" }] },
+    { code: "CIS-SC-1.4", name: "Code Review Required", weight: 2.0, matchRules: [{ agent: "quality", category: "quality/review*" }] },
+    { code: "CIS-SC-2.2", name: "Minimal Build Steps", weight: 1.0, matchRules: [{ agent: "quality", category: "quality/build*" }] },
+    { code: "CIS-SC-2.3", name: "Locked Build Dependencies", weight: 2.0, matchRules: [{ agent: "dependency", category: "dependency/unpinned*" }] },
+    { code: "CIS-SC-3.3", name: "SBOM Generation", weight: 2.0, matchRules: [{ agent: "dependency" }] },
+    { code: "CIS-SC-4.2", name: "Artifact Signing", weight: 3.0, matchRules: [{ agent: "quality", category: "quality/signing*" }] },
+    { code: "CIS-SC-5.2", name: "Runtime Monitoring", weight: 1.0, matchRules: [{ severity: ["critical", "high"] }] },
+    { code: "CIS-SC-5.3", name: "Immutable Deployments", weight: 2.0, matchRules: [{ agent: "security" }] },
   ],
 };
