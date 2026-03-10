@@ -57,7 +57,7 @@ services:
       AZURE_KEY_VAULT_URL: ${AZURE_KEY_VAULT_URL:-}
       AZURE_KEY_NAME: ${AZURE_KEY_NAME:-sentinel-master}
     healthcheck:
-      test: ["CMD", "node", "-e", "fetch('http://localhost:8080/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      test: ["CMD", "node", "docker/healthcheck.js", "8080"]
       interval: 15s
       timeout: 5s
       retries: 3
@@ -90,6 +90,11 @@ services:
       SAML_JACKSON_PRODUCT: ${SAML_JACKSON_PRODUCT:-sentinel}
       SAML_CLIENT_ID: ${SAML_CLIENT_ID:-dummy}
       SAML_CLIENT_SECRET: ${SAML_CLIENT_SECRET:-dummy}
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/api/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
 
   assessor-worker:
     build:
@@ -120,7 +125,13 @@ services:
       AZURE_ARCHIVE_CONTAINER: ${AZURE_ARCHIVE_CONTAINER:-}
       AZURE_KEY_VAULT_URL: ${AZURE_KEY_VAULT_URL:-}
       AZURE_KEY_NAME: ${AZURE_KEY_NAME:-sentinel-master}
+      WORKER_HEALTH_PORT: "9092"
     command: ["node", "apps/api/dist/worker.js"]
+    healthcheck:
+      test: ["CMD", "node", "docker/healthcheck.js", "9092"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
 
   scheduler:
     build:
@@ -135,36 +146,68 @@ services:
       SCHEDULER_PORT: "9091"
     command: ["node", "apps/api/dist/scheduler.js"]
     healthcheck:
-      test: ["CMD", "node", "-e", "fetch('http://localhost:9091/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      test: ["CMD", "node", "docker/healthcheck.js", "9091"]
       interval: 30s
       timeout: 5s
       retries: 3
 
-  # Analysis Agents (uncomment when running full pipeline)
-  # agent-security:
-  #   build:
-  #     context: agents/security
-  #     dockerfile: Dockerfile
-  #   depends_on:
-  #     redis:
-  #       condition: service_healthy
-  #   environment:
-  #     REDIS_URL: redis://redis:6379
-  #
+  github-bridge:
+    build:
+      context: .
+      dockerfile: docker/api.Dockerfile
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://sentinel:sentinel_dev@postgres:5432/sentinel
+      REDIS_URL: redis://redis:6379
+      GITHUB_APP_ID: ${GITHUB_APP_ID:-}
+      GITHUB_PRIVATE_KEY: ${GITHUB_PRIVATE_KEY:-}
+      GITHUB_BRIDGE_PORT: "9092"
+    command: ["node", "apps/api/dist/github-bridge.js"]
+    healthcheck:
+      test: ["CMD", "node", "docker/healthcheck.js", "9092"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
+  # Analysis Agents
+  agent-security:
+    build:
+      context: .
+      dockerfile: agents/security/Dockerfile
+    depends_on:
+      redis:
+        condition: service_healthy
+    environment:
+      REDIS_URL: redis://redis:6379
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8081/')"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
+  agent-dependency:
+    build:
+      context: .
+      dockerfile: agents/dependency/Dockerfile
+    depends_on:
+      redis:
+        condition: service_healthy
+    environment:
+      REDIS_URL: redis://redis:6379
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8083/')"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
   # agent-ip-license:
   #   build:
-  #     context: agents/ip-license
-  #     dockerfile: Dockerfile
-  #   depends_on:
-  #     redis:
-  #       condition: service_healthy
-  #   environment:
-  #     REDIS_URL: redis://redis:6379
-  #
-  # agent-dependency:
-  #   build:
-  #     context: agents/dependency
-  #     dockerfile: Dockerfile
+  #     context: .
+  #     dockerfile: agents/ip-license/Dockerfile
   #   depends_on:
   #     redis:
   #       condition: service_healthy

@@ -2,9 +2,10 @@ import cron from "node-cron";
 import http from "node:http";
 import { Redis } from "ioredis";
 import { EventBus } from "@sentinel/events";
-import { SELF_SCAN_CONFIG, validateSelfScanConfig, runRetentionCleanup } from "@sentinel/security";
+import { SELF_SCAN_CONFIG, validateSelfScanConfig, runRetentionCleanup, DEFAULT_RETENTION_DAYS } from "@sentinel/security";
 import { getDb } from "@sentinel/db";
 import { createLogger } from "@sentinel/telemetry";
+import { CronExpressionParser } from "cron-parser";
 
 const logger = createLogger({ name: "sentinel-scheduler" });
 
@@ -67,6 +68,25 @@ export class SchedulerMetrics {
   private triggers = new Map<string, number>();
   private errors = new Map<string, number>();
   private lastTrigger = new Map<string, number>();
+  private schedules = new Map<string, string>();
+
+  registerSchedule(type: string, cronExpr: string) {
+    this.schedules.set(type, cronExpr);
+  }
+
+  getHealthStatus(): { status: string; uptime: number; lastTrigger: Record<string, string>; nextScheduled: Record<string, string> } {
+    const lastTrigger: Record<string, string> = {};
+    const nextScheduled: Record<string, string> = {};
+    for (const [type, ts] of this.lastTrigger) {
+      lastTrigger[type] = new Date(ts).toISOString();
+    }
+    for (const [type, expr] of this.schedules) {
+      try {
+        nextScheduled[type] = CronExpressionParser.parse(expr).next().toDate().toISOString();
+      } catch { /* skip invalid */ }
+    }
+    return { status: "ok", uptime: process.uptime(), lastTrigger, nextScheduled };
+  }
 
   recordTrigger(type: string) {
     this.triggers.set(type, (this.triggers.get(type) ?? 0) + 1);
@@ -110,7 +130,7 @@ export function createHealthServer(metrics: SchedulerMetrics, port: number): htt
   const server = http.createServer((req, res) => {
     if (req.url === "/health") {
       res.writeHead(200, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ status: "ok", uptime: process.uptime() }));
+      res.end(JSON.stringify(metrics.getHealthStatus()));
     } else if (req.url === "/metrics") {
       res.writeHead(200, { "Content-Type": "text/plain" });
       res.end(metrics.toPrometheus());
@@ -127,6 +147,9 @@ export function createHealthServer(metrics: SchedulerMetrics, port: number): htt
 if (process.env.NODE_ENV !== "test") {
   const config = buildSchedulerConfig();
   const metrics = new SchedulerMetrics();
+  metrics.registerSchedule("self_scan", config.schedule);
+  metrics.registerSchedule("retention", RETENTION_SCHEDULE);
+  if (config.cveRescanEnabled) metrics.registerSchedule("cve_rescan", config.cveRescanSchedule);
   const healthPort = parseInt(process.env.SCHEDULER_PORT ?? "9091", 10);
   const healthServer = createHealthServer(metrics, healthPort);
   logger.info({ port: healthPort }, "Scheduler health server listening");
@@ -170,9 +193,16 @@ if (process.env.NODE_ENV !== "test") {
   cron.schedule(RETENTION_SCHEDULE, async () => {
     try {
       const db = getDb();
-      const result = await runRetentionCleanup(db);
+      const orgs = await db.organization.findMany({ select: { id: true, settings: true } });
+      for (const org of orgs) {
+        const retentionDays = (org.settings as any)?.retentionDays ?? DEFAULT_RETENTION_DAYS;
+        const result = await runRetentionCleanup(db, retentionDays, org.id);
+        if (result.deletedFindings + result.deletedAgentResults + result.deletedScans > 0) {
+          logger.info({ orgId: org.id, retentionDays, ...result }, "Org retention cleanup completed");
+        }
+      }
       metrics.recordTrigger("retention");
-      logger.info(result, "Data retention cleanup completed");
+      logger.info("Data retention cleanup completed for all orgs");
     } catch (err) {
       metrics.recordError("retention");
       logger.error({ err }, "Data retention cleanup failed");

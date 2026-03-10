@@ -1,10 +1,16 @@
 from __future__ import annotations
 
+import logging
+
 from sentinel_agents.base import BaseAgent
 from sentinel_agents.types import DiffEvent, Finding
 
 from sentinel_dependency.drift_detector import detect_drift, extract_imports
+from sentinel_dependency.manifest_parser import parse_manifests_from_diff
+from sentinel_dependency.osv_scanner import scan_dependencies
 from sentinel_dependency.typosquat import detect_typosquats
+
+logger = logging.getLogger(__name__)
 
 
 class DependencyAgent(BaseAgent):
@@ -22,8 +28,8 @@ class DependencyAgent(BaseAgent):
         # Extract imports from diff
         imports = extract_imports(event)
 
-        # Tier 1: OSV-Scanner CVE detection (stub — needs lock files)
-        findings.extend(self._run_osv_scanner())
+        # Tier 1: OSV-Scanner CVE detection
+        findings.extend(self._run_osv_scanner(event))
 
         # Tier 2: Architectural drift detection
         findings.extend(detect_drift(event, self.existing_deps))
@@ -34,6 +40,13 @@ class DependencyAgent(BaseAgent):
         return findings
 
     @staticmethod
-    def _run_osv_scanner() -> list[Finding]:
-        """Stub for OSV-Scanner integration. Returns [] until lock files are available."""
-        return []
+    def _run_osv_scanner(event: DiffEvent) -> list[Finding]:
+        """Parse manifests from diff and query OSV.dev for known CVEs."""
+        try:
+            deps = parse_manifests_from_diff(event.files)
+            if not deps:
+                return []
+            return scan_dependencies(deps)
+        except Exception:
+            logger.exception("OSV scanner failed")
+            return []

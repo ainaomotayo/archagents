@@ -1,5 +1,5 @@
-import { describe, test, expect } from "vitest";
-import { buildRetentionQuery, DEFAULT_RETENTION_DAYS } from "../data-retention.js";
+import { describe, test, expect, vi } from "vitest";
+import { buildRetentionQuery, DEFAULT_RETENTION_DAYS, runRetentionCleanup } from "../data-retention.js";
 
 describe("data-retention", () => {
   test("DEFAULT_RETENTION_DAYS is 90", () => {
@@ -17,5 +17,112 @@ describe("data-retention", () => {
     const now = new Date("2026-03-09T00:00:00Z");
     const result = buildRetentionQuery(30, now);
     expect(result.cutoffDate).toEqual(new Date("2026-02-07T00:00:00Z"));
+  });
+
+  test("chunked deletion processes in batches", async () => {
+    const mockIds = [{ id: "f1" }, { id: "f2" }, { id: "f3" }];
+    const db = {
+      finding: {
+        findMany: vi.fn()
+          .mockResolvedValueOnce(mockIds)
+          .mockResolvedValueOnce([]),
+        deleteMany: vi.fn().mockResolvedValue({ count: 3 }),
+      },
+      agentResult: {
+        findMany: vi.fn().mockResolvedValue([]),
+        deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
+      },
+      scan: {
+        findMany: vi.fn().mockResolvedValue([]),
+        deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
+      },
+    };
+
+    const result = await runRetentionCleanup(db as any, 90);
+    expect(result.deletedFindings).toBe(3);
+    expect(result.deletedAgentResults).toBe(0);
+    expect(result.deletedScans).toBe(0);
+    expect(db.finding.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ take: 1000 }),
+    );
+    expect(db.finding.deleteMany).toHaveBeenCalledWith({
+      where: { id: { in: ["f1", "f2", "f3"] } },
+    });
+  });
+
+  test("per-org retention uses custom retentionDays", async () => {
+    const db = {
+      finding: {
+        findMany: vi.fn().mockResolvedValue([]),
+        deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
+      },
+      agentResult: {
+        findMany: vi.fn().mockResolvedValue([]),
+        deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
+      },
+      scan: {
+        findMany: vi.fn().mockResolvedValue([]),
+        deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
+      },
+    };
+
+    await runRetentionCleanup(db as any, 180);
+    const findCall = db.finding.findMany.mock.calls[0][0];
+    const cutoff = findCall.where.createdAt.lt;
+    const now = new Date();
+    const daysDiff = Math.round((now.getTime() - cutoff.getTime()) / (1000 * 60 * 60 * 24));
+    expect(daysDiff).toBeGreaterThanOrEqual(179);
+    expect(daysDiff).toBeLessThanOrEqual(181);
+  });
+
+  test("falls back to DEFAULT_RETENTION_DAYS when no retentionDays provided", async () => {
+    const db = {
+      finding: {
+        findMany: vi.fn().mockResolvedValue([]),
+        deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
+      },
+      agentResult: {
+        findMany: vi.fn().mockResolvedValue([]),
+        deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
+      },
+      scan: {
+        findMany: vi.fn().mockResolvedValue([]),
+        deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
+      },
+    };
+
+    await runRetentionCleanup(db as any);
+    const findCall = db.finding.findMany.mock.calls[0][0];
+    const cutoff = findCall.where.createdAt.lt;
+    const now = new Date();
+    const daysDiff = Math.round((now.getTime() - cutoff.getTime()) / (1000 * 60 * 60 * 24));
+    expect(daysDiff).toBeGreaterThanOrEqual(89);
+    expect(daysDiff).toBeLessThanOrEqual(91);
+  });
+
+  test("scopes deletes by orgId when provided", async () => {
+    const db = {
+      finding: {
+        findMany: vi.fn().mockResolvedValue([]),
+        deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
+      },
+      agentResult: {
+        findMany: vi.fn().mockResolvedValue([]),
+        deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
+      },
+      scan: {
+        findMany: vi.fn().mockResolvedValue([]),
+        deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
+      },
+    };
+
+    await runRetentionCleanup(db as any, 90, "org-123");
+    const findingWhere = db.finding.findMany.mock.calls[0][0].where;
+    expect(findingWhere).toHaveProperty("scan");
+    expect(findingWhere.scan.project.orgId).toBe("org-123");
+
+    const scanWhere = db.scan.findMany.mock.calls[0][0].where;
+    expect(scanWhere).toHaveProperty("project");
+    expect(scanWhere.project.orgId).toBe("org-123");
   });
 });

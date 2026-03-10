@@ -53,6 +53,8 @@ model Scan {
   riskScore   Int?      @map("risk_score")
   scanLevel   String    @default("standard") @map("scan_level")
   metadata    Json      @default("{}")
+  triggerType String?   @map("trigger_type")
+  triggerMeta Json      @default("{}") @map("trigger_meta")
   startedAt   DateTime  @default(now()) @map("started_at")
   completedAt DateTime? @map("completed_at")
 
@@ -143,13 +145,31 @@ model Policy {
   rules     Json
   version   Int      @default(1)
   createdBy String   @map("created_by")
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
 
-  organization Organization @relation(fields: [orgId], references: [id])
+  organization Organization    @relation(fields: [orgId], references: [id])
+  versions     PolicyVersion[]
 
   @@index([orgId])
   @@map("policies")
+}
+
+model PolicyVersion {
+  id         String   @id @default(uuid()) @db.Uuid
+  policyId   String   @map("policy_id") @db.Uuid
+  version    Int
+  name       String
+  rules      Json
+  changedBy  String   @map("changed_by")
+  changedAt  DateTime @default(now()) @map("changed_at")
+  changeType String   @map("change_type")
+
+  policy Policy @relation(fields: [policyId], references: [id])
+
+  @@index([policyId, version])
+  @@map("policy_versions")
 }
 
 model AuditEvent {

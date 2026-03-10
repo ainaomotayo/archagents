@@ -1,5 +1,6 @@
 import { describe, test, expect } from "vitest";
-import { buildSchedulerConfig, shouldTriggerScan, RETENTION_SCHEDULE, SchedulerMetrics } from "../scheduler.js";
+import { buildSchedulerConfig, shouldTriggerScan, RETENTION_SCHEDULE, SchedulerMetrics, createHealthServer } from "../scheduler.js";
+import type { AddressInfo } from "node:net";
 
 describe("scheduler", () => {
   test("buildSchedulerConfig returns valid config from SELF_SCAN_CONFIG", () => {
@@ -59,5 +60,83 @@ describe("SchedulerMetrics", () => {
     const output = metrics.toPrometheus();
     expect(output).toContain("sentinel_scheduler_triggers_total");
     expect(output).toContain('type="self_scan"');
+  });
+});
+
+describe("SchedulerMetrics health status", () => {
+  test("getHealthStatus includes lastTrigger timestamps as ISO strings", () => {
+    const metrics = new SchedulerMetrics();
+    metrics.recordTrigger("self_scan");
+    const health = metrics.getHealthStatus();
+    expect(health.status).toBe("ok");
+    expect(health.uptime).toBeGreaterThan(0);
+    expect(health.lastTrigger).toBeDefined();
+    expect(health.lastTrigger.self_scan).toBeDefined();
+    expect(new Date(health.lastTrigger.self_scan).toISOString()).toBe(health.lastTrigger.self_scan);
+  });
+
+  test("getHealthStatus includes nextScheduled computed by cron-parser", () => {
+    const metrics = new SchedulerMetrics();
+    metrics.registerSchedule("self_scan", "0 2 * * *");
+    const health = metrics.getHealthStatus();
+    expect(health.nextScheduled).toBeDefined();
+    expect(health.nextScheduled.self_scan).toBeDefined();
+    const next = new Date(health.nextScheduled.self_scan);
+    expect(next.getTime()).toBeGreaterThan(Date.now());
+  });
+
+  test("getHealthStatus skips invalid cron expressions gracefully", () => {
+    const metrics = new SchedulerMetrics();
+    metrics.registerSchedule("bad_schedule", "not-a-cron");
+    const health = metrics.getHealthStatus();
+    expect(health.nextScheduled.bad_schedule).toBeUndefined();
+  });
+});
+
+describe("createHealthServer", () => {
+  test("GET /health returns enriched status with lastTrigger and nextScheduled", async () => {
+    const metrics = new SchedulerMetrics();
+    metrics.registerSchedule("self_scan", "0 2 * * *");
+    metrics.recordTrigger("self_scan");
+    const server = createHealthServer(metrics, 0);
+    const port = (server.address() as AddressInfo).port;
+    try {
+      const res = await fetch(`http://localhost:${port}/health`);
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.status).toBe("ok");
+      expect(body.uptime).toBeGreaterThan(0);
+      expect(body.lastTrigger.self_scan).toBeDefined();
+      expect(body.nextScheduled.self_scan).toBeDefined();
+    } finally {
+      server.close();
+    }
+  });
+
+  test("GET /metrics returns Prometheus text format", async () => {
+    const metrics = new SchedulerMetrics();
+    metrics.recordTrigger("self_scan");
+    const server = createHealthServer(metrics, 0);
+    const port = (server.address() as AddressInfo).port;
+    try {
+      const res = await fetch(`http://localhost:${port}/metrics`);
+      expect(res.status).toBe(200);
+      const text = await res.text();
+      expect(text).toContain("sentinel_scheduler_triggers_total");
+    } finally {
+      server.close();
+    }
+  });
+
+  test("GET /unknown returns 404", async () => {
+    const metrics = new SchedulerMetrics();
+    const server = createHealthServer(metrics, 0);
+    const port = (server.address() as AddressInfo).port;
+    try {
+      const res = await fetch(`http://localhost:${port}/unknown`);
+      expect(res.status).toBe(404);
+    } finally {
+      server.close();
+    }
   });
 });

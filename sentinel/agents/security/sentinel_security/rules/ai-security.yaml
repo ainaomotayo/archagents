@@ -1,0 +1,242 @@
+rules:
+  # --- Hardcoded Credentials ---
+  - id: sentinel.ai-hardcoded-secret
+    patterns:
+      - pattern-either:
+          - pattern: $VAR = "..."
+          - pattern: $VAR = '...'
+      - metavariable-regex:
+          metavariable: $VAR
+          regex: (?i)(password|passwd|secret|api_key|apikey|api_secret|token|auth_token|access_key|secret_key|private_key)
+    message: >-
+      Hardcoded credential detected in variable '$VAR'. Never embed secrets
+      directly in source code. Use environment variables or a secrets manager.
+    languages: [python]
+    severity: ERROR
+    metadata:
+      cwe:
+        - "CWE-798: Use of Hard-coded Credentials"
+      category: security
+      technology:
+        - python
+      confidence: HIGH
+      references:
+        - https://cwe.mitre.org/data/definitions/798.html
+
+  # --- Code Injection: eval/exec ---
+  - id: sentinel.ai-eval-injection
+    pattern-either:
+      - pattern: eval(...)
+      - pattern: exec(...)
+    message: >-
+      Use of eval() or exec() detected. These functions can execute arbitrary
+      code and are a common source of code injection vulnerabilities, especially
+      in AI-generated code. Use ast.literal_eval() for data parsing or
+      find a safer alternative.
+    languages: [python]
+    severity: ERROR
+    metadata:
+      cwe:
+        - "CWE-94: Improper Control of Generation of Code"
+      category: security
+      technology:
+        - python
+      confidence: MEDIUM
+      references:
+        - https://cwe.mitre.org/data/definitions/94.html
+
+  # --- SQL Injection ---
+  - id: sentinel.ai-sql-injection
+    pattern-either:
+      - pattern: $CURSOR.execute("..." % ...)
+      - pattern: $CURSOR.execute("...".format(...))
+      - pattern: $CURSOR.execute(f"...")
+      - pattern: $CURSOR.execute("..." + ...)
+    message: >-
+      Possible SQL injection via string formatting. Use parameterized queries
+      instead of string interpolation to prevent SQL injection attacks.
+    languages: [python]
+    severity: ERROR
+    metadata:
+      cwe:
+        - "CWE-89: SQL Injection"
+      category: security
+      technology:
+        - python
+      confidence: HIGH
+      references:
+        - https://cwe.mitre.org/data/definitions/89.html
+
+  # --- Command Injection ---
+  - id: sentinel.ai-command-injection
+    pattern-either:
+      - pattern: subprocess.call(..., shell=True, ...)
+      - pattern: subprocess.run(..., shell=True, ...)
+      - pattern: subprocess.Popen(..., shell=True, ...)
+      - pattern: os.system(...)
+      - pattern: os.popen(...)
+    message: >-
+      Potential command injection. Using shell=True with subprocess or
+      os.system/popen can allow command injection. Use subprocess with a
+      list of arguments and shell=False instead.
+    languages: [python]
+    severity: ERROR
+    metadata:
+      cwe:
+        - "CWE-78: OS Command Injection"
+      category: security
+      technology:
+        - python
+      confidence: HIGH
+      references:
+        - https://cwe.mitre.org/data/definitions/78.html
+
+  # --- Insecure Deserialization ---
+  - id: sentinel.ai-insecure-deserialization
+    pattern-either:
+      - pattern: pickle.loads(...)
+      - pattern: pickle.load(...)
+      - pattern: marshal.loads(...)
+      - pattern: shelve.open(...)
+    message: >-
+      Insecure deserialization detected. pickle.load/loads and marshal.loads
+      can execute arbitrary code. Use json for untrusted data.
+    languages: [python]
+    severity: ERROR
+    metadata:
+      cwe:
+        - "CWE-502: Deserialization of Untrusted Data"
+      category: security
+      technology:
+        - python
+      confidence: HIGH
+      references:
+        - https://cwe.mitre.org/data/definitions/502.html
+
+  - id: sentinel.ai-yaml-unsafe-load
+    pattern: yaml.load(...)
+    message: >-
+      yaml.load() without SafeLoader can execute arbitrary Python code.
+      Use yaml.safe_load() or pass Loader=yaml.SafeLoader explicitly.
+    languages: [python]
+    severity: ERROR
+    metadata:
+      cwe:
+        - "CWE-502: Deserialization of Untrusted Data"
+      category: security
+      technology:
+        - python
+      confidence: HIGH
+
+  # --- Path Traversal ---
+  - id: sentinel.ai-path-traversal
+    pattern-either:
+      - pattern: open($PATH + ..., ...)
+      - pattern: open(f"...{$PATH}...", ...)
+      - pattern: open("...".format($PATH), ...)
+      - pattern: open("..." % $PATH, ...)
+    message: >-
+      Potential path traversal vulnerability. User-controlled input in file
+      paths can allow reading/writing arbitrary files. Validate and sanitize
+      file paths, use os.path.realpath() and check against an allowed directory.
+    languages: [python]
+    severity: WARNING
+    metadata:
+      cwe:
+        - "CWE-22: Path Traversal"
+      category: security
+      technology:
+        - python
+      confidence: MEDIUM
+      references:
+        - https://cwe.mitre.org/data/definitions/22.html
+
+  # --- SSRF ---
+  - id: sentinel.ai-ssrf-requests
+    pattern-either:
+      - pattern: requests.get($URL + ..., ...)
+      - pattern: requests.get(f"...{$URL}...", ...)
+      - pattern: requests.post($URL + ..., ...)
+      - pattern: requests.post(f"...{$URL}...", ...)
+      - pattern: urllib.request.urlopen($URL + ...)
+      - pattern: urllib.request.urlopen(f"...{$URL}...")
+    message: >-
+      Potential Server-Side Request Forgery (SSRF). User-controlled URLs in
+      HTTP requests can allow attackers to access internal services. Validate
+      and restrict URLs to known-safe domains.
+    languages: [python]
+    severity: WARNING
+    metadata:
+      cwe:
+        - "CWE-918: Server-Side Request Forgery"
+      category: security
+      technology:
+        - python
+      confidence: MEDIUM
+      references:
+        - https://cwe.mitre.org/data/definitions/918.html
+
+  # --- Insecure Random ---
+  - id: sentinel.ai-insecure-random
+    pattern-either:
+      - pattern: random.random()
+      - pattern: random.randint(...)
+      - pattern: random.choice(...)
+      - pattern: random.randrange(...)
+    message: >-
+      Use of non-cryptographic random number generator. For security-sensitive
+      operations (tokens, keys, passwords), use secrets module or
+      os.urandom() instead.
+    languages: [python]
+    severity: WARNING
+    metadata:
+      cwe:
+        - "CWE-330: Use of Insufficiently Random Values"
+      category: security
+      technology:
+        - python
+      confidence: LOW
+      references:
+        - https://cwe.mitre.org/data/definitions/330.html
+
+  # --- JWT Verification Disabled ---
+  - id: sentinel.ai-jwt-no-verify
+    pattern: jwt.decode($TOKEN, options=$OPTS, ...)
+    metavariable-pattern:
+      metavariable: $OPTS
+      pattern: |
+        {"verify_signature": False, ...}
+    message: >-
+      JWT signature verification is disabled. This allows attackers to forge
+      tokens. Always verify JWT signatures with a proper secret or public key.
+    languages: [python]
+    severity: ERROR
+    metadata:
+      cwe:
+        - "CWE-347: Improper Verification of Cryptographic Signature"
+      category: security
+      technology:
+        - python
+      confidence: HIGH
+      references:
+        - https://cwe.mitre.org/data/definitions/347.html
+
+  # --- CORS Wildcard ---
+  - id: sentinel.ai-cors-wildcard
+    pattern-either:
+      - pattern: CORS($APP, origins="*")
+      - pattern: CORS($APP, origins=["*"])
+    message: >-
+      CORS wildcard origin detected. Allowing all origins can expose your
+      API to cross-origin attacks. Restrict to specific trusted domains.
+    languages: [python]
+    severity: WARNING
+    metadata:
+      cwe:
+        - "CWE-942: Permissive Cross-domain Policy"
+      category: security
+      technology:
+        - python
+      confidence: HIGH
+      references:
+        - https://cwe.mitre.org/data/definitions/942.html

@@ -368,10 +368,21 @@ app.get("/v1/projects/:id/findings", { preHandler: authHook }, async (request) =
 });
 
 // --- Policies ---
+const policyBodySchema = {
+  type: "object",
+  required: ["name", "rules"],
+  properties: {
+    name: { type: "string", minLength: 1, maxLength: 255 },
+    rules: { type: "array", items: { type: "object" } },
+    projectId: { type: "string", format: "uuid" },
+  },
+  additionalProperties: false,
+} as const;
+
 app.get("/v1/policies", { preHandler: authHook }, async (request) => {
   const orgId = (request as any).orgId ?? "default";
   return withTenant(db, orgId, async (tx) => {
-    return tx.policy.findMany({ orderBy: { createdAt: "desc" } });
+    return tx.policy.findMany({ where: { deletedAt: null }, orderBy: { createdAt: "desc" } });
   });
 });
 
@@ -379,7 +390,7 @@ app.get("/v1/policies/:id", { preHandler: authHook }, async (request, reply) => 
   const orgId = (request as any).orgId ?? "default";
   const { id } = request.params as { id: string };
   return withTenant(db, orgId, async (tx) => {
-    const policy = await tx.policy.findUnique({ where: { id } });
+    const policy = await tx.policy.findFirst({ where: { id, deletedAt: null } });
     if (!policy) {
       reply.code(404).send({ error: "Policy not found" });
       return;
@@ -388,21 +399,46 @@ app.get("/v1/policies/:id", { preHandler: authHook }, async (request, reply) => 
   });
 });
 
-app.post("/v1/policies", { preHandler: authHook }, async (request, reply) => {
+app.post("/v1/policies", { preHandler: authHook, schema: { body: policyBodySchema } }, async (request, reply) => {
   const orgId = (request as any).orgId ?? "default";
   const body = request.body as any;
-  return withTenant(db, orgId, async (tx) => {
-    const policy = await tx.policy.create({ data: body });
-    reply.code(201).send(policy);
+  const policy = await withTenant(db, orgId, async (tx) => {
+    return tx.policy.create({ data: body });
   });
+  const role = (request as any).role ?? "unknown";
+  try {
+    await db.policyVersion.create({
+      data: {
+        policyId: policy.id,
+        version: policy.version,
+        name: policy.name,
+        rules: policy.rules as any,
+        changedBy: role,
+        changeType: "created",
+      },
+    });
+  } catch (err) {
+    request.log.error({ err }, "Failed to create policy version snapshot");
+  }
+  try {
+    await auditLog.append(orgId, {
+      actor: { type: "api", id: role, name: "API" },
+      action: "policy.created",
+      resource: { type: "policy", id: policy.id },
+      detail: { name: policy.name, version: policy.version },
+    });
+  } catch (err) {
+    request.log.error({ err }, "Failed to append audit log");
+  }
+  reply.code(201).send(policy);
 });
 
-app.put("/v1/policies/:id", { preHandler: authHook }, async (request, reply) => {
+app.put("/v1/policies/:id", { preHandler: authHook, schema: { body: policyBodySchema } }, async (request, reply) => {
   const orgId = (request as any).orgId ?? "default";
   const { id } = request.params as { id: string };
   const body = request.body as any;
   return withTenant(db, orgId, async (tx) => {
-    const existing = await tx.policy.findUnique({ where: { id } });
+    const existing = await tx.policy.findFirst({ where: { id, deletedAt: null } });
     if (!existing) {
       reply.code(404).send({ error: "Policy not found" });
       return;
@@ -411,21 +447,86 @@ app.put("/v1/policies/:id", { preHandler: authHook }, async (request, reply) => 
       where: { id },
       data: { name: body.name, rules: body.rules, version: { increment: 1 } },
     });
+    const role = (request as any).role ?? "unknown";
+    try {
+      await tx.policyVersion.create({
+        data: {
+          policyId: id,
+          version: updated.version,
+          name: updated.name,
+          rules: updated.rules as any,
+          changedBy: role,
+          changeType: "updated",
+        },
+      });
+    } catch (err) {
+      request.log.error({ err }, "Failed to create policy version snapshot");
+    }
+    try {
+      await auditLog.append(orgId, {
+        actor: { type: "api", id: role, name: "API" },
+        action: "policy.updated",
+        resource: { type: "policy", id },
+        detail: { name: updated.name, version: updated.version },
+      });
+    } catch (err) {
+      request.log.error({ err }, "Failed to append audit log");
+    }
     return updated;
   });
 });
 
 app.delete("/v1/policies/:id", { preHandler: authHook }, async (request, reply) => {
   const orgId = (request as any).orgId ?? "default";
+  const role = (request as any).role ?? "unknown";
   const { id } = request.params as { id: string };
   return withTenant(db, orgId, async (tx) => {
-    const existing = await tx.policy.findUnique({ where: { id } });
+    const existing = await tx.policy.findFirst({ where: { id, deletedAt: null } });
     if (!existing) {
       reply.code(404).send({ error: "Policy not found" });
       return;
     }
-    await tx.policy.delete({ where: { id } });
+    await tx.policy.update({
+      where: { id },
+      data: { deletedAt: new Date() },
+    });
+    try {
+      await tx.policyVersion.create({
+        data: {
+          policyId: id,
+          version: existing.version,
+          name: existing.name,
+          rules: existing.rules as any,
+          changedBy: role,
+          changeType: "deleted",
+        },
+      });
+    } catch (err) {
+      request.log.error({ err }, "Failed to create policy version snapshot");
+    }
+    try {
+      await auditLog.append(orgId, {
+        actor: { type: "api", id: role, name: "API" },
+        action: "policy.deleted",
+        resource: { type: "policy", id },
+        detail: { name: existing.name },
+      });
+    } catch (err) {
+      request.log.error({ err }, "Failed to append audit log");
+    }
     reply.code(204).send();
+  });
+});
+
+app.get("/v1/policies/:id/versions", { preHandler: authHook }, async (request) => {
+  const orgId = (request as any).orgId ?? "default";
+  const { id } = request.params as { id: string };
+  return withTenant(db, orgId, async (tx) => {
+    const versions = await tx.policyVersion.findMany({
+      where: { policyId: id },
+      orderBy: { version: "desc" },
+    });
+    return { versions };
   });
 });
 

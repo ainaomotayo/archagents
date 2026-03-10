@@ -128,6 +128,7 @@ vi.mock("@sentinel/db", () => {
   const certificateModel = makeModel(certificates, "issuedAt");
   const projectModel = makeModel(projects);
   const policyModel = makeModel(policies);
+  const policyVersionModel = makeModel([] as any[], "changedAt");
   const auditEventModel = makeModel(auditEvents, "timestamp");
 
   const tenant = {
@@ -136,6 +137,7 @@ vi.mock("@sentinel/db", () => {
     certificate: certificateModel,
     project: projectModel,
     policy: policyModel,
+    policyVersion: policyVersionModel,
     auditEvent: auditEventModel,
   };
 
@@ -389,7 +391,7 @@ describe("API integration", () => {
   });
 
   it("POST /v1/policies creates policy (admin) returns 201", async () => {
-    const bodyObj = { name: "new-policy", rules: {} };
+    const bodyObj = { name: "new-policy", rules: [] };
     const payload = JSON.stringify(bodyObj);
     // Fastify parses JSON, then auth middleware does JSON.stringify(parsedBody)
     const signBody = JSON.stringify(bodyObj);
@@ -406,7 +408,7 @@ describe("API integration", () => {
   });
 
   it("POST /v1/policies rejected for viewer (403)", async () => {
-    const bodyObj = { name: "new-policy", rules: {} };
+    const bodyObj = { name: "new-policy", rules: [] };
     const payload = JSON.stringify(bodyObj);
     const signBody = JSON.stringify(bodyObj);
     const res = await app.inject({
@@ -443,6 +445,170 @@ describe("API integration", () => {
     expect(body).toHaveProperty("total");
     expect(body).toHaveProperty("limit");
     expect(body).toHaveProperty("offset");
+  });
+
+  // ── Policy validation ──────────────────────────────────────────────────
+  it("POST /v1/policies rejects missing name (400)", async () => {
+    const body = JSON.stringify({ rules: [{ field: "severity", operator: "gte", value: "high" }] });
+    const res = await app.inject({
+      method: "POST",
+      url: "/v1/policies",
+      headers: { ...signedHeaders(body), "content-type": "application/json" },
+      payload: body,
+    });
+    expect(res.statusCode).toBe(400);
+  });
+
+  it("POST /v1/policies rejects empty name (400)", async () => {
+    const body = JSON.stringify({ name: "", rules: [] });
+    const res = await app.inject({
+      method: "POST",
+      url: "/v1/policies",
+      headers: { ...signedHeaders(body), "content-type": "application/json" },
+      payload: body,
+    });
+    expect(res.statusCode).toBe(400);
+  });
+
+  it("POST /v1/policies accepts valid body (201)", async () => {
+    const body = JSON.stringify({ name: "test-policy", rules: [{ field: "sev", operator: "gte", value: "high" }] });
+    const res = await app.inject({
+      method: "POST",
+      url: "/v1/policies",
+      headers: { ...signedHeaders(body), "content-type": "application/json" },
+      payload: body,
+    });
+    expect(res.statusCode).toBe(201);
+  });
+
+  // ── Audit logging ────────────────────────────────────────────────────
+  it("POST /v1/policies triggers audit log", async () => {
+    const { AuditLog } = await import("@sentinel/audit");
+    const auditInstance = (AuditLog as any).mock.results[0].value;
+    const callsBefore = auditInstance.append.mock.calls.length;
+
+    const body = JSON.stringify({ name: "audit-test", rules: [] });
+    await app.inject({
+      method: "POST",
+      url: "/v1/policies",
+      headers: { ...signedHeaders(body), "content-type": "application/json" },
+      payload: body,
+    });
+
+    expect(auditInstance.append.mock.calls.length).toBeGreaterThan(callsBefore);
+    const lastCall = auditInstance.append.mock.calls[auditInstance.append.mock.calls.length - 1];
+    expect(lastCall[1].action).toBe("policy.created");
+    expect(lastCall[1].resource.type).toBe("policy");
+  });
+
+  // ── Audit logging (PUT + DELETE) ─────────────────────────────────────
+  it("PUT /v1/policies/:id triggers audit log with policy.updated", async () => {
+    const { AuditLog } = await import("@sentinel/audit");
+    const auditInstance = (AuditLog as any).mock.results[0].value;
+    const callsBefore = auditInstance.append.mock.calls.length;
+
+    const body = JSON.stringify({ name: "updated-policy", rules: [] });
+    await app.inject({
+      method: "PUT",
+      url: "/v1/policies/pol-1",
+      headers: { ...signedHeaders(body), "content-type": "application/json" },
+      payload: body,
+    });
+
+    expect(auditInstance.append.mock.calls.length).toBeGreaterThan(callsBefore);
+    const lastCall = auditInstance.append.mock.calls[auditInstance.append.mock.calls.length - 1];
+    expect(lastCall[1].action).toBe("policy.updated");
+  });
+
+  it("DELETE /v1/policies/:id triggers audit log with policy.deleted", async () => {
+    const { AuditLog } = await import("@sentinel/audit");
+    const auditInstance = (AuditLog as any).mock.results[0].value;
+    const callsBefore = auditInstance.append.mock.calls.length;
+
+    await app.inject({
+      method: "DELETE",
+      url: "/v1/policies/pol-1",
+      headers: signedHeaders(),
+    });
+
+    expect(auditInstance.append.mock.calls.length).toBeGreaterThan(callsBefore);
+    const lastCall = auditInstance.append.mock.calls[auditInstance.append.mock.calls.length - 1];
+    expect(lastCall[1].action).toBe("policy.deleted");
+  });
+
+  // ── Soft delete + version history ────────────────────────────────────
+  it("DELETE /v1/policies/:id returns 204 (soft delete)", async () => {
+    const res = await app.inject({
+      method: "DELETE",
+      url: "/v1/policies/pol-1",
+      headers: signedHeaders(),
+    });
+    expect(res.statusCode).toBe(204);
+  });
+
+  it("DELETE /v1/policies/:id calls policy.update with deletedAt (not hard delete)", async () => {
+    const { withTenant } = await import("@sentinel/db");
+    await app.inject({
+      method: "DELETE",
+      url: "/v1/policies/pol-1",
+      headers: signedHeaders(),
+    });
+
+    // withTenant passes the tenant mock; check policy.update was called with deletedAt
+    const tenantMock = (withTenant as any).mock.calls.at(-1);
+    // The tenant is passed to the callback — we check the update mock on the policy model
+    const { getDb } = await import("@sentinel/db");
+    const db = (getDb as any)();
+    const updateCalls = db.policy.update.mock.calls;
+    const lastUpdate = updateCalls[updateCalls.length - 1][0];
+    expect(lastUpdate.data).toHaveProperty("deletedAt");
+    expect(lastUpdate.data.deletedAt).toBeInstanceOf(Date);
+  });
+
+  it("POST /v1/policies creates a PolicyVersion snapshot", async () => {
+    const { getDb } = await import("@sentinel/db");
+    const db = (getDb as any)();
+    const versionCreatesBefore = db.policyVersion.create.mock.calls.length;
+
+    const body = JSON.stringify({ name: "version-test", rules: [] });
+    await app.inject({
+      method: "POST",
+      url: "/v1/policies",
+      headers: { ...signedHeaders(body), "content-type": "application/json" },
+      payload: body,
+    });
+
+    expect(db.policyVersion.create.mock.calls.length).toBeGreaterThan(versionCreatesBefore);
+    const lastCall = db.policyVersion.create.mock.calls[db.policyVersion.create.mock.calls.length - 1][0];
+    expect(lastCall.data.changeType).toBe("created");
+  });
+
+  it("DELETE /v1/policies/:id creates a PolicyVersion snapshot with changeType deleted", async () => {
+    const { getDb } = await import("@sentinel/db");
+    const db = (getDb as any)();
+    const versionCreatesBefore = db.policyVersion.create.mock.calls.length;
+
+    await app.inject({
+      method: "DELETE",
+      url: "/v1/policies/pol-1",
+      headers: signedHeaders(),
+    });
+
+    expect(db.policyVersion.create.mock.calls.length).toBeGreaterThan(versionCreatesBefore);
+    const lastCall = db.policyVersion.create.mock.calls[db.policyVersion.create.mock.calls.length - 1][0];
+    expect(lastCall.data.changeType).toBe("deleted");
+  });
+
+  it("GET /v1/policies/:id/versions returns version history", async () => {
+    const res = await app.inject({
+      method: "GET",
+      url: "/v1/policies/pol-1/versions",
+      headers: signedHeaders(),
+    });
+    expect(res.statusCode).toBe(200);
+    const body = JSON.parse(res.payload);
+    expect(body).toHaveProperty("versions");
+    expect(Array.isArray(body.versions)).toBe(true);
   });
 
   // ── Unknown route ─────────────────────────────────────────────────────

@@ -60,4 +60,14 @@ describe("RBAC enforcement", () => {
     expect(isAuthorized("service", "GET", "/v1/scans")).toBe(true);
     expect(isAuthorized("service", "GET", "/v1/scans/:id/poll")).toBe(true);
   });
+
+  it("returns false for completely unknown paths", () => {
+    expect(isAuthorized("admin", "GET", "/v1/nonexistent")).toBe(false);
+  });
+
+  it("GET /v1/policies/:id/versions accessible by all authenticated roles", () => {
+    expect(isAuthorized("admin", "GET", "/v1/policies/:id/versions")).toBe(true);
+    expect(isAuthorized("viewer", "GET", "/v1/policies/:id/versions")).toBe(true);
+    expect(isAuthorized("service", "GET", "/v1/policies/:id/versions")).toBe(false);
+  });
 });

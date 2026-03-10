@@ -10,6 +10,7 @@ import {
   scanDuration,
 } from "@sentinel/telemetry";
 import { isArchiveEnabled, archiveToS3, getArchiveConfig } from "@sentinel/security";
+import http from "node:http";
 import { createAssessmentStore } from "./stores.js";
 
 const logger = createLogger({ name: "sentinel-worker" });
@@ -20,7 +21,12 @@ const db = getDb();
 const assessor = new Assessor();
 const store = createAssessmentStore(db);
 
-const EXPECTED_AGENTS = ["security", "ip-license", "dependency", "ai-detector", "quality", "policy"];
+// Only agents that are actually deployed. Additional agents can be added here
+// as they come online — the worker will wait for all listed agents or timeout.
+const EXPECTED_AGENTS = (process.env.EXPECTED_AGENTS ?? "security,dependency")
+  .split(",")
+  .map((s) => s.trim())
+  .filter(Boolean);
 const AGENT_TIMEOUT_MS = parseInt(process.env.AGENT_TIMEOUT_MS ?? "30000", 10);
 
 interface PendingScan {
@@ -125,8 +131,22 @@ async function finalizeScan(scanId: string, hasTimeouts: boolean) {
   }
 }
 
+const healthPort = parseInt(process.env.WORKER_HEALTH_PORT ?? "9092", 10);
+const healthServer = http.createServer((req, res) => {
+  if (req.url === "/health") {
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ status: "ok", uptime: process.uptime() }));
+  } else {
+    res.writeHead(404);
+    res.end();
+  }
+});
+healthServer.listen(healthPort);
+logger.info({ port: healthPort }, "Worker health server listening");
+
 // Graceful shutdown
 const shutdown = async () => {
+  healthServer.close();
   logger.info("Assessor worker shutting down...");
   for (const [scanId, pending] of pendingScans) {
     clearTimeout(pending.timer);

@@ -118,3 +118,26 @@ export async function apiPatch<T>(
   }
   return res.json() as Promise<T>;
 }
+
+export async function apiDelete(
+  path: string,
+  extraHeaders?: Record<string, string>,
+): Promise<void> {
+  const url = new URL(path, API_URL);
+  const body = "";
+  const { signRequest } = await import("@sentinel/auth");
+  const signature = signRequest(body, API_SECRET);
+
+  const res = await fetch(url.toString(), {
+    method: "DELETE",
+    headers: {
+      "X-Sentinel-Signature": signature,
+      "X-Sentinel-API-Key": "dashboard",
+      ...extraHeaders,
+    },
+  });
+
+  if (!res.ok) {
+    throw new Error(`API DELETE ${res.status}: ${await res.text()}`);
+  }
+}
