@@ -48,3 +48,6 @@ export interface FindingInput {
   category: string | null;
   suppressed: boolean;
 }
+
+export const VALID_REPORT_TYPES = ["compliance_summary", "audit_evidence", "executive"] as const;
+export type ReportType = (typeof VALID_REPORT_TYPES)[number];

@@ -13,6 +13,7 @@ import {
   scoreFramework,
   computeEvidenceHash,
   verifyEvidenceChain,
+  VALID_REPORT_TYPES,
   type FindingInput,
 } from "@sentinel/compliance";
 import { createAuthHook } from "./middleware/auth.js";
@@ -712,6 +713,10 @@ app.get("/v1/evidence/verify", { preHandler: authHook }, async (request) => {
 app.post("/v1/reports", { preHandler: authHook }, async (request, reply) => {
   const orgId = (request as any).orgId ?? "default";
   const { type, frameworkId, parameters } = request.body as any;
+  if (!VALID_REPORT_TYPES.includes(type)) {
+    reply.code(400).send({ error: `Invalid report type. Must be one of: ${VALID_REPORT_TYPES.join(", ")}` });
+    return;
+  }
   const report = await db.report.create({
     data: { orgId, type, frameworkId, parameters: parameters ?? {}, requestedBy: "api" },
   });

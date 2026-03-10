@@ -6,7 +6,10 @@ export type {
   ControlScore,
   AssessmentResult,
   FindingInput,
+  ReportType,
 } from "./types.js";
+
+export { VALID_REPORT_TYPES } from "./types.js";
 
 export { matchFindings } from "./matchers/rule-matcher.js";
 
