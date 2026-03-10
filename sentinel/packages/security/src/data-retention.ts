@@ -36,11 +36,20 @@ async function chunkedDelete(
 ): Promise<number> {
   let totalDeleted = 0;
   while (true) {
-    const batch = await model.findMany({ where, take: chunkSize, select: { id: true } });
+    let batch: { id: string }[];
+    try {
+      batch = await model.findMany({ where, take: chunkSize, select: { id: true } });
+    } catch {
+      break; // Stop iteration on query failure; next cron run picks up remaining
+    }
     if (batch.length === 0) break;
     const ids = batch.map((b) => b.id);
-    const { count } = await model.deleteMany({ where: { id: { in: ids } } });
-    totalDeleted += count;
+    try {
+      const { count } = await model.deleteMany({ where: { id: { in: ids } } });
+      totalDeleted += count;
+    } catch {
+      break; // Stop iteration on delete failure; next cron run picks up remaining
+    }
     if (batch.length < chunkSize) break;
   }
   return totalDeleted;

@@ -501,6 +501,41 @@ describe("API integration", () => {
     expect(lastCall[1].resource.type).toBe("policy");
   });
 
+  // ── Audit logging (PUT + DELETE) ─────────────────────────────────────
+  it("PUT /v1/policies/:id triggers audit log with policy.updated", async () => {
+    const { AuditLog } = await import("@sentinel/audit");
+    const auditInstance = (AuditLog as any).mock.results[0].value;
+    const callsBefore = auditInstance.append.mock.calls.length;
+
+    const body = JSON.stringify({ name: "updated-policy", rules: [] });
+    await app.inject({
+      method: "PUT",
+      url: "/v1/policies/pol-1",
+      headers: { ...signedHeaders(body), "content-type": "application/json" },
+      payload: body,
+    });
+
+    expect(auditInstance.append.mock.calls.length).toBeGreaterThan(callsBefore);
+    const lastCall = auditInstance.append.mock.calls[auditInstance.append.mock.calls.length - 1];
+    expect(lastCall[1].action).toBe("policy.updated");
+  });
+
+  it("DELETE /v1/policies/:id triggers audit log with policy.deleted", async () => {
+    const { AuditLog } = await import("@sentinel/audit");
+    const auditInstance = (AuditLog as any).mock.results[0].value;
+    const callsBefore = auditInstance.append.mock.calls.length;
+
+    await app.inject({
+      method: "DELETE",
+      url: "/v1/policies/pol-1",
+      headers: signedHeaders(),
+    });
+
+    expect(auditInstance.append.mock.calls.length).toBeGreaterThan(callsBefore);
+    const lastCall = auditInstance.append.mock.calls[auditInstance.append.mock.calls.length - 1];
+    expect(lastCall[1].action).toBe("policy.deleted");
+  });
+
   // ── Soft delete + version history ────────────────────────────────────
   it("DELETE /v1/policies/:id returns 204 (soft delete)", async () => {
     const res = await app.inject({
@@ -509,6 +544,59 @@ describe("API integration", () => {
       headers: signedHeaders(),
     });
     expect(res.statusCode).toBe(204);
+  });
+
+  it("DELETE /v1/policies/:id calls policy.update with deletedAt (not hard delete)", async () => {
+    const { withTenant } = await import("@sentinel/db");
+    await app.inject({
+      method: "DELETE",
+      url: "/v1/policies/pol-1",
+      headers: signedHeaders(),
+    });
+
+    // withTenant passes the tenant mock; check policy.update was called with deletedAt
+    const tenantMock = (withTenant as any).mock.calls.at(-1);
+    // The tenant is passed to the callback — we check the update mock on the policy model
+    const { getDb } = await import("@sentinel/db");
+    const db = (getDb as any)();
+    const updateCalls = db.policy.update.mock.calls;
+    const lastUpdate = updateCalls[updateCalls.length - 1][0];
+    expect(lastUpdate.data).toHaveProperty("deletedAt");
+    expect(lastUpdate.data.deletedAt).toBeInstanceOf(Date);
+  });
+
+  it("POST /v1/policies creates a PolicyVersion snapshot", async () => {
+    const { getDb } = await import("@sentinel/db");
+    const db = (getDb as any)();
+    const versionCreatesBefore = db.policyVersion.create.mock.calls.length;
+
+    const body = JSON.stringify({ name: "version-test", rules: [] });
+    await app.inject({
+      method: "POST",
+      url: "/v1/policies",
+      headers: { ...signedHeaders(body), "content-type": "application/json" },
+      payload: body,
+    });
+
+    expect(db.policyVersion.create.mock.calls.length).toBeGreaterThan(versionCreatesBefore);
+    const lastCall = db.policyVersion.create.mock.calls[db.policyVersion.create.mock.calls.length - 1][0];
+    expect(lastCall.data.changeType).toBe("created");
+  });
+
+  it("DELETE /v1/policies/:id creates a PolicyVersion snapshot with changeType deleted", async () => {
+    const { getDb } = await import("@sentinel/db");
+    const db = (getDb as any)();
+    const versionCreatesBefore = db.policyVersion.create.mock.calls.length;
+
+    await app.inject({
+      method: "DELETE",
+      url: "/v1/policies/pol-1",
+      headers: signedHeaders(),
+    });
+
+    expect(db.policyVersion.create.mock.calls.length).toBeGreaterThan(versionCreatesBefore);
+    const lastCall = db.policyVersion.create.mock.calls[db.policyVersion.create.mock.calls.length - 1][0];
+    expect(lastCall.data.changeType).toBe("deleted");
   });
 
   it("GET /v1/policies/:id/versions returns version history", async () => {

@@ -74,4 +74,55 @@ describe("data-retention", () => {
     expect(daysDiff).toBeGreaterThanOrEqual(179);
     expect(daysDiff).toBeLessThanOrEqual(181);
   });
+
+  test("falls back to DEFAULT_RETENTION_DAYS when no retentionDays provided", async () => {
+    const db = {
+      finding: {
+        findMany: vi.fn().mockResolvedValue([]),
+        deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
+      },
+      agentResult: {
+        findMany: vi.fn().mockResolvedValue([]),
+        deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
+      },
+      scan: {
+        findMany: vi.fn().mockResolvedValue([]),
+        deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
+      },
+    };
+
+    await runRetentionCleanup(db as any);
+    const findCall = db.finding.findMany.mock.calls[0][0];
+    const cutoff = findCall.where.createdAt.lt;
+    const now = new Date();
+    const daysDiff = Math.round((now.getTime() - cutoff.getTime()) / (1000 * 60 * 60 * 24));
+    expect(daysDiff).toBeGreaterThanOrEqual(89);
+    expect(daysDiff).toBeLessThanOrEqual(91);
+  });
+
+  test("scopes deletes by orgId when provided", async () => {
+    const db = {
+      finding: {
+        findMany: vi.fn().mockResolvedValue([]),
+        deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
+      },
+      agentResult: {
+        findMany: vi.fn().mockResolvedValue([]),
+        deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
+      },
+      scan: {
+        findMany: vi.fn().mockResolvedValue([]),
+        deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
+      },
+    };
+
+    await runRetentionCleanup(db as any, 90, "org-123");
+    const findingWhere = db.finding.findMany.mock.calls[0][0].where;
+    expect(findingWhere).toHaveProperty("scan");
+    expect(findingWhere.scan.project.orgId).toBe("org-123");
+
+    const scanWhere = db.scan.findMany.mock.calls[0][0].where;
+    expect(scanWhere).toHaveProperty("project");
+    expect(scanWhere.project.orgId).toBe("org-123");
+  });
 });
