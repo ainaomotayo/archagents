@@ -57,7 +57,7 @@ services:
       AZURE_KEY_VAULT_URL: ${AZURE_KEY_VAULT_URL:-}
       AZURE_KEY_NAME: ${AZURE_KEY_NAME:-sentinel-master}
     healthcheck:
-      test: ["CMD", "node", "-e", "fetch('http://localhost:8080/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      test: ["CMD", "node", "docker/healthcheck.js", "8080"]
       interval: 15s
       timeout: 5s
       retries: 3
@@ -90,6 +90,11 @@ services:
       SAML_JACKSON_PRODUCT: ${SAML_JACKSON_PRODUCT:-sentinel}
       SAML_CLIENT_ID: ${SAML_CLIENT_ID:-dummy}
       SAML_CLIENT_SECRET: ${SAML_CLIENT_SECRET:-dummy}
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/api/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
 
   assessor-worker:
     build:
@@ -163,7 +168,7 @@ services:
       GITHUB_BRIDGE_PORT: "9092"
     command: ["node", "apps/api/dist/github-bridge.js"]
     healthcheck:
-      test: ["CMD", "node", "-e", "fetch('http://localhost:9092/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      test: ["CMD", "node", "docker/healthcheck.js", "9092"]
       interval: 15s
       timeout: 5s
       retries: 3
