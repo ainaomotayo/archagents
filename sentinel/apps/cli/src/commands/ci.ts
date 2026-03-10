@@ -4,7 +4,9 @@ import type {
   ComplianceAssessment,
   Finding,
   FindingType,
+  SentinelDiffPayload,
 } from "@sentinel/shared";
+import { parseDiff } from "../git/diff.js";
 
 // ── Options & types ────────────────────────────────────────────────
 
@@ -60,26 +62,61 @@ async function readStdin(): Promise<string> {
 
 // ── Submit scan ────────────────────────────────────────────────────
 
+function detectLanguage(filePath: string): string {
+  const ext = filePath.split(".").pop()?.toLowerCase() ?? "";
+  const langMap: Record<string, string> = {
+    py: "python", js: "javascript", ts: "typescript", tsx: "typescript",
+    jsx: "javascript", go: "go", rs: "rust", java: "java", rb: "ruby",
+    cs: "csharp", cpp: "cpp", c: "c", swift: "swift", kt: "kotlin",
+  };
+  return langMap[ext] ?? "unknown";
+}
+
+function buildPayload(rawDiff: string): SentinelDiffPayload {
+  const diffFiles = parseDiff(rawDiff);
+  return {
+    projectId: process.env.SENTINEL_PROJECT_ID ?? "default",
+    commitHash: process.env.SENTINEL_COMMIT_HASH ?? process.env.GITHUB_SHA ?? "unknown",
+    branch: process.env.SENTINEL_BRANCH ?? process.env.GITHUB_REF_NAME ?? "unknown",
+    author: process.env.SENTINEL_AUTHOR ?? process.env.GITHUB_ACTOR ?? "unknown",
+    timestamp: new Date().toISOString(),
+    files: diffFiles.map((f) => ({
+      path: f.path,
+      language: detectLanguage(f.path),
+      hunks: f.hunks,
+      aiScore: 0,
+    })),
+    scanConfig: {
+      securityLevel: (process.env.SENTINEL_SECURITY_LEVEL as any) ?? "standard",
+      licensePolicy: process.env.SENTINEL_LICENSE_POLICY ?? "",
+      qualityThreshold: parseFloat(process.env.SENTINEL_QUALITY_THRESHOLD ?? "0.7"),
+    },
+  };
+}
+
 async function submitScan(
   diff: string,
   options: Pick<CiOptions, "apiUrl" | "apiKey" | "secret" | "fetchFn">,
 ): Promise<string> {
   const fetchFn = options.fetchFn ?? globalThis.fetch;
-  const body = JSON.stringify({ diff });
+  const payload = buildPayload(diff);
+  const body = JSON.stringify(payload);
   const signature = signRequest(body, options.secret);
 
   const res = await fetchFn(`${options.apiUrl}/v1/scans`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${options.apiKey}`,
       "X-Sentinel-Signature": signature,
+      "X-Sentinel-API-Key": options.apiKey || "cli",
+      "X-Sentinel-Role": "service",
     },
     body,
   });
 
   if (!res.ok) {
-    throw new Error(`API error: ${res.status} ${res.statusText}`);
+    const text = await res.text().catch(() => "");
+    throw new Error(`API error: ${res.status} ${res.statusText} ${text}`);
   }
 
   const data = (await res.json()) as { scanId: string };
@@ -97,12 +134,14 @@ export async function pollForResult(
   const POLL_INTERVAL_MS = 2000;
 
   while (Date.now() < deadline) {
-    const signature = signRequest(scanId, options.secret);
+    const signature = signRequest("", options.secret);
     const res = await fetchFn(
       `${options.apiUrl}/v1/scans/${scanId}/poll`,
       {
         headers: {
           "X-Sentinel-Signature": signature,
+          "X-Sentinel-API-Key": "cli",
+          "X-Sentinel-Role": "service",
         },
       },
     );

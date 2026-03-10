@@ -20,7 +20,12 @@ const db = getDb();
 const assessor = new Assessor();
 const store = createAssessmentStore(db);
 
-const EXPECTED_AGENTS = ["security", "ip-license", "dependency", "ai-detector", "quality", "policy"];
+// Only agents that are actually deployed. Additional agents can be added here
+// as they come online — the worker will wait for all listed agents or timeout.
+const EXPECTED_AGENTS = (process.env.EXPECTED_AGENTS ?? "security,dependency")
+  .split(",")
+  .map((s) => s.trim())
+  .filter(Boolean);
 const AGENT_TIMEOUT_MS = parseInt(process.env.AGENT_TIMEOUT_MS ?? "30000", 10);
 
 interface PendingScan {
