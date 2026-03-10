@@ -80,6 +80,7 @@ function createFullMocks() {
         scansCreated.push(scan);
         return scan;
       }),
+      update: vi.fn().mockResolvedValue({ id: "scan-e2e" }),
       findUnique: vi.fn().mockImplementation(async () => ({
         id: "scan-e2e",
         commitHash: "abc123",

@@ -85,18 +85,24 @@ export async function handleScanResult(
   );
 
   // 3. Build annotations (handles 50-annotation cap)
-  const sharedFindings: Finding[] = findings.map((f: any) => ({
-    ...(f.rawData ?? {}),
-    type: f.type,
-    file: f.file,
-    lineStart: f.lineStart,
-    lineEnd: f.lineEnd,
-    severity: f.severity,
-    confidence: f.confidence,
-    title: f.title,
-    description: f.description,
-    remediation: f.remediation,
-  }));
+  // rawData contains the full original agent Finding (type-specific fields included).
+  // Overlay DB columns only when non-null to avoid clobbering rawData values.
+  const sharedFindings: Finding[] = findings.map((f: any) => {
+    const base = { ...(f.rawData ?? {}) };
+    // Always overlay core fields from DB (authoritative)
+    base.type = f.type;
+    base.file = f.file;
+    base.lineStart = f.lineStart;
+    base.lineEnd = f.lineEnd;
+    base.severity = f.severity;
+    // Preserve original string confidence from rawData (DB stores as float)
+    if (!base.confidence) base.confidence = f.severity === "critical" ? "high" : "medium";
+    // Overlay nullable fields only when DB has a value
+    if (f.title != null) base.title = f.title;
+    if (f.description != null) base.description = f.description;
+    if (f.remediation != null) base.remediation = f.remediation;
+    return base as Finding;
+  });
 
   const annotations = findingsToAnnotations(sharedFindings);
 

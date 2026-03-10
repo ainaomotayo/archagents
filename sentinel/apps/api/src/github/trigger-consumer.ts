@@ -76,23 +76,14 @@ export async function handleScanTrigger(
     logger.info({ repo: trigger.repo, projectId: project.id }, "Auto-created project");
   }
 
-  // Idempotency: check if this trigger was already processed
+  // Idempotency: skip if this commit+PR was already processed
   const idempotencyKey = `scan:trigger:${trigger.commitHash}:${trigger.prNumber ?? "push"}`;
   const isNew = await redis.hsetnx(idempotencyKey, "status", "processing");
-
-  let checkRunId: number | undefined;
-
-  if (isNew) {
-    // Create "in_progress" Check Run
-    const checkRunPayload = buildCheckRunCreate("pending", trigger.commitHash);
-    const checkRes = await octokit.rest.checks.create({
-      owner: trigger.owner,
-      repo: repoName,
-      ...checkRunPayload,
-    });
-    checkRunId = checkRes.data.id;
-    await redis.expire(idempotencyKey, CORRELATION_TTL);
+  if (!isNew) {
+    logger.info({ commit: trigger.commitHash, prNumber: trigger.prNumber }, "Duplicate trigger, skipping");
+    return;
   }
+  await redis.expire(idempotencyKey, CORRELATION_TTL);
 
   // Fetch diff from GitHub
   const rawDiff = await fetchDiff(octokit as any, {
@@ -104,15 +95,10 @@ export async function handleScanTrigger(
     prNumber: trigger.prNumber,
   });
 
-  if (!rawDiff.trim()) {
-    logger.warn({ repo: trigger.repo, commit: trigger.commitHash }, "Empty diff, skipping");
-    return;
-  }
-
   // Parse diff into structured payload
   const diffFiles = parseDiff(rawDiff);
 
-  // Create Scan in DB
+  // Create Scan in DB first (need scanId for Check Run summary)
   const scan = await db.scan.create({
     data: {
       projectId: project.id,
@@ -127,12 +113,44 @@ export async function handleScanTrigger(
         owner: trigger.owner,
         repo: trigger.repo,
         prNumber: trigger.prNumber ?? null,
-        checkRunId: checkRunId ?? null,
       },
     },
   });
 
-  // Store correlation for results consumer
+  // Create "in_progress" Check Run (after scan so we have real scanId)
+  let checkRunId: number | undefined;
+  const checkRunPayload = buildCheckRunCreate(scan.id, trigger.commitHash);
+  try {
+    const checkRes = await octokit.rest.checks.create({
+      owner: trigger.owner,
+      repo: repoName,
+      ...checkRunPayload,
+    });
+    checkRunId = checkRes.data.id;
+  } catch (err) {
+    // Non-fatal: scan still runs, just no Check Run on PR
+    logger.error({ scanId: scan.id, err }, "Failed to create Check Run");
+  }
+
+  if (!rawDiff.trim()) {
+    // Complete the Check Run as neutral before bailing
+    if (checkRunId) {
+      try {
+        await octokit.rest.checks.update({
+          owner: trigger.owner,
+          repo: repoName,
+          check_run_id: checkRunId,
+          status: "completed",
+          conclusion: "neutral",
+          output: { title: "SENTINEL: No changes to scan", summary: "The diff was empty." },
+        });
+      } catch { /* best-effort */ }
+    }
+    logger.warn({ repo: trigger.repo, commit: trigger.commitHash }, "Empty diff, skipping");
+    return;
+  }
+
+  // Store correlation for results consumer + update scan with checkRunId
   if (checkRunId) {
     const key = correlationKey(scan.id);
     await redis.hset(key, {
@@ -143,6 +161,20 @@ export async function handleScanTrigger(
       commitHash: trigger.commitHash,
     });
     await redis.expire(key, CORRELATION_TTL);
+
+    // Update triggerMeta with the checkRunId
+    await db.scan.update({
+      where: { id: scan.id },
+      data: {
+        triggerMeta: {
+          installationId: trigger.installationId,
+          owner: trigger.owner,
+          repo: trigger.repo,
+          prNumber: trigger.prNumber ?? null,
+          checkRunId,
+        },
+      },
+    });
   }
 
   // Publish to sentinel.diffs — agents pick this up

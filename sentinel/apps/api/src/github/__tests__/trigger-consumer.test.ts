@@ -8,6 +8,7 @@ function createMocks() {
     rest: {
       checks: {
         create: vi.fn().mockResolvedValue({ data: { id: 9999 } }),
+        update: vi.fn().mockResolvedValue({ data: { id: 9999 } }),
       },
       pulls: {
         get: vi.fn().mockResolvedValue({ data: DIFF_TEXT }),
@@ -34,6 +35,7 @@ function createMocks() {
     },
     scan: {
       create: vi.fn().mockResolvedValue({ id: "scan-1", status: "pending" }),
+      update: vi.fn().mockResolvedValue({ id: "scan-1" }),
     },
   };
 
@@ -135,9 +137,11 @@ describe("handleScanTrigger", () => {
     });
 
     expect(mocks.octokit.rest.checks.create).not.toHaveBeenCalled();
+    expect(mocks.db.scan.create).not.toHaveBeenCalled();
+    expect(mocks.eventBus.publish).not.toHaveBeenCalled();
   });
 
-  it("skips processing when diff is empty", async () => {
+  it("completes check run as neutral and skips publish when diff is empty", async () => {
     // Override pulls.get to return empty diff
     mocks.octokit.rest.pulls.get.mockResolvedValue({ data: "   " });
 
@@ -160,7 +164,17 @@ describe("handleScanTrigger", () => {
       getOctokit: mocks.getOctokit,
     });
 
-    expect(mocks.db.scan.create).not.toHaveBeenCalled();
+    // Scan is still created (before empty check)
+    expect(mocks.db.scan.create).toHaveBeenCalledTimes(1);
+    // Check Run created then completed as neutral
+    expect(mocks.octokit.rest.checks.create).toHaveBeenCalledTimes(1);
+    expect(mocks.octokit.rest.checks.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: "completed",
+        conclusion: "neutral",
+      }),
+    );
+    // Should NOT publish to sentinel.diffs
     expect(mocks.eventBus.publish).not.toHaveBeenCalled();
   });
 
