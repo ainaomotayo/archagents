@@ -140,6 +140,28 @@ services:
       timeout: 5s
       retries: 3
 
+  github-bridge:
+    build:
+      context: .
+      dockerfile: docker/api.Dockerfile
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://sentinel:sentinel_dev@postgres:5432/sentinel
+      REDIS_URL: redis://redis:6379
+      GITHUB_APP_ID: ${GITHUB_APP_ID:-}
+      GITHUB_PRIVATE_KEY: ${GITHUB_PRIVATE_KEY:-}
+      GITHUB_BRIDGE_PORT: "9092"
+    command: ["node", "apps/api/dist/github-bridge.js"]
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:9092/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
   # Analysis Agents
   agent-security:
     build:
