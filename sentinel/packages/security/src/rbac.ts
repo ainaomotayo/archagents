@@ -27,21 +27,22 @@ export const API_PERMISSIONS: EndpointPermission[] = [
   { method: "PUT", path: "/v1/policies/:id", roles: ["admin", "manager"] },
   { method: "DELETE", path: "/v1/policies/:id", roles: ["admin"] },
   { method: "GET", path: "/v1/audit", roles: ["admin", "manager"] },
+  { method: "GET", path: "/v1/policies/:id/versions", roles: ["admin", "manager", "developer", "viewer"] },
   { method: "GET", path: "/v1/admin/dlq", roles: ["admin"] },
 ];
+
+/** Pre-computed HashMap for O(1) authorization lookups. */
+const PERMISSION_MAP: Map<string, Set<ApiRole>> = new Map(
+  API_PERMISSIONS.map((p) => [`${p.method}:${p.path}`, new Set(p.roles)]),
+);
 
 /**
  * Check whether a given role is authorized to access a specific endpoint.
  * Returns false for unknown roles or unregistered endpoints.
  */
 export function isAuthorized(role: ApiRole, method: string, path: string): boolean {
-  const permission = API_PERMISSIONS.find(
-    (p) => p.method === method.toUpperCase() && p.path === path,
-  );
-  if (!permission) {
-    return false;
-  }
-  return permission.roles.includes(role);
+  const roles = PERMISSION_MAP.get(`${method.toUpperCase()}:${path}`);
+  return roles?.has(role) ?? false;
 }
 
 /**
