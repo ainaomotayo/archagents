@@ -8,3 +8,4 @@ export {
   pendingScansGauge,
   dlqDepthGauge,
 } from "./metrics.js";
+export { initTracing, shutdownTracing, type TracingOptions } from "./tracer.js";
