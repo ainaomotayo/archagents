@@ -1,0 +1,62 @@
+rules:
+  # --- Known Malicious Package Patterns (typosquats) ---
+  - id: sentinel.dep-malicious-package-typosquat
+    pattern-either:
+      - pattern: import requets
+      - pattern: import reqeusts
+      - pattern: import requsts
+      - pattern: import urlib
+      - pattern: import urrlib
+      - pattern: import colourama
+      - pattern: import coloarama
+      - pattern: import pycript
+      - pattern: import pycryptoo
+      - pattern: import beautifulsop
+      - pattern: import bs5
+      - pattern: import numpyy
+      - pattern: import pandass
+      - pattern: import scikitlearn
+      - pattern: import tensorflw
+      - pattern: import openai_api
+      - pattern: import flaskk
+    message: >-
+      Import of potentially malicious typosquatted package detected. Verify
+      the package name is correct. Common typosquats mimic popular packages
+      to distribute malware.
+    languages: [python]
+    severity: ERROR
+    metadata:
+      cwe:
+        - "CWE-506: Embedded Malicious Code"
+      category: dependency
+      technology:
+        - python
+      confidence: HIGH
+      references:
+        - https://cwe.mitre.org/data/definitions/506.html
+
+  # --- Deprecated stdlib modules ---
+  - id: sentinel.dep-deprecated-stdlib
+    pattern-either:
+      - pattern: import cgi
+      - pattern: import cgitb
+      - pattern: import imp
+      - pattern: import optparse
+      - pattern: import formatter
+      - pattern: import parser
+      - pattern: import symbol
+    message: >-
+      Import of deprecated standard library module. This module has been
+      deprecated and may be removed in future Python versions. Migrate
+      to the recommended replacement.
+    languages: [python]
+    severity: WARNING
+    metadata:
+      cwe:
+        - "CWE-477: Use of Obsolete Function"
+      category: dependency
+      technology:
+        - python
+      confidence: HIGH
+      references:
+        - https://docs.python.org/3/library/index.html

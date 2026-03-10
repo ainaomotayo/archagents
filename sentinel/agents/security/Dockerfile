@@ -5,15 +5,14 @@ WORKDIR /app
 # Install semgrep
 RUN pip install --no-cache-dir semgrep
 
-# Install framework
-COPY ../framework/ /tmp/framework/
+# Install framework first
+COPY agents/framework/ /tmp/framework/
 RUN pip install --no-cache-dir /tmp/framework/ && rm -rf /tmp/framework/
 
 # Install security agent
-COPY pyproject.toml .
-RUN pip install --no-cache-dir .
-
-COPY sentinel_security/ sentinel_security/
+COPY agents/security/pyproject.toml /tmp/security/pyproject.toml
+COPY agents/security/sentinel_security/ /tmp/security/sentinel_security/
+RUN pip install --no-cache-dir /tmp/security/ && cp -r /tmp/security/sentinel_security /app/sentinel_security && rm -rf /tmp/security/
 
 ENV REDIS_URL=redis://redis:6379
 ENV HEALTH_PORT=8081

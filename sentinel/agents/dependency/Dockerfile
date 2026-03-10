@@ -2,15 +2,14 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
-# Install framework
-COPY ../framework/ /tmp/framework/
+# Install framework first
+COPY agents/framework/ /tmp/framework/
 RUN pip install --no-cache-dir /tmp/framework/ && rm -rf /tmp/framework/
 
 # Install dependency agent
-COPY pyproject.toml .
-RUN pip install --no-cache-dir .
-
-COPY sentinel_dependency/ sentinel_dependency/
+COPY agents/dependency/pyproject.toml /tmp/dependency/pyproject.toml
+COPY agents/dependency/sentinel_dependency/ /tmp/dependency/sentinel_dependency/
+RUN pip install --no-cache-dir /tmp/dependency/ && cp -r /tmp/dependency/sentinel_dependency /app/sentinel_dependency && rm -rf /tmp/dependency/
 
 ENV REDIS_URL=redis://redis:6379
 ENV HEALTH_PORT=8083

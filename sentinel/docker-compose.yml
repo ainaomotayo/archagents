@@ -140,31 +140,41 @@ services:
       timeout: 5s
       retries: 3
 
-  # Analysis Agents (uncomment when running full pipeline)
-  # agent-security:
-  #   build:
-  #     context: agents/security
-  #     dockerfile: Dockerfile
-  #   depends_on:
-  #     redis:
-  #       condition: service_healthy
-  #   environment:
-  #     REDIS_URL: redis://redis:6379
-  #
+  # Analysis Agents
+  agent-security:
+    build:
+      context: .
+      dockerfile: agents/security/Dockerfile
+    depends_on:
+      redis:
+        condition: service_healthy
+    environment:
+      REDIS_URL: redis://redis:6379
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8081/')"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
+  agent-dependency:
+    build:
+      context: .
+      dockerfile: agents/dependency/Dockerfile
+    depends_on:
+      redis:
+        condition: service_healthy
+    environment:
+      REDIS_URL: redis://redis:6379
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8083/')"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
   # agent-ip-license:
   #   build:
-  #     context: agents/ip-license
-  #     dockerfile: Dockerfile
-  #   depends_on:
-  #     redis:
-  #       condition: service_healthy
-  #   environment:
-  #     REDIS_URL: redis://redis:6379
-  #
-  # agent-dependency:
-  #   build:
-  #     context: agents/dependency
-  #     dockerfile: Dockerfile
+  #     context: .
+  #     dockerfile: agents/ip-license/Dockerfile
   #   depends_on:
   #     redis:
   #       condition: service_healthy
