@@ -29,6 +29,7 @@
     "node-cron": "^4.2.1"
   },
   "devDependencies": {
+    "@octokit/rest": "^22.0.1",
     "tsx": "^4.19",
     "typescript": "^5.7",
     "vitest": "^3.0"
