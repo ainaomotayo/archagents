@@ -1,5 +1,16 @@
-import { describe, test, expect, afterEach } from "vitest";
-import { resolveRole, getConfiguredProviders, authOptions, rateLimiter, providerHealth } from "../lib/auth";
+import { describe, test, expect, afterEach, vi } from "vitest";
+import {
+  resolveRole,
+  getConfiguredProviders,
+  authOptions,
+  rateLimiter,
+  providerHealth,
+  extractClientIp,
+  extractProvider,
+  setCurrentRequestIp,
+  getCurrentRequestIp,
+  logAuthEvent,
+} from "../lib/auth";
 import { AuthRateLimiter, ProviderHealthMonitor } from "@sentinel/security";
 
 describe("auth", () => {
@@ -149,5 +160,82 @@ describe("auth rate limiter integration", () => {
 
   test("providerHealth is a ProviderHealthMonitor instance", () => {
     expect(providerHealth).toBeInstanceOf(ProviderHealthMonitor);
+  });
+});
+
+describe("extractClientIp", () => {
+  test("extracts first IP from x-forwarded-for", () => {
+    const headers = new Headers({ "x-forwarded-for": "1.2.3.4, 10.0.0.1" });
+    expect(extractClientIp(headers)).toBe("1.2.3.4");
+  });
+
+  test("returns unknown when header is missing", () => {
+    const headers = new Headers();
+    expect(extractClientIp(headers)).toBe("unknown");
+  });
+});
+
+describe("extractProvider", () => {
+  test("extracts provider from callback URL", () => {
+    expect(extractProvider("http://localhost:3000/api/auth/callback/github")).toBe("github");
+  });
+
+  test("extracts provider from signin URL", () => {
+    expect(extractProvider("http://localhost:3000/api/auth/signin/gitlab")).toBe("gitlab");
+  });
+
+  test("returns undefined for non-auth URLs", () => {
+    expect(extractProvider("http://localhost:3000/api/auth/session")).toBeUndefined();
+  });
+
+  test("returns undefined for malformed URLs", () => {
+    expect(extractProvider("not-a-url")).toBeUndefined();
+  });
+});
+
+describe("request-scoped IP helpers", () => {
+  test("setCurrentRequestIp / getCurrentRequestIp round-trip", () => {
+    setCurrentRequestIp("10.0.0.5");
+    expect(getCurrentRequestIp()).toBe("10.0.0.5");
+  });
+});
+
+describe("auth event logging", () => {
+  test("logAuthEvent writes structured JSON to stdout", () => {
+    const spy = vi.spyOn(console, "log").mockImplementation(() => {});
+    logAuthEvent("auth.login.success", { ip: "1.2.3.4", provider: "github" });
+    expect(spy).toHaveBeenCalledOnce();
+    const logged = JSON.parse(spy.mock.calls[0][0]);
+    expect(logged.event).toBe("auth.login.success");
+    expect(logged.ip).toBe("1.2.3.4");
+    expect(logged.provider).toBe("github");
+    expect(logged.timestamp).toBeDefined();
+    spy.mockRestore();
+  });
+});
+
+describe("events.signIn wiring", () => {
+  test("events.signIn calls rateLimiter.reset and providerHealth.recordSuccess", async () => {
+    const resetSpy = vi.spyOn(rateLimiter, "reset");
+    const successSpy = vi.spyOn(providerHealth, "recordSuccess");
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    setCurrentRequestIp("10.0.0.1");
+
+    await authOptions.events!.signIn!({
+      user: { id: "u1" } as any,
+      account: { provider: "github" } as any,
+      profile: undefined as any,
+      isNewUser: false,
+    });
+
+    expect(resetSpy).toHaveBeenCalledWith("10.0.0.1");
+    expect(successSpy).toHaveBeenCalledWith("github");
+    expect(logSpy).toHaveBeenCalled();
+    const logged = JSON.parse(logSpy.mock.calls[0][0]);
+    expect(logged.event).toBe("auth.login.success");
+
+    resetSpy.mockRestore();
+    successSpy.mockRestore();
+    logSpy.mockRestore();
   });
 });

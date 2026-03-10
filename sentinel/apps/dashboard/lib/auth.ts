@@ -150,6 +150,41 @@ if (typeof setInterval !== "undefined") {
   setInterval(() => rateLimiter.prune(), 60 * 60 * 1000);
 }
 
+// Request-scoped IP for use in NextAuth callbacks/events
+let _currentRequestIp = "unknown";
+export function setCurrentRequestIp(ip: string): void { _currentRequestIp = ip; }
+export function getCurrentRequestIp(): string { return _currentRequestIp; }
+
+/**
+ * Extract client IP from request headers.
+ * x-forwarded-for is set by reverse proxies; falls back to "unknown".
+ */
+export function extractClientIp(headers: Headers): string {
+  return headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+}
+
+/**
+ * Extract provider ID from NextAuth catch-all route path.
+ * e.g. /api/auth/callback/github → "github"
+ */
+export function extractProvider(url: string): string | undefined {
+  try {
+    const { pathname } = new URL(url);
+    const parts = pathname.split("/");
+    // /api/auth/<action>/<provider>
+    if (parts.length >= 5 && (parts[3] === "callback" || parts[3] === "signin")) {
+      return parts[4];
+    }
+  } catch { /* ignore malformed URLs */ }
+  return undefined;
+}
+
+/** Structured auth event logger (JSON to stdout for log aggregators). */
+export function logAuthEvent(event: string, details: Record<string, unknown>): void {
+  const entry = { event, ...details, timestamp: new Date().toISOString() };
+  console.log(JSON.stringify(entry));
+}
+
 export const authOptions: AuthOptions = {
   providers: getConfiguredProviders(),
 
@@ -192,9 +227,15 @@ export const authOptions: AuthOptions = {
 
   events: {
     async signIn({ account }) {
+      const ip = getCurrentRequestIp();
       if (account?.provider) {
         providerHealth.recordSuccess(account.provider);
       }
+      rateLimiter.reset(ip);
+      logAuthEvent("auth.login.success", {
+        provider: account?.provider,
+        ip,
+      });
     },
   },
 
