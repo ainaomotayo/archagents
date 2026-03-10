@@ -31,6 +31,26 @@ function ProviderIcon({ id, className }: { id: string; className?: string }) {
   );
 }
 
+async function handleSignIn(providerId: string) {
+  const res = await fetch("/api/auth/csrf");
+  const { csrfToken } = await res.json();
+  const form = document.createElement("form");
+  form.method = "POST";
+  form.action = `/api/auth/signin/${providerId}`;
+  const csrf = document.createElement("input");
+  csrf.type = "hidden";
+  csrf.name = "csrfToken";
+  csrf.value = csrfToken;
+  const cb = document.createElement("input");
+  cb.type = "hidden";
+  cb.name = "callbackUrl";
+  cb.value = "/";
+  form.appendChild(csrf);
+  form.appendChild(cb);
+  document.body.appendChild(form);
+  form.submit();
+}
+
 export default function LoginPage() {
   const [providers, setProviders] = useState<ProviderInfo[]>([]);
   const [loading, setLoading] = useState(true);
@@ -92,9 +112,7 @@ export default function LoginPage() {
               providers.map((provider) => (
                 <button
                   key={provider.id}
-                  onClick={() => {
-                    window.location.href = `/api/auth/signin/${provider.id}`;
-                  }}
+                  onClick={() => handleSignIn(provider.id)}
                   className="group flex w-full items-center justify-center gap-3 rounded-xl border border-border bg-text-primary px-4 py-3 text-[13px] font-semibold text-surface-0 transition-all hover:bg-text-primary/90 hover:shadow-lg hover:shadow-surface-0/20 focus-ring active:scale-[0.98]"
                 >
                   <ProviderIcon
