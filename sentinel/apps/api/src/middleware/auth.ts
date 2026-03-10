@@ -23,7 +23,9 @@ export function createAuthHook(options: AuthHookOptions) {
       return;
     }
 
-    const body = typeof request.body === "string" ? request.body : JSON.stringify(request.body ?? "");
+    const body = request.body === undefined || request.body === null
+      ? ""
+      : typeof request.body === "string" ? request.body : JSON.stringify(request.body);
     const result = verifyRequest(signature, body, secret);
     if (!result.valid) {
       reply.code(401).send({ error: `Authentication failed: ${result.reason}` });
