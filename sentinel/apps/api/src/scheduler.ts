@@ -5,7 +5,7 @@ import { EventBus } from "@sentinel/events";
 import { SELF_SCAN_CONFIG, validateSelfScanConfig, runRetentionCleanup, DEFAULT_RETENTION_DAYS } from "@sentinel/security";
 import { getDb } from "@sentinel/db";
 import { createLogger } from "@sentinel/telemetry";
-import { BUILT_IN_FRAMEWORKS, scoreFramework, type FindingInput } from "@sentinel/compliance";
+import { BUILT_IN_FRAMEWORKS, scoreFramework, verifyEvidenceChain, type FindingInput } from "@sentinel/compliance";
 import { CronExpressionParser } from "cron-parser";
 
 const logger = createLogger({ name: "sentinel-scheduler" });
@@ -145,7 +145,7 @@ export function createHealthServer(metrics: SchedulerMetrics, port: number): htt
   return server;
 }
 
-async function generateComplianceSnapshots(db: any) {
+async function generateComplianceSnapshots(db: any, eventBus?: EventBus) {
   const orgs = await db.organization.findMany({ select: { id: true } });
   const today = new Date();
   today.setUTCHours(0, 0, 0, 0);
@@ -171,10 +171,50 @@ async function generateComplianceSnapshots(db: any) {
       await db.complianceAssessment.create({
         data: { orgId: org.id, frameworkId: fw.slug, score: result.score, verdict: result.verdict, controlScores: result.controlScores },
       });
+      if (eventBus) {
+        await eventBus.publish("sentinel.evidence", {
+          orgId: org.id,
+          type: "compliance_assessed",
+          eventData: { frameworkSlug: fw.slug, score: result.score, verdict: result.verdict },
+        });
+      }
       generated++;
     }
   }
   logger.info({ generated }, "Compliance snapshots generated");
+}
+
+async function refreshComplianceTrends(db: any) {
+  try {
+    await db.$executeRawUnsafe("REFRESH MATERIALIZED VIEW CONCURRENTLY compliance_trends");
+    logger.info("Compliance trends materialized view refreshed");
+  } catch (err) {
+    // View may not exist yet (first deploy before migration runs)
+    logger.warn({ err }, "Failed to refresh compliance_trends view — may not exist yet");
+  }
+}
+
+async function verifyEvidenceChains(db: any) {
+  const orgs = await db.organization.findMany({ select: { id: true } });
+  let checked = 0;
+  let failures = 0;
+
+  for (const org of orgs) {
+    const records = await db.evidenceRecord.findMany({
+      where: { orgId: org.id },
+      orderBy: { createdAt: "asc" },
+    });
+    if (records.length === 0) continue;
+
+    const chain = records.map((r: any) => ({ data: r.data, hash: r.hash, prevHash: r.prevHash }));
+    const result = verifyEvidenceChain(chain);
+    checked++;
+    if (!result.valid) {
+      failures++;
+      logger.error({ orgId: org.id, brokenAt: result.brokenAt }, "Evidence chain integrity failure detected");
+    }
+  }
+  logger.info({ checked, failures }, "Evidence chain integrity check completed");
 }
 
 // --- Main entrypoint (when run as standalone process) ---
@@ -248,12 +288,34 @@ if (process.env.NODE_ENV !== "test") {
     logger.info("Running daily compliance snapshot generation...");
     try {
       const db = getDb();
-      await generateComplianceSnapshots(db);
+      await generateComplianceSnapshots(db, eventBus);
     } catch (err) {
       logger.error({ err }, "Compliance snapshot generation failed");
     }
   });
   logger.info({ schedule: COMPLIANCE_SNAPSHOT_SCHEDULE }, "Compliance snapshot cron registered");
+
+  // Refresh compliance trends materialized view at 05:05 UTC (after snapshots at 05:00)
+  cron.schedule("5 5 * * *", async () => {
+    logger.info("Refreshing compliance trends materialized view...");
+    try {
+      await refreshComplianceTrends(getDb());
+    } catch (err) {
+      logger.error({ err }, "Compliance trends refresh failed");
+    }
+  });
+  logger.info("Compliance trends view refresh cron registered (05:05 UTC daily)");
+
+  // Evidence chain integrity check at 05:30 UTC daily
+  cron.schedule("30 5 * * *", async () => {
+    logger.info("Running daily evidence chain integrity check...");
+    try {
+      await verifyEvidenceChains(getDb());
+    } catch (err) {
+      logger.error({ err }, "Evidence chain integrity check failed");
+    }
+  });
+  logger.info("Evidence chain integrity check cron registered (05:30 UTC daily)");
 
   const shutdown = async () => {
     logger.info("Scheduler shutting down...");
