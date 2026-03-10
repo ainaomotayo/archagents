@@ -67,3 +67,7 @@ export { AzureArchiveProvider } from "./archive-azure.js";
 export { AzureKmsKeyStore } from "./kms-azure.js";
 
 export { buildRetentionQuery, runRetentionCleanup, DEFAULT_RETENTION_DAYS } from "./data-retention.js";
+
+export { ProviderHealthMonitor, type ProviderStatus } from "./provider-health.js";
+
+export { AuthRateLimiter, type RateLimitConfig, type RateLimitResult } from "./auth-rate-limit.js";
