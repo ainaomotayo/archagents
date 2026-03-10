@@ -112,6 +112,9 @@ importers:
       '@sentinel/auth':
         specifier: workspace:*
         version: link:../../packages/auth
+      '@sentinel/security':
+        specifier: workspace:*
+        version: link:../../packages/security
       next:
         specifier: ^15.3.0
         version: 15.5.12(@opentelemetry/api@1.9.0)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)

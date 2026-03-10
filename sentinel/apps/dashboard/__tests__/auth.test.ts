@@ -1,5 +1,6 @@
 import { describe, test, expect, afterEach } from "vitest";
-import { resolveRole, getConfiguredProviders } from "../lib/auth";
+import { resolveRole, getConfiguredProviders, authOptions, rateLimiter, providerHealth } from "../lib/auth";
+import { AuthRateLimiter, ProviderHealthMonitor } from "@sentinel/security";
 
 describe("auth", () => {
   afterEach(() => {
@@ -118,5 +119,35 @@ describe("auth", () => {
     expect(ids).toContain("gitlab");
     expect(ids).toContain("oidc");
     expect(ids).toContain("saml-jackson");
+  });
+});
+
+describe("session security", () => {
+  test("session maxAge is 8 hours", () => {
+    expect(authOptions.session?.maxAge).toBe(8 * 60 * 60);
+  });
+
+  test("session updateAge is 1 hour for JWT rotation", () => {
+    expect((authOptions.session as any)?.updateAge).toBe(60 * 60);
+  });
+
+  test("session strategy is jwt", () => {
+    expect(authOptions.session?.strategy).toBe("jwt");
+  });
+
+  test("session cookie is httpOnly and sameSite lax", () => {
+    const cookieOpts = (authOptions.cookies as any)?.sessionToken?.options;
+    expect(cookieOpts?.httpOnly).toBe(true);
+    expect(cookieOpts?.sameSite).toBe("lax");
+  });
+});
+
+describe("auth rate limiter integration", () => {
+  test("rateLimiter is an AuthRateLimiter instance", () => {
+    expect(rateLimiter).toBeInstanceOf(AuthRateLimiter);
+  });
+
+  test("providerHealth is a ProviderHealthMonitor instance", () => {
+    expect(providerHealth).toBeInstanceOf(ProviderHealthMonitor);
   });
 });

@@ -11,6 +11,7 @@ import type { JWT } from "next-auth/jwt";
 import GitHubProvider from "next-auth/providers/github";
 import GitLabProvider from "next-auth/providers/gitlab";
 import type { Role } from "./rbac";
+import { AuthRateLimiter, ProviderHealthMonitor } from "@sentinel/security";
 
 /**
  * Extend the default NextAuth types so `session.user.role` is
@@ -141,8 +142,34 @@ export function getConfiguredProviders(): any[] {
   return providers;
 }
 
+export const rateLimiter = new AuthRateLimiter();
+export const providerHealth = new ProviderHealthMonitor();
+
+// Prune expired rate limit entries every hour
+if (typeof setInterval !== "undefined") {
+  setInterval(() => rateLimiter.prune(), 60 * 60 * 1000);
+}
+
 export const authOptions: AuthOptions = {
   providers: getConfiguredProviders(),
+
+  session: {
+    strategy: "jwt",
+    maxAge: 8 * 60 * 60,       // 8 hours absolute timeout
+    updateAge: 60 * 60,         // Rotate JWT every 1 hour of activity
+  },
+
+  cookies: {
+    sessionToken: {
+      name: "next-auth.session-token",
+      options: {
+        httpOnly: true,
+        sameSite: "lax" as const,
+        path: "/",
+        secure: process.env.NODE_ENV === "production",
+      },
+    },
+  },
 
   callbacks: {
     async jwt({ token, profile, account }) {
@@ -160,6 +187,14 @@ export const authOptions: AuthOptions = {
     async session({ session, token }: { session: Session; token: JWT }) {
       session.user.role = (token.role as Role) ?? "viewer";
       return session;
+    },
+  },
+
+  events: {
+    async signIn({ account }) {
+      if (account?.provider) {
+        providerHealth.recordSuccess(account.provider);
+      }
     },
   },
 
