@@ -128,6 +128,7 @@ vi.mock("@sentinel/db", () => {
   const certificateModel = makeModel(certificates, "issuedAt");
   const projectModel = makeModel(projects);
   const policyModel = makeModel(policies);
+  const policyVersionModel = makeModel([] as any[], "changedAt");
   const auditEventModel = makeModel(auditEvents, "timestamp");
 
   const tenant = {
@@ -136,6 +137,7 @@ vi.mock("@sentinel/db", () => {
     certificate: certificateModel,
     project: projectModel,
     policy: policyModel,
+    policyVersion: policyVersionModel,
     auditEvent: auditEventModel,
   };
 
@@ -497,6 +499,28 @@ describe("API integration", () => {
     const lastCall = auditInstance.append.mock.calls[auditInstance.append.mock.calls.length - 1];
     expect(lastCall[1].action).toBe("policy.created");
     expect(lastCall[1].resource.type).toBe("policy");
+  });
+
+  // ── Soft delete + version history ────────────────────────────────────
+  it("DELETE /v1/policies/:id returns 204 (soft delete)", async () => {
+    const res = await app.inject({
+      method: "DELETE",
+      url: "/v1/policies/pol-1",
+      headers: signedHeaders(),
+    });
+    expect(res.statusCode).toBe(204);
+  });
+
+  it("GET /v1/policies/:id/versions returns version history", async () => {
+    const res = await app.inject({
+      method: "GET",
+      url: "/v1/policies/pol-1/versions",
+      headers: signedHeaders(),
+    });
+    expect(res.statusCode).toBe(200);
+    const body = JSON.parse(res.payload);
+    expect(body).toHaveProperty("versions");
+    expect(Array.isArray(body.versions)).toBe(true);
   });
 
   // ── Unknown route ─────────────────────────────────────────────────────

@@ -382,7 +382,7 @@ const policyBodySchema = {
 app.get("/v1/policies", { preHandler: authHook }, async (request) => {
   const orgId = (request as any).orgId ?? "default";
   return withTenant(db, orgId, async (tx) => {
-    return tx.policy.findMany({ orderBy: { createdAt: "desc" } });
+    return tx.policy.findMany({ where: { deletedAt: null }, orderBy: { createdAt: "desc" } });
   });
 });
 
@@ -390,7 +390,7 @@ app.get("/v1/policies/:id", { preHandler: authHook }, async (request, reply) => 
   const orgId = (request as any).orgId ?? "default";
   const { id } = request.params as { id: string };
   return withTenant(db, orgId, async (tx) => {
-    const policy = await tx.policy.findUnique({ where: { id } });
+    const policy = await tx.policy.findFirst({ where: { id, deletedAt: null } });
     if (!policy) {
       reply.code(404).send({ error: "Policy not found" });
       return;
@@ -405,6 +405,16 @@ app.post("/v1/policies", { preHandler: authHook, schema: { body: policyBodySchem
   return withTenant(db, orgId, async (tx) => {
     const policy = await tx.policy.create({ data: body });
     const role = (request as any).role ?? "unknown";
+    await tx.policyVersion.create({
+      data: {
+        policyId: policy.id,
+        version: policy.version,
+        name: policy.name,
+        rules: policy.rules as any,
+        changedBy: role,
+        changeType: "created",
+      },
+    });
     await auditLog.append(orgId, {
       actor: { type: "api", id: role, name: "API" },
       action: "policy.created",
@@ -420,7 +430,7 @@ app.put("/v1/policies/:id", { preHandler: authHook, schema: { body: policyBodySc
   const { id } = request.params as { id: string };
   const body = request.body as any;
   return withTenant(db, orgId, async (tx) => {
-    const existing = await tx.policy.findUnique({ where: { id } });
+    const existing = await tx.policy.findFirst({ where: { id, deletedAt: null } });
     if (!existing) {
       reply.code(404).send({ error: "Policy not found" });
       return;
@@ -430,6 +440,16 @@ app.put("/v1/policies/:id", { preHandler: authHook, schema: { body: policyBodySc
       data: { name: body.name, rules: body.rules, version: { increment: 1 } },
     });
     const role = (request as any).role ?? "unknown";
+    await tx.policyVersion.create({
+      data: {
+        policyId: id,
+        version: updated.version,
+        name: updated.name,
+        rules: updated.rules as any,
+        changedBy: role,
+        changeType: "updated",
+      },
+    });
     await auditLog.append(orgId, {
       actor: { type: "api", id: role, name: "API" },
       action: "policy.updated",
@@ -442,15 +462,28 @@ app.put("/v1/policies/:id", { preHandler: authHook, schema: { body: policyBodySc
 
 app.delete("/v1/policies/:id", { preHandler: authHook }, async (request, reply) => {
   const orgId = (request as any).orgId ?? "default";
+  const role = (request as any).role ?? "unknown";
   const { id } = request.params as { id: string };
   return withTenant(db, orgId, async (tx) => {
-    const existing = await tx.policy.findUnique({ where: { id } });
+    const existing = await tx.policy.findFirst({ where: { id, deletedAt: null } });
     if (!existing) {
       reply.code(404).send({ error: "Policy not found" });
       return;
     }
-    await tx.policy.delete({ where: { id } });
-    const role = (request as any).role ?? "unknown";
+    await tx.policy.update({
+      where: { id },
+      data: { deletedAt: new Date() },
+    });
+    await tx.policyVersion.create({
+      data: {
+        policyId: id,
+        version: existing.version,
+        name: existing.name,
+        rules: existing.rules as any,
+        changedBy: role,
+        changeType: "deleted",
+      },
+    });
     await auditLog.append(orgId, {
       actor: { type: "api", id: role, name: "API" },
       action: "policy.deleted",
@@ -458,6 +491,18 @@ app.delete("/v1/policies/:id", { preHandler: authHook }, async (request, reply) 
       detail: { name: existing.name },
     });
     reply.code(204).send();
+  });
+});
+
+app.get("/v1/policies/:id/versions", { preHandler: authHook }, async (request) => {
+  const orgId = (request as any).orgId ?? "default";
+  const { id } = request.params as { id: string };
+  return withTenant(db, orgId, async (tx) => {
+    const versions = await tx.policyVersion.findMany({
+      where: { policyId: id },
+      orderBy: { version: "desc" },
+    });
+    return { versions };
   });
 });
 
