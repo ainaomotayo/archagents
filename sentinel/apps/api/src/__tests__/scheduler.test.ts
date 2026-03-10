@@ -61,3 +61,33 @@ describe("SchedulerMetrics", () => {
     expect(output).toContain('type="self_scan"');
   });
 });
+
+describe("SchedulerMetrics health status", () => {
+  test("getHealthStatus includes lastTrigger timestamps as ISO strings", () => {
+    const metrics = new SchedulerMetrics();
+    metrics.recordTrigger("self_scan");
+    const health = metrics.getHealthStatus();
+    expect(health.status).toBe("ok");
+    expect(health.uptime).toBeGreaterThan(0);
+    expect(health.lastTrigger).toBeDefined();
+    expect(health.lastTrigger.self_scan).toBeDefined();
+    expect(new Date(health.lastTrigger.self_scan).toISOString()).toBe(health.lastTrigger.self_scan);
+  });
+
+  test("getHealthStatus includes nextScheduled computed by cron-parser", () => {
+    const metrics = new SchedulerMetrics();
+    metrics.registerSchedule("self_scan", "0 2 * * *");
+    const health = metrics.getHealthStatus();
+    expect(health.nextScheduled).toBeDefined();
+    expect(health.nextScheduled.self_scan).toBeDefined();
+    const next = new Date(health.nextScheduled.self_scan);
+    expect(next.getTime()).toBeGreaterThan(Date.now());
+  });
+
+  test("getHealthStatus skips invalid cron expressions gracefully", () => {
+    const metrics = new SchedulerMetrics();
+    metrics.registerSchedule("bad_schedule", "not-a-cron");
+    const health = metrics.getHealthStatus();
+    expect(health.nextScheduled.bad_schedule).toBeUndefined();
+  });
+});
