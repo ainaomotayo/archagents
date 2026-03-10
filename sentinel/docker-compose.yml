@@ -120,7 +120,13 @@ services:
       AZURE_ARCHIVE_CONTAINER: ${AZURE_ARCHIVE_CONTAINER:-}
       AZURE_KEY_VAULT_URL: ${AZURE_KEY_VAULT_URL:-}
       AZURE_KEY_NAME: ${AZURE_KEY_NAME:-sentinel-master}
+      WORKER_HEALTH_PORT: "9092"
     command: ["node", "apps/api/dist/worker.js"]
+    healthcheck:
+      test: ["CMD", "node", "docker/healthcheck.js", "9092"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
 
   scheduler:
     build:
@@ -135,7 +141,7 @@ services:
       SCHEDULER_PORT: "9091"
     command: ["node", "apps/api/dist/scheduler.js"]
     healthcheck:
-      test: ["CMD", "node", "-e", "fetch('http://localhost:9091/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      test: ["CMD", "node", "docker/healthcheck.js", "9091"]
       interval: 30s
       timeout: 5s
       retries: 3
