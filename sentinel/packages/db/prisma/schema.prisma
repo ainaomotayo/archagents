@@ -220,3 +220,111 @@ model GitHubInstallation {
   @@index([orgId])
   @@map("github_installations")
 }
+
+model ComplianceFramework {
+  id          String   @id @default(uuid()) @db.Uuid
+  orgId       String?  @map("org_id") @db.Uuid
+  slug        String
+  name        String
+  version     String
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  controls    ComplianceControl[]
+  assessments ComplianceAssessment[]
+  snapshots   ComplianceSnapshot[]
+
+  @@unique([orgId, slug])
+  @@map("compliance_frameworks")
+}
+
+model ComplianceControl {
+  id          String   @id @default(uuid()) @db.Uuid
+  frameworkId String   @map("framework_id") @db.Uuid
+  code        String
+  name        String
+  description String?
+  weight      Float    @default(1.0)
+  matchRules  Json     @default("[]") @map("match_rules")
+
+  framework   ComplianceFramework      @relation(fields: [frameworkId], references: [id])
+  overrides   ComplianceControlOverride[]
+
+  @@unique([frameworkId, code])
+  @@map("compliance_controls")
+}
+
+model ComplianceControlOverride {
+  id         String   @id @default(uuid()) @db.Uuid
+  orgId      String   @map("org_id") @db.Uuid
+  controlId  String   @map("control_id") @db.Uuid
+  matchRules Json?    @map("match_rules")
+  weight     Float?
+  enabled    Boolean  @default(true)
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  control    ComplianceControl @relation(fields: [controlId], references: [id])
+
+  @@unique([orgId, controlId])
+  @@map("compliance_control_overrides")
+}
+
+model ComplianceAssessment {
+  id            String   @id @default(uuid()) @db.Uuid
+  orgId         String   @map("org_id") @db.Uuid
+  frameworkId   String   @map("framework_id") @db.Uuid
+  scanId        String?  @map("scan_id") @db.Uuid
+  score         Float
+  verdict       String
+  controlScores Json     @map("control_scores")
+  assessedAt    DateTime @default(now()) @map("assessed_at")
+
+  framework     ComplianceFramework @relation(fields: [frameworkId], references: [id])
+
+  @@index([orgId, frameworkId])
+  @@map("compliance_assessments")
+}
+
+model ComplianceSnapshot {
+  id               String   @id @default(uuid()) @db.Uuid
+  orgId            String   @map("org_id") @db.Uuid
+  frameworkId      String   @map("framework_id") @db.Uuid
+  date             DateTime @db.Date
+  score            Float
+  controlBreakdown Json     @map("control_breakdown")
+
+  framework        ComplianceFramework @relation(fields: [frameworkId], references: [id])
+
+  @@unique([orgId, frameworkId, date])
+  @@map("compliance_snapshots")
+}
+
+model EvidenceRecord {
+  id        String   @id @default(uuid()) @db.Uuid
+  orgId     String   @map("org_id") @db.Uuid
+  scanId    String?  @map("scan_id") @db.Uuid
+  type      String
+  data      Json
+  hash      String
+  prevHash  String?  @map("prev_hash")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([orgId, createdAt])
+  @@map("evidence_records")
+}
+
+model Report {
+  id          String    @id @default(uuid()) @db.Uuid
+  orgId       String    @map("org_id") @db.Uuid
+  type        String
+  frameworkId String?   @map("framework_id") @db.Uuid
+  status      String    @default("pending")
+  parameters  Json      @default("{}")
+  fileUrl     String?   @map("file_url")
+  fileHash    String?   @map("file_hash")
+  requestedBy String?   @map("requested_by")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  completedAt DateTime? @map("completed_at")
+
+  @@index([orgId])
+  @@map("reports")
+}
