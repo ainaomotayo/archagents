@@ -389,7 +389,7 @@ describe("API integration", () => {
   });
 
   it("POST /v1/policies creates policy (admin) returns 201", async () => {
-    const bodyObj = { name: "new-policy", rules: {} };
+    const bodyObj = { name: "new-policy", rules: [] };
     const payload = JSON.stringify(bodyObj);
     // Fastify parses JSON, then auth middleware does JSON.stringify(parsedBody)
     const signBody = JSON.stringify(bodyObj);
@@ -406,7 +406,7 @@ describe("API integration", () => {
   });
 
   it("POST /v1/policies rejected for viewer (403)", async () => {
-    const bodyObj = { name: "new-policy", rules: {} };
+    const bodyObj = { name: "new-policy", rules: [] };
     const payload = JSON.stringify(bodyObj);
     const signBody = JSON.stringify(bodyObj);
     const res = await app.inject({
@@ -443,6 +443,40 @@ describe("API integration", () => {
     expect(body).toHaveProperty("total");
     expect(body).toHaveProperty("limit");
     expect(body).toHaveProperty("offset");
+  });
+
+  // ── Policy validation ──────────────────────────────────────────────────
+  it("POST /v1/policies rejects missing name (400)", async () => {
+    const body = JSON.stringify({ rules: [{ field: "severity", operator: "gte", value: "high" }] });
+    const res = await app.inject({
+      method: "POST",
+      url: "/v1/policies",
+      headers: { ...signedHeaders(body), "content-type": "application/json" },
+      payload: body,
+    });
+    expect(res.statusCode).toBe(400);
+  });
+
+  it("POST /v1/policies rejects empty name (400)", async () => {
+    const body = JSON.stringify({ name: "", rules: [] });
+    const res = await app.inject({
+      method: "POST",
+      url: "/v1/policies",
+      headers: { ...signedHeaders(body), "content-type": "application/json" },
+      payload: body,
+    });
+    expect(res.statusCode).toBe(400);
+  });
+
+  it("POST /v1/policies accepts valid body (201)", async () => {
+    const body = JSON.stringify({ name: "test-policy", rules: [{ field: "sev", operator: "gte", value: "high" }] });
+    const res = await app.inject({
+      method: "POST",
+      url: "/v1/policies",
+      headers: { ...signedHeaders(body), "content-type": "application/json" },
+      payload: body,
+    });
+    expect(res.statusCode).toBe(201);
   });
 
   // ── Unknown route ─────────────────────────────────────────────────────

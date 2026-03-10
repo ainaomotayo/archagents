@@ -368,6 +368,17 @@ app.get("/v1/projects/:id/findings", { preHandler: authHook }, async (request) =
 });
 
 // --- Policies ---
+const policyBodySchema = {
+  type: "object",
+  required: ["name", "rules"],
+  properties: {
+    name: { type: "string", minLength: 1, maxLength: 255 },
+    rules: { type: "array", items: { type: "object" } },
+    projectId: { type: "string", format: "uuid" },
+  },
+  additionalProperties: false,
+} as const;
+
 app.get("/v1/policies", { preHandler: authHook }, async (request) => {
   const orgId = (request as any).orgId ?? "default";
   return withTenant(db, orgId, async (tx) => {
@@ -388,7 +399,7 @@ app.get("/v1/policies/:id", { preHandler: authHook }, async (request, reply) => 
   });
 });
 
-app.post("/v1/policies", { preHandler: authHook }, async (request, reply) => {
+app.post("/v1/policies", { preHandler: authHook, schema: { body: policyBodySchema } }, async (request, reply) => {
   const orgId = (request as any).orgId ?? "default";
   const body = request.body as any;
   return withTenant(db, orgId, async (tx) => {
@@ -397,7 +408,7 @@ app.post("/v1/policies", { preHandler: authHook }, async (request, reply) => {
   });
 });
 
-app.put("/v1/policies/:id", { preHandler: authHook }, async (request, reply) => {
+app.put("/v1/policies/:id", { preHandler: authHook, schema: { body: policyBodySchema } }, async (request, reply) => {
   const orgId = (request as any).orgId ?? "default";
   const { id } = request.params as { id: string };
   const body = request.body as any;
