@@ -214,6 +214,26 @@ describe("auth event logging", () => {
   });
 });
 
+describe("provider health endpoint", () => {
+  test("GET /api/auth/health returns provider health scores as JSON", async () => {
+    // Simulate some provider activity so getAll() has data
+    providerHealth.recordSuccess("github");
+    providerHealth.recordFailure("oidc");
+
+    const { GET } = await import("../app/api/auth/health/route");
+    const response = await GET();
+    expect(response.status).toBe(200);
+
+    const body = await response.json();
+    expect(body.github).toBeDefined();
+    expect(body.github.status).toBe("healthy");
+    expect(body.github.score).toBeGreaterThan(0.7);
+    expect(body.oidc).toBeDefined();
+    expect(typeof body.oidc.score).toBe("number");
+    expect(["healthy", "degraded", "down"]).toContain(body.oidc.status);
+  });
+});
+
 describe("events.signIn wiring", () => {
   test("events.signIn calls rateLimiter.reset and providerHealth.recordSuccess", async () => {
     const resetSpy = vi.spyOn(rateLimiter, "reset");

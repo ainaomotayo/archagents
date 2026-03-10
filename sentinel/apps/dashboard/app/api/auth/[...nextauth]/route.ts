@@ -55,6 +55,14 @@ export async function POST(req: Request): Promise<Response> {
     rateLimiter.record(ip);
     if (provider) {
       providerHealth.recordFailure(provider);
+      const health = providerHealth.getHealth(provider);
+      if (health.status !== "healthy") {
+        logAuthEvent("auth.provider.degraded", {
+          providerId: provider,
+          score: health.score,
+          status: health.status,
+        });
+      }
     }
     const errorMatch = location.match(/error=([^&]+)/);
     logAuthEvent("auth.login.failed", {
