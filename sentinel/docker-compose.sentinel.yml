@@ -197,6 +197,35 @@ services:
       retries: 3
       start_period: 15s
 
+  report-worker:
+    build:
+      context: .
+      dockerfile: docker/api.Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - sentinel-internal
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: ${REDIS_URL}
+      SENTINEL_SECRET: ${SENTINEL_SECRET}
+      NODE_ENV: production
+      CLOUD_PROVIDER: ${CLOUD_PROVIDER:-}
+      ARCHIVE_BUCKET: ${ARCHIVE_BUCKET:-}
+      ARCHIVE_PREFIX: ${ARCHIVE_PREFIX:-sentinel}
+      REPORT_WORKER_PORT: "9094"
+    command: ["node", "apps/api/dist/report-worker.js"]
+    healthcheck:
+      test: ["CMD", "node", "docker/healthcheck.js", "9094"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
   saml-jackson:
     image: boxyhq/jackson:latest
     restart: unless-stopped
