@@ -1,5 +1,6 @@
 import { describe, test, expect } from "vitest";
-import { buildSchedulerConfig, shouldTriggerScan, RETENTION_SCHEDULE, SchedulerMetrics } from "../scheduler.js";
+import { buildSchedulerConfig, shouldTriggerScan, RETENTION_SCHEDULE, SchedulerMetrics, createHealthServer } from "../scheduler.js";
+import type { AddressInfo } from "node:net";
 
 describe("scheduler", () => {
   test("buildSchedulerConfig returns valid config from SELF_SCAN_CONFIG", () => {
@@ -89,5 +90,53 @@ describe("SchedulerMetrics health status", () => {
     metrics.registerSchedule("bad_schedule", "not-a-cron");
     const health = metrics.getHealthStatus();
     expect(health.nextScheduled.bad_schedule).toBeUndefined();
+  });
+});
+
+describe("createHealthServer", () => {
+  test("GET /health returns enriched status with lastTrigger and nextScheduled", async () => {
+    const metrics = new SchedulerMetrics();
+    metrics.registerSchedule("self_scan", "0 2 * * *");
+    metrics.recordTrigger("self_scan");
+    const server = createHealthServer(metrics, 0);
+    const port = (server.address() as AddressInfo).port;
+    try {
+      const res = await fetch(`http://localhost:${port}/health`);
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.status).toBe("ok");
+      expect(body.uptime).toBeGreaterThan(0);
+      expect(body.lastTrigger.self_scan).toBeDefined();
+      expect(body.nextScheduled.self_scan).toBeDefined();
+    } finally {
+      server.close();
+    }
+  });
+
+  test("GET /metrics returns Prometheus text format", async () => {
+    const metrics = new SchedulerMetrics();
+    metrics.recordTrigger("self_scan");
+    const server = createHealthServer(metrics, 0);
+    const port = (server.address() as AddressInfo).port;
+    try {
+      const res = await fetch(`http://localhost:${port}/metrics`);
+      expect(res.status).toBe(200);
+      const text = await res.text();
+      expect(text).toContain("sentinel_scheduler_triggers_total");
+    } finally {
+      server.close();
+    }
+  });
+
+  test("GET /unknown returns 404", async () => {
+    const metrics = new SchedulerMetrics();
+    const server = createHealthServer(metrics, 0);
+    const port = (server.address() as AddressInfo).port;
+    try {
+      const res = await fetch(`http://localhost:${port}/unknown`);
+      expect(res.status).toBe(404);
+    } finally {
+      server.close();
+    }
   });
 });
