@@ -64,3 +64,57 @@ export async function apiPost<T>(
   }
   return res.json() as Promise<T>;
 }
+
+export async function apiPut<T>(
+  path: string,
+  data: unknown,
+  extraHeaders?: Record<string, string>,
+): Promise<T> {
+  const url = new URL(path, API_URL);
+  const bodyStr = JSON.stringify(data);
+  const { signRequest } = await import("@sentinel/auth");
+  const signature = signRequest(bodyStr, API_SECRET);
+
+  const res = await fetch(url.toString(), {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Sentinel-Signature": signature,
+      "X-Sentinel-API-Key": "dashboard",
+      ...extraHeaders,
+    },
+    body: bodyStr,
+  });
+
+  if (!res.ok) {
+    throw new Error(`API PUT ${res.status}: ${await res.text()}`);
+  }
+  return res.json() as Promise<T>;
+}
+
+export async function apiPatch<T>(
+  path: string,
+  data: unknown,
+  extraHeaders?: Record<string, string>,
+): Promise<T> {
+  const url = new URL(path, API_URL);
+  const bodyStr = JSON.stringify(data);
+  const { signRequest } = await import("@sentinel/auth");
+  const signature = signRequest(bodyStr, API_SECRET);
+
+  const res = await fetch(url.toString(), {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Sentinel-Signature": signature,
+      "X-Sentinel-API-Key": "dashboard",
+      ...extraHeaders,
+    },
+    body: bodyStr,
+  });
+
+  if (!res.ok) {
+    throw new Error(`API PATCH ${res.status}: ${await res.text()}`);
+  }
+  return res.json() as Promise<T>;
+}

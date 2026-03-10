@@ -15,6 +15,7 @@ import type {
 } from "./types";
 
 import {
+  MOCK_AUDIT_LOG,
   MOCK_CERTIFICATES,
   MOCK_FINDING_COUNTS_BY_CATEGORY,
   MOCK_FINDINGS,
@@ -105,7 +106,7 @@ export async function getProjects(): Promise<Project[]> {
       repoUrl: p.repoUrl ?? "",
       lastScanDate: p.scans?.[0]?.startedAt ?? null,
       lastScanStatus: p.scans?.[0]?.status ?? null,
-      findingCount: 0,
+      findingCount: (p.scans ?? []).reduce((sum: number, s: any) => sum + (s._count?.findings ?? 0), 0),
       scanCount: p._count?.scans ?? 0,
     }));
   }, MOCK_PROJECTS);
@@ -121,7 +122,7 @@ export async function getProjectById(id: string): Promise<Project | null> {
       repoUrl: p.repoUrl ?? "",
       lastScanDate: p.scans?.[0]?.startedAt ?? null,
       lastScanStatus: p.scans?.[0]?.status ?? null,
-      findingCount: 0,
+      findingCount: (p.scans ?? []).reduce((sum: number, s: any) => sum + (s._count?.findings ?? 0), 0),
       scanCount: p._count?.scans ?? 0,
     };
   }, MOCK_PROJECTS.find((p) => p.id === id) ?? null);
@@ -178,7 +179,7 @@ export async function getFindings(): Promise<Finding[]> {
       filePath: f.file,
       lineStart: f.lineStart,
       lineEnd: f.lineEnd,
-      codeSnippet: "",
+      codeSnippet: f.rawData?.codeSnippet ?? "",
       remediation: f.remediation ?? "",
       createdAt: f.createdAt,
     }));
@@ -202,7 +203,7 @@ export async function getFindingById(id: string): Promise<Finding | null> {
       filePath: f.file,
       lineStart: f.lineStart,
       lineEnd: f.lineEnd,
-      codeSnippet: "",
+      codeSnippet: f.rawData?.codeSnippet ?? "",
       remediation: f.remediation ?? "",
       createdAt: f.createdAt,
     };
@@ -281,5 +282,5 @@ export async function getAuditLog(limit = 50) {
     const { apiGet } = await import("./api-client");
     const data = await apiGet<{ events: any[] }>("/v1/audit", { limit: String(limit) }, headers);
     return data.events ?? [];
-  }, []);
+  }, MOCK_AUDIT_LOG);
 }

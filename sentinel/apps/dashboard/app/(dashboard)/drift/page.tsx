@@ -25,7 +25,7 @@ export default async function DriftPage() {
     }),
     commit: scan.commit,
     branch: scan.branch,
-    aiPercent: Math.min(100, Math.max(0, 15 + i * 3 + scan.riskScore * 0.1)),
+    aiPercent: Math.min(100, Math.max(0, scan.riskScore)),
     riskScore: scan.riskScore,
   }));
 
@@ -36,9 +36,9 @@ export default async function DriftPage() {
 
   const statCards = [
     {
-      label: "Current AI Composition",
+      label: "Estimated AI Composition",
       value: `${latestAi.toFixed(1)}%`,
-      sub: "Latest scan",
+      sub: "Based on risk score",
       trend: latestAi > 50 ? "Above threshold" : "Within threshold",
       trendUp: latestAi <= 50,
     },
@@ -122,9 +122,9 @@ export default async function DriftPage() {
         <div className="rounded-xl border border-border bg-surface-1 p-6">
           <div className="mb-4 flex items-center justify-between">
             <div>
-              <h2 className="text-sm font-semibold text-text-primary">AI Composition Over Time</h2>
+              <h2 className="text-sm font-semibold text-text-primary">Estimated AI Composition Over Time</h2>
               <p className="mt-0.5 text-[11px] text-text-tertiary">
-                Percentage of AI-generated code per scan
+                Estimated from risk score — real AI composition metrics coming soon
               </p>
             </div>
             {/* Chart legend */}

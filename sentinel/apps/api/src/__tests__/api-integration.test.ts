@@ -216,13 +216,13 @@ vi.mock("@fastify/rate-limit", () => ({
  * The auth middleware serialises the body via:
  *   typeof request.body === "string" ? request.body : JSON.stringify(request.body ?? "")
  *
- * For GET requests (body undefined) that yields JSON.stringify("") → '""'.
- * For POST/PUT with a JSON string payload, Fastify parses it into an object,
- * so the middleware re-serialises the parsed object with JSON.stringify().
+ * For GET requests, body is empty string (null/undefined → "").
+ * For GET requests, body is empty string. For POST/PUT/PATCH with a JSON
+ * payload, body is the JSON-stringified request body.
  *
  * `body` here must match whatever the middleware will compute.
  */
-function signedHeaders(body = '""', role = "admin"): Record<string, string> {
+function signedHeaders(body = "", role = "admin"): Record<string, string> {
   return {
     "x-sentinel-signature": signRequest(body, SECRET),
     "x-sentinel-api-key": "test-client",
@@ -283,7 +283,7 @@ describe("API integration", () => {
     const res = await app.inject({
       method: "GET",
       url: "/v1/admin/dlq",
-      headers: signedHeaders('""', "viewer"),
+      headers: signedHeaders("", "viewer"),
     });
     expect(res.statusCode).toBe(403);
   });
@@ -426,7 +426,7 @@ describe("API integration", () => {
     const res = await app.inject({
       method: "GET",
       url: "/v1/audit",
-      headers: signedHeaders('""', "developer"),
+      headers: signedHeaders("", "developer"),
     });
     expect(res.statusCode).toBe(403);
   });
@@ -435,7 +435,7 @@ describe("API integration", () => {
     const res = await app.inject({
       method: "GET",
       url: "/v1/audit",
-      headers: signedHeaders('""', "admin"),
+      headers: signedHeaders("", "admin"),
     });
     expect(res.statusCode).toBe(200);
     const body = JSON.parse(res.payload);

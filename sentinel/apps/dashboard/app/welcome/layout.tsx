@@ -18,7 +18,7 @@ export default function PublicLayout({
           </a>
           <div className="flex items-center gap-6">
             <a
-              href="/pricing"
+              href="/welcome/pricing"
               className="text-[13px] font-medium text-text-secondary hover:text-text-primary transition-colors"
             >
               Pricing

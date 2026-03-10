@@ -3,6 +3,7 @@ import { getFindingById } from "@/lib/api";
 import { SeverityBadge } from "@/components/severity-badge";
 import { PageHeader } from "@/components/page-header";
 import { IconChevronLeft } from "@/components/icons";
+import { FindingActions } from "./finding-actions";
 
 interface FindingDetailPageProps {
   params: Promise<{ id: string }>;
@@ -172,22 +173,7 @@ export default async function FindingDetailPage({
       {/* Actions */}
       <section aria-label="Actions" className="animate-fade-up" style={{ animationDelay: "0.2s" }}>
         <h2 className="mb-3 text-sm font-semibold text-text-primary">Actions</h2>
-        <div className="flex gap-3">
-          <button
-            type="button"
-            className="rounded-lg border border-status-warn/30 bg-status-warn/10 px-4 py-2.5 text-[13px] font-semibold text-status-warn transition-all hover:bg-status-warn/20 active:scale-[0.98] focus-ring"
-            aria-label="Suppress this finding"
-          >
-            Suppress
-          </button>
-          <button
-            type="button"
-            className="rounded-lg border border-status-pass/30 bg-status-pass/10 px-4 py-2.5 text-[13px] font-semibold text-status-pass transition-all hover:bg-status-pass/20 active:scale-[0.98] focus-ring"
-            aria-label="Mark this finding as resolved"
-          >
-            Resolve
-          </button>
-        </div>
+        <FindingActions findingId={finding.id} status={finding.status} />
       </section>
     </div>
   );
