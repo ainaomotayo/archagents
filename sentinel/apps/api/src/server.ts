@@ -234,6 +234,18 @@ app.patch("/v1/findings/:id", { preHandler: authHook }, async (request, reply) =
       data.suppressedAt = null;
     }
     const updated = await tx.finding.update({ where: { id }, data });
+    if (body.suppressed === true) {
+      await eventBus.publish("sentinel.evidence", {
+        orgId,
+        type: "finding_suppressed",
+        eventData: {
+          findingId: id,
+          suppressedBy: body.suppressedBy ?? null,
+          severity: finding.severity,
+          category: finding.category,
+        },
+      });
+    }
     return updated;
   });
 });
@@ -322,6 +334,12 @@ app.post("/v1/certificates/:id/revoke", { preHandler: authHook }, async (request
       action: "certificate.revoked",
       resource: { type: "certificate", id },
       detail: { reason },
+    });
+
+    await eventBus.publish("sentinel.evidence", {
+      orgId,
+      type: "certificate_revoked",
+      eventData: { certificateId: id, reason },
     });
 
     return { id, status: "revoked", revokedAt: now.toISOString() };
@@ -443,6 +461,11 @@ app.post("/v1/policies", { preHandler: authHook, schema: { body: policyBodySchem
   } catch (err) {
     request.log.error({ err }, "Failed to append audit log");
   }
+  await eventBus.publish("sentinel.evidence", {
+    orgId,
+    type: "policy_changed",
+    eventData: { policyId: policy.id, changeType: "created", name: policy.name, version: policy.version },
+  });
   reply.code(201).send(policy);
 });
 
@@ -485,6 +508,11 @@ app.put("/v1/policies/:id", { preHandler: authHook, schema: { body: policyBodySc
     } catch (err) {
       request.log.error({ err }, "Failed to append audit log");
     }
+    await eventBus.publish("sentinel.evidence", {
+      orgId,
+      type: "policy_changed",
+      eventData: { policyId: id, changeType: "updated", name: updated.name, version: updated.version },
+    });
     return updated;
   });
 });
@@ -527,6 +555,11 @@ app.delete("/v1/policies/:id", { preHandler: authHook }, async (request, reply) 
     } catch (err) {
       request.log.error({ err }, "Failed to append audit log");
     }
+    await eventBus.publish("sentinel.evidence", {
+      orgId,
+      type: "policy_changed",
+      eventData: { policyId: id, changeType: "deleted", name: existing.name },
+    });
     reply.code(204).send();
   });
 });

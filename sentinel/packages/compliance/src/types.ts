@@ -51,3 +51,14 @@ export interface FindingInput {
 
 export const VALID_REPORT_TYPES = ["compliance_summary", "audit_evidence", "executive"] as const;
 export type ReportType = (typeof VALID_REPORT_TYPES)[number];
+
+export const EVIDENCE_EVENT_TYPES = [
+  "scan_completed",
+  "certificate_issued",
+  "certificate_revoked",
+  "policy_changed",
+  "compliance_assessed",
+  "report_generated",
+  "finding_suppressed",
+] as const;
+export type EvidenceEventType = (typeof EVIDENCE_EVENT_TYPES)[number];

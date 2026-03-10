@@ -11,11 +11,14 @@
     "lint": "echo 'lint placeholder'"
   },
   "dependencies": {
-    "micromatch": "^4.0"
+    "micromatch": "^4.0",
+    "@react-pdf/renderer": "^4.3",
+    "react": "^19.0"
   },
   "devDependencies": {
     "@types/micromatch": "^4.0",
     "@types/node": "^22.0.0",
+    "@types/react": "^19.0",
     "typescript": "^5.7",
     "vitest": "^3.0"
   }

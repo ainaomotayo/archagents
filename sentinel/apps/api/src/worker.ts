@@ -124,6 +124,33 @@ async function finalizeScan(scanId: string, hasTimeouts: boolean) {
       certificateId: assessment.certificate?.id,
     });
 
+    // Publish evidence events for compliance audit trail
+    await eventBus.publish("sentinel.evidence", {
+      orgId: scan.orgId,
+      type: "scan_completed",
+      scanId,
+      eventData: {
+        status: assessment.status,
+        riskScore: assessment.riskScore,
+        findingsCount: pending.findings.reduce(
+          (sum, f) => sum + (Array.isArray(f.findings) ? f.findings.length : 0),
+          0,
+        ),
+      },
+    });
+
+    if (assessment.certificate) {
+      await eventBus.publish("sentinel.evidence", {
+        orgId: scan.orgId,
+        type: "certificate_issued",
+        scanId,
+        eventData: {
+          certificateId: assessment.certificate.id,
+          status: assessment.certificate.verdict?.status ?? assessment.status,
+        },
+      });
+    }
+
     const durationSec = (performance.now() - pending.startedAt) / 1000;
     scanDuration.observe({ status: assessment.status }, durationSec);
 
