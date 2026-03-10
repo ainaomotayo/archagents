@@ -404,6 +404,13 @@ app.post("/v1/policies", { preHandler: authHook, schema: { body: policyBodySchem
   const body = request.body as any;
   return withTenant(db, orgId, async (tx) => {
     const policy = await tx.policy.create({ data: body });
+    const role = (request as any).role ?? "unknown";
+    await auditLog.append(orgId, {
+      actor: { type: "api", id: role, name: "API" },
+      action: "policy.created",
+      resource: { type: "policy", id: policy.id },
+      detail: { name: policy.name, version: policy.version },
+    });
     reply.code(201).send(policy);
   });
 });
@@ -422,6 +429,13 @@ app.put("/v1/policies/:id", { preHandler: authHook, schema: { body: policyBodySc
       where: { id },
       data: { name: body.name, rules: body.rules, version: { increment: 1 } },
     });
+    const role = (request as any).role ?? "unknown";
+    await auditLog.append(orgId, {
+      actor: { type: "api", id: role, name: "API" },
+      action: "policy.updated",
+      resource: { type: "policy", id },
+      detail: { name: updated.name, version: updated.version },
+    });
     return updated;
   });
 });
@@ -436,6 +450,13 @@ app.delete("/v1/policies/:id", { preHandler: authHook }, async (request, reply) 
       return;
     }
     await tx.policy.delete({ where: { id } });
+    const role = (request as any).role ?? "unknown";
+    await auditLog.append(orgId, {
+      actor: { type: "api", id: role, name: "API" },
+      action: "policy.deleted",
+      resource: { type: "policy", id },
+      detail: { name: existing.name },
+    });
     reply.code(204).send();
   });
 });

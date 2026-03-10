@@ -479,6 +479,26 @@ describe("API integration", () => {
     expect(res.statusCode).toBe(201);
   });
 
+  // ── Audit logging ────────────────────────────────────────────────────
+  it("POST /v1/policies triggers audit log", async () => {
+    const { AuditLog } = await import("@sentinel/audit");
+    const auditInstance = (AuditLog as any).mock.results[0].value;
+    const callsBefore = auditInstance.append.mock.calls.length;
+
+    const body = JSON.stringify({ name: "audit-test", rules: [] });
+    await app.inject({
+      method: "POST",
+      url: "/v1/policies",
+      headers: { ...signedHeaders(body), "content-type": "application/json" },
+      payload: body,
+    });
+
+    expect(auditInstance.append.mock.calls.length).toBeGreaterThan(callsBefore);
+    const lastCall = auditInstance.append.mock.calls[auditInstance.append.mock.calls.length - 1];
+    expect(lastCall[1].action).toBe("policy.created");
+    expect(lastCall[1].resource.type).toBe("policy");
+  });
+
   // ── Unknown route ─────────────────────────────────────────────────────
   it("unknown route returns 404", async () => {
     const res = await app.inject({
