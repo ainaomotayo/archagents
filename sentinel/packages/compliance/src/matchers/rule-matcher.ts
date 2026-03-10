@@ -4,18 +4,23 @@ import type { MatchRule, FindingInput } from "../types.js";
 function matchesSingleRule(rule: MatchRule, finding: FindingInput): boolean {
   if (finding.suppressed) return false;
 
-  if (rule.agent && finding.agentName !== rule.agent) return false;
+  let matches = true;
 
-  if (rule.category) {
+  if (rule.agent && finding.agentName !== rule.agent) matches = false;
+
+  if (matches && rule.category) {
     const cat = finding.category ?? "";
-    if (!micromatch.isMatch(cat, rule.category)) return false;
+    if (!micromatch.isMatch(cat, rule.category)) matches = false;
   }
 
-  if (rule.severity && rule.severity.length > 0) {
-    if (!rule.severity.includes(finding.severity)) return false;
+  if (matches && rule.severity && rule.severity.length > 0) {
+    if (!rule.severity.includes(finding.severity)) matches = false;
   }
 
-  return true;
+  // negate inverts the match: "passing means NO findings match this rule"
+  if (rule.negate) matches = !matches;
+
+  return matches;
 }
 
 /**

@@ -59,4 +59,13 @@ describe("matchFindings", () => {
   it("returns empty for empty rules", () => {
     expect(matchFindings([], findings)).toEqual([]);
   });
+
+  it("negates match rule (returns non-matching findings)", () => {
+    const rules: MatchRule[] = [{ category: "vulnerability/*", negate: true }];
+    const matched = matchFindings(rules, findings);
+    // f1, f2 are vulnerability/* → negated so excluded
+    // f3 (dependency/outdated), f4 (ai/generated) → don't match → negated so included
+    // f5 is suppressed → always excluded
+    expect(matched.map((f) => f.id)).toEqual(["f3", "f4"]);
+  });
 });
