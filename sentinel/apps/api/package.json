@@ -21,6 +21,7 @@
     "@sentinel/db": "workspace:*",
     "@sentinel/events": "workspace:*",
     "@sentinel/github": "workspace:*",
+    "@sentinel/notifications": "workspace:*",
     "@sentinel/security": "workspace:*",
     "@sentinel/shared": "workspace:*",
     "@sentinel/telemetry": "workspace:*",
