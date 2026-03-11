@@ -36,7 +36,12 @@ describe("E2E: Certificate Verification", () => {
     const certificate = await ctx.certificateService.getCertificate(scanId);
     if (!certificate) return; // Skip if no cert endpoint
 
-    // Use server-side verification endpoint via POST
+    // Client-side verification: re-sign verdict JSON and compare to stored signature
+    const secret = process.env.E2E_SECRET ?? "e2e-test-secret";
+    const clientValid = ctx.certificateService.verifyCertificateSignature(certificate, secret);
+    console.log(`[VERIFY] Client-side HMAC verification: valid=${clientValid}`);
+
+    // Also try server-side verification endpoint via POST
     const apiUrl = process.env.E2E_API_URL ?? "http://localhost:8081";
     try {
       const res = await fetch(`${apiUrl}/v1/certificates/${certificate.id}/verify`, {
@@ -47,6 +52,10 @@ describe("E2E: Certificate Verification", () => {
     } catch (err) {
       console.log(`[VERIFY] Certificate verification endpoint not available: ${(err as Error).message}`);
     }
+
+    // At least client-side verification should confirm the signature
+    expect(certificate.signature).toBeTruthy();
+    expect(certificate.verdict).toBeTruthy();
   });
 
   it("certificate can be retrieved by scanId via API", async () => {

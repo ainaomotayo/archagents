@@ -85,7 +85,7 @@ describe("E2E: Happy Path — Full Pipeline", () => {
     console.log("[VERIFY] All invariants passed");
   });
 
-  it("verifies Redis streams have correct entries after pipeline", async () => {
+  it("verifies Redis streams have correct entries and DAG ordering", async () => {
     // Submit a diff and wait
     const { scanId } = await ctx.scanService.submitDiff(
       combinedVulnDiff(ctx.projectId),
@@ -101,5 +101,23 @@ describe("E2E: Happy Path — Full Pipeline", () => {
     const findingsLen = await redis.getStreamLength("sentinel.findings");
     console.log(`[VERIFY] sentinel.findings stream length: ${findingsLen}`);
     expect(findingsLen).toBeGreaterThan(0);
+
+    // VERIFY: DAG ordering — collect event types from all streams
+    const allStreams = ["sentinel.diffs", "sentinel.findings", "sentinel.results", "sentinel.notifications"];
+    const events: string[] = [];
+    for (const stream of allStreams) {
+      const entries = await redis.getStreamEntries(stream, 100);
+      for (const entry of entries) {
+        const type = (entry.data as any).type ?? (entry.data as any).topic ?? "";
+        if (type) events.push(type);
+      }
+    }
+    console.log(`[VERIFY] Collected ${events.length} events for DAG verification`);
+
+    if (events.length > 0) {
+      const dagResult = verifyDag(HAPPY_PATH_DAG, events);
+      console.log(`[VERIFY] DAG: valid=${dagResult.valid}, matched=${dagResult.matched.join(",")}, missing=${dagResult.missing.join(",")}, violations=${dagResult.orderViolations.join(",")}`);
+      expect(dagResult.orderViolations).toHaveLength(0);
+    }
   });
 });

@@ -44,16 +44,28 @@ describe("E2E: Compliance Pipeline", () => {
     }
   });
 
-  it("certificate includes compliance metadata", async () => {
+  it("certificate includes compliance metadata and verdict categories", async () => {
     const { scanId } = await ctx.scanService.submitDiff(combinedVulnDiff(ctx.projectId));
     await ctx.scanService.pollUntilStatus(scanId, "completed", 45_000);
 
     const certificate = await ctx.certificateService.getCertificate(scanId);
     if (certificate) {
-      console.log(`[VERIFY] Certificate compliance: ${JSON.stringify((certificate as any).compliance)}`);
-      expect((certificate as any).compliance).toBeDefined();
-      // Compliance field should be an object (may be empty if no frameworks configured)
-      expect(typeof (certificate as any).compliance).toBe("object");
+      // Compliance field should be an object
+      console.log(`[VERIFY] Certificate compliance: ${JSON.stringify(certificate.compliance)}`);
+      expect(certificate.compliance).toBeDefined();
+      expect(typeof certificate.compliance).toBe("object");
+
+      // Verdict should contain categories with per-category pass/warn/fail scoring
+      console.log(`[VERIFY] Certificate verdict categories: ${JSON.stringify(certificate.verdict?.categories)}`);
+      expect(certificate.verdict).toBeDefined();
+      if (certificate.verdict?.categories) {
+        expect(typeof certificate.verdict.categories).toBe("object");
+        const validScores = new Set(["pass", "warn", "fail"]);
+        for (const [cat, score] of Object.entries(certificate.verdict.categories)) {
+          console.log(`[VERIFY]   category ${cat}=${score}`);
+          expect(validScores.has(score as string)).toBe(true);
+        }
+      }
     }
   });
 });

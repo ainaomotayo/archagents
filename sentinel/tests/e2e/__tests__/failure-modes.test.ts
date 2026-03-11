@@ -66,7 +66,7 @@ describe("E2E: Failure Modes", () => {
     expect(findings.length).toBe(0);
   });
 
-  it("rejects duplicate scan submission with same commit hash", async () => {
+  it("handles duplicate scan submission with same commit hash", async () => {
     const fixedHash = `e2e-dup-${Date.now()}`;
     const payload = {
       projectId: ctx.projectId,
@@ -88,11 +88,18 @@ describe("E2E: Failure Modes", () => {
     expect(scanId).toBeTruthy();
     console.log(`[VERIFY] First submission: scanId=${scanId}`);
 
-    // Second submission with same commit hash — behavior depends on API (may create new scan or reject)
-    const result2 = await ctx.scanService.submitDiff(payload as any);
-    console.log(`[VERIFY] Duplicate submission: scanId=${result2.scanId}`);
-    // At minimum, both scans should be created (API doesn't enforce uniqueness on commitHash)
-    expect(result2.scanId).toBeTruthy();
+    // Second submission with same commit hash — API may reject or create new scan
+    try {
+      const result2 = await ctx.scanService.submitDiff(payload as any);
+      // If accepted, the two scans must have distinct IDs (no silent overwrite)
+      console.log(`[VERIFY] Duplicate accepted: scanId=${result2.scanId}`);
+      expect(result2.scanId).toBeTruthy();
+      expect(result2.scanId).not.toBe(scanId);
+    } catch (err) {
+      // If rejected, must be a 4xx error (duplicate detected)
+      console.log(`[VERIFY] Duplicate rejected: ${(err as Error).message}`);
+      expect((err as Error).message).toMatch(/4\d\d/);
+    }
   });
 
   it("returns 401/403 for requests without signature", async () => {
