@@ -61,6 +61,23 @@ export const API_PERMISSIONS: EndpointPermission[] = [
   { method: "DELETE", path: "/v1/notifications/rules/:id", roles: ["admin", "manager"] },
   // SSE stream
   { method: "GET", path: "/v1/events/stream", roles: ["admin", "manager", "developer", "viewer", "service"] },
+  // P10: API Keys
+  { method: "POST", path: "/v1/api-keys", roles: ["admin", "manager"] },
+  { method: "GET", path: "/v1/api-keys", roles: ["admin", "manager", "developer", "viewer"] },
+  { method: "DELETE", path: "/v1/api-keys/:id", roles: ["admin", "manager"] },
+  // P10: SSO Config
+  { method: "GET", path: "/v1/sso-configs", roles: ["admin", "manager"] },
+  { method: "POST", path: "/v1/sso-configs", roles: ["admin"] },
+  { method: "PUT", path: "/v1/sso-configs/:id", roles: ["admin"] },
+  { method: "DELETE", path: "/v1/sso-configs/:id", roles: ["admin"] },
+  // P10: Org Memberships
+  { method: "GET", path: "/v1/memberships", roles: ["admin", "manager"] },
+  { method: "POST", path: "/v1/memberships", roles: ["admin"] },
+  { method: "PUT", path: "/v1/memberships/:id", roles: ["admin"] },
+  { method: "DELETE", path: "/v1/memberships/:id", roles: ["admin"] },
+  // P10: Encryption Admin
+  { method: "POST", path: "/v1/admin/rotate-keys", roles: ["admin"] },
+  { method: "POST", path: "/v1/admin/crypto-shred", roles: ["admin"] },
 ];
 
 /** Pre-computed HashMap for O(1) authorization lookups. */
