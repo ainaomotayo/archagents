@@ -60,7 +60,8 @@ export function resolveRole(username: string | undefined | null): Role {
 
 /**
  * Build the list of OAuth providers based on which env vars are set.
- * This allows zero-config: only providers with credentials are enabled.
+ * NOTE: These are global providers. Per-org provider filtering is handled
+ * by the login page via /v1/auth/discovery and the signIn callback.
  */
 export function getConfiguredProviders(): any[] {
   const providers: any[] = [];

@@ -8,6 +8,11 @@ interface ProviderInfo {
   name: string;
 }
 
+interface DiscoveryResult {
+  providers: ProviderInfo[];
+  enforced: boolean;
+}
+
 function ProviderIcon({ id, className }: { id: string; className?: string }) {
   if (id === "github") return <IconGithub className={className} />;
   if (id === "gitlab")
@@ -52,16 +57,97 @@ async function handleSignIn(providerId: string) {
 }
 
 export default function LoginPage() {
-  const [providers, setProviders] = useState<ProviderInfo[]>([]);
+  /** All globally configured providers (fetched from NextAuth) */
+  const [allProviders, setAllProviders] = useState<ProviderInfo[]>([]);
+  /** Providers filtered by discovery API for the entered email */
+  const [discoveredProviders, setDiscoveredProviders] = useState<
+    ProviderInfo[] | null
+  >(null);
+  /** Whether the org enforces SSO (only discovered providers allowed) */
+  const [ssoEnforced, setSsoEnforced] = useState(false);
+  /** Loading state for initial provider fetch */
   const [loading, setLoading] = useState(true);
+  /** Loading state for discovery API call */
+  const [discovering, setDiscovering] = useState(false);
+  /** Email entered by user for discovery */
+  const [discoveryEmail, setDiscoveryEmail] = useState("");
+  /** Error message for discovery */
+  const [discoveryError, setDiscoveryError] = useState("");
 
+  // Fetch all globally configured providers on mount
   useEffect(() => {
     fetch("/api/auth/providers")
       .then((r) => r.json())
-      .then((data) => setProviders(data))
-      .catch(() => setProviders([]))
+      .then((data) => setAllProviders(data))
+      .catch(() => setAllProviders([]))
       .finally(() => setLoading(false));
   }, []);
+
+  /** The providers to display: discovered (if available) or all */
+  const displayProviders =
+    discoveredProviders !== null && discoveredProviders.length > 0
+      ? discoveredProviders
+      : discoveredProviders !== null && ssoEnforced
+        ? [] // SSO enforced but no matching providers configured
+        : allProviders;
+
+  /** Whether we are in the "show providers" step */
+  const showProviders = discoveredProviders !== null;
+
+  async function handleDiscovery(e: React.FormEvent) {
+    e.preventDefault();
+    const email = discoveryEmail.trim();
+    if (!email) return;
+
+    setDiscovering(true);
+    setDiscoveryError("");
+
+    try {
+      const res = await fetch(
+        `/api/auth/discovery?email=${encodeURIComponent(email)}`,
+      );
+
+      if (!res.ok) {
+        // Fall back to showing all providers
+        setDiscoveredProviders([]);
+        setSsoEnforced(false);
+        return;
+      }
+
+      const data: DiscoveryResult = await res.json();
+
+      if (data.providers && data.providers.length > 0) {
+        // Filter to only providers that are actually configured globally
+        const configuredIds = new Set(allProviders.map((p) => p.id));
+        const filtered = data.providers.filter((p) => configuredIds.has(p.id));
+
+        // Use names from the global config for consistency
+        const merged = filtered.map((dp) => {
+          const global = allProviders.find((gp) => gp.id === dp.id);
+          return { id: dp.id, name: dp.name || global?.name || dp.id };
+        });
+
+        setDiscoveredProviders(merged.length > 0 ? merged : []);
+        setSsoEnforced(data.enforced ?? false);
+      } else {
+        // Discovery returned no org-specific providers; show all
+        setDiscoveredProviders([]);
+        setSsoEnforced(data.enforced ?? false);
+      }
+    } catch {
+      // Discovery failed; fall back to all providers
+      setDiscoveredProviders([]);
+      setSsoEnforced(false);
+    } finally {
+      setDiscovering(false);
+    }
+  }
+
+  function handleBack() {
+    setDiscoveredProviders(null);
+    setSsoEnforced(false);
+    setDiscoveryError("");
+  }
 
   return (
     <div className="relative flex min-h-screen items-center justify-center bg-surface-0 overflow-hidden">
@@ -88,28 +174,82 @@ export default function LoginPage() {
                 SENTINEL
               </h1>
               <p className="mt-1.5 text-[13px] leading-relaxed text-text-secondary">
-                Sign in to access your governance dashboard
+                {showProviders
+                  ? `Sign in as ${discoveryEmail}`
+                  : "Sign in to access your governance dashboard"}
               </p>
             </div>
           </div>
 
-          {/* Providers */}
+          {/* Email discovery form or provider buttons */}
           <div className="space-y-2.5">
             {loading ? (
               <div className="flex justify-center py-6">
                 <div className="h-5 w-5 animate-spin rounded-full border-2 border-accent border-t-transparent" />
               </div>
-            ) : providers.length === 0 ? (
+            ) : !showProviders ? (
+              /* Step 1: Email input for discovery */
+              <form onSubmit={handleDiscovery} className="space-y-3">
+                <div>
+                  <label
+                    htmlFor="discovery-email"
+                    className="block text-[12px] font-medium text-text-secondary mb-1.5"
+                  >
+                    Work email
+                  </label>
+                  <input
+                    id="discovery-email"
+                    type="email"
+                    required
+                    autoFocus
+                    autoComplete="email"
+                    placeholder="you@company.com"
+                    value={discoveryEmail}
+                    onChange={(e) => setDiscoveryEmail(e.target.value)}
+                    className="w-full rounded-xl border border-border bg-surface-0 px-4 py-3 text-[13px] text-text-primary placeholder:text-text-tertiary outline-none transition-colors focus:border-accent focus:ring-1 focus:ring-accent"
+                  />
+                </div>
+                {discoveryError && (
+                  <p className="text-[12px] text-red-400">{discoveryError}</p>
+                )}
+                <button
+                  type="submit"
+                  disabled={discovering || !discoveryEmail.trim()}
+                  className="flex w-full items-center justify-center gap-2 rounded-xl border border-border bg-text-primary px-4 py-3 text-[13px] font-semibold text-surface-0 transition-all hover:bg-text-primary/90 hover:shadow-lg hover:shadow-surface-0/20 focus-ring active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {discovering ? (
+                    <div className="h-4 w-4 animate-spin rounded-full border-2 border-surface-0 border-t-transparent" />
+                  ) : null}
+                  Continue
+                </button>
+              </form>
+            ) : displayProviders.length === 0 ? (
+              /* No providers available */
               <div className="rounded-lg border border-border bg-surface-0 px-4 py-5 text-center">
-                <p className="text-[13px] text-text-secondary">
-                  No sign-in providers configured
-                </p>
-                <p className="mt-1 text-[11px] text-text-tertiary">
-                  Set GITHUB_CLIENT_ID to enable authentication
-                </p>
+                {ssoEnforced ? (
+                  <>
+                    <p className="text-[13px] text-text-secondary">
+                      Your organization requires SSO sign-in
+                    </p>
+                    <p className="mt-1 text-[11px] text-text-tertiary">
+                      The required SSO provider is not configured. Contact your
+                      administrator.
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-[13px] text-text-secondary">
+                      No sign-in providers configured
+                    </p>
+                    <p className="mt-1 text-[11px] text-text-tertiary">
+                      Set GITHUB_CLIENT_ID to enable authentication
+                    </p>
+                  </>
+                )}
               </div>
             ) : (
-              providers.map((provider) => (
+              /* Step 2: Show discovered/filtered providers */
+              displayProviders.map((provider) => (
                 <button
                   key={provider.id}
                   onClick={() => handleSignIn(provider.id)}
@@ -124,6 +264,18 @@ export default function LoginPage() {
               ))
             )}
           </div>
+
+          {/* Back button when showing providers */}
+          {showProviders && (
+            <div className="flex justify-center">
+              <button
+                onClick={handleBack}
+                className="text-[12px] text-text-tertiary hover:text-text-secondary transition-colors"
+              >
+                &larr; Use a different email
+              </button>
+            </div>
+          )}
 
           {/* Footer */}
           <div className="space-y-3 pt-2">
