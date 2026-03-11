@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 import Fastify from "fastify";
 import { Redis } from "ioredis";
-import { getDb, disconnectDb, withTenant } from "@sentinel/db";
+import { getDb, disconnectDb, withTenant, initEncryption } from "@sentinel/db";
 import { EventBus, getDlqDepth, readDlq } from "@sentinel/events";
 import { AuditLog } from "@sentinel/audit";
 import { verifyCertificate } from "@sentinel/assessor";
@@ -32,7 +32,7 @@ import { registerOrgMembershipRoutes } from "./routes/org-memberships.js";
 import { registerScimRoutes } from "./routes/scim.js";
 import { registerEncryptionAdminRoutes } from "./routes/encryption-admin.js";
 import { registerDomainRoutes } from "./routes/domain-verification.js";
-import { DekCache } from "@sentinel/security";
+import { DekCache, EnvelopeEncryption, LocalKmsProvider } from "@sentinel/security";
 
 // Module-level DEK cache for encryption — shared with crypto-shred handler for eviction
 let dekCache: DekCache | undefined;
@@ -979,7 +979,33 @@ registerSsoConfigRoutes(app, authHook);
 registerDiscoveryRoutes(app);  // Public, no auth
 registerOrgMembershipRoutes(app, authHook);
 registerScimRoutes(app);  // Uses own SCIM auth
+// --- Encryption wiring ---
 dekCache = new DekCache();
+const kms = new LocalKmsProvider();
+const envelope = new EnvelopeEncryption(kms, dekCache);
+
+// Wire key loader: loads wrapped DEK from DB for a given org+purpose
+envelope.setKeyLoader(async (orgId, purpose) => {
+  const record = await db.encryptionKey.findFirst({
+    where: { orgId, purpose, active: true },
+    orderBy: { version: "desc" },
+  });
+  if (!record) return null;
+  return { wrappedDek: Buffer.from(record.wrappedDek), kekId: record.kekId };
+});
+
+// Wire key provisioner: persists newly generated DEK to DB
+envelope.setKeyProvisioner(async (orgId, purpose, wrappedDek, kekId) => {
+  await db.encryptionKey.create({
+    data: { orgId, purpose, wrappedDek: new Uint8Array(wrappedDek), kekId, kekProvider: kms.name },
+  });
+});
+
+envelope.setDefaultKekId("default");
+
+// Activate encryption middleware on Prisma client
+initEncryption(envelope);
+
 registerEncryptionAdminRoutes(app, authHook, dekCache);
 registerDomainRoutes(app, authHook);
 
