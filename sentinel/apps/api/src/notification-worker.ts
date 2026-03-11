@@ -6,6 +6,7 @@ import {
   HttpWebhookAdapter,
   SlackAdapter,
   PagerDutyAdapter,
+  EmailAdapter,
   AdapterRegistry,
   TopicTrie,
   type NotificationEvent,
@@ -193,6 +194,22 @@ if (process.env.NODE_ENV !== "test") {
   registry.register(new HttpWebhookAdapter());
   registry.register(new SlackAdapter());
   registry.register(new PagerDutyAdapter());
+
+  // Register email adapter if SMTP is configured
+  if (process.env.SMTP_HOST) {
+    const nodemailer = await import("nodemailer");
+    const transporter = nodemailer.default.createTransport({
+      host: process.env.SMTP_HOST,
+      port: parseInt(process.env.SMTP_PORT ?? "587", 10),
+      secure: process.env.SMTP_SECURE === "true",
+      auth: process.env.SMTP_USER ? {
+        user: process.env.SMTP_USER,
+        pass: process.env.SMTP_PASS ?? "",
+      } : undefined,
+    });
+    registry.register(new EmailAdapter(transporter));
+    logger.info({ host: process.env.SMTP_HOST }, "Email adapter registered");
+  }
 
   const wrappedHandler = withRetry(redis, "sentinel.notifications", async (_id: string, data: Record<string, unknown>) => {
     const event = data as unknown as NotificationEvent;

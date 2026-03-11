@@ -29,10 +29,12 @@
     "cron-parser": "^5.5.0",
     "fastify": "^5.2",
     "ioredis": "^5.6",
-    "node-cron": "^4.2.1"
+    "node-cron": "^4.2.1",
+    "nodemailer": "^6.9"
   },
   "devDependencies": {
     "@octokit/rest": "^22.0.1",
+    "@types/nodemailer": "^6.4",
     "tsx": "^4.19",
     "typescript": "^5.7",
     "vitest": "^3.0"
