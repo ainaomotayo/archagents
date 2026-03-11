@@ -194,6 +194,17 @@ export const authOptions: AuthOptions = {
     updateAge: 60 * 60,         // Rotate JWT every 1 hour of activity
   },
 
+  jwt: {
+    async encode({ token, secret }: { token: any; secret: string }) {
+      const { encryptJwe } = await import("./jwe.js");
+      return encryptJwe(token as Record<string, unknown>, secret);
+    },
+    async decode({ token, secret }: { token: string; secret: string }) {
+      const { decryptJwe } = await import("./jwe.js");
+      return decryptJwe(token, secret) as any;
+    },
+  },
+
   cookies: {
     sessionToken: {
       name: "next-auth.session-token",
