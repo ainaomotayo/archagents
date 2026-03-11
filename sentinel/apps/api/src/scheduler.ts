@@ -177,6 +177,27 @@ async function generateComplianceSnapshots(db: any, eventBus?: EventBus) {
           type: "compliance_assessed",
           eventData: { frameworkSlug: fw.slug, score: result.score, verdict: result.verdict },
         });
+        await eventBus.publish("sentinel.notifications", {
+          id: `evt-${org.id}-${fw.slug}-assessed`,
+          orgId: org.id,
+          topic: "compliance.assessed",
+          payload: { frameworkSlug: fw.slug, score: result.score, verdict: result.verdict },
+          timestamp: new Date().toISOString(),
+        });
+        // Check for compliance degradation
+        const prevSnapshot = await db.complianceSnapshot.findFirst({
+          where: { orgId: org.id, frameworkId: fw.slug, date: { lt: today } },
+          orderBy: { date: "desc" },
+        });
+        if (prevSnapshot && result.score < prevSnapshot.score) {
+          await eventBus.publish("sentinel.notifications", {
+            id: `evt-${org.id}-${fw.slug}-degraded`,
+            orgId: org.id,
+            topic: "compliance.degraded",
+            payload: { frameworkSlug: fw.slug, previousScore: prevSnapshot.score, newScore: result.score },
+            timestamp: new Date().toISOString(),
+          });
+        }
       }
       generated++;
     }
@@ -194,7 +215,7 @@ async function refreshComplianceTrends(db: any) {
   }
 }
 
-async function verifyEvidenceChains(db: any) {
+async function verifyEvidenceChains(db: any, eventBus?: EventBus) {
   const orgs = await db.organization.findMany({ select: { id: true } });
   let checked = 0;
   let failures = 0;
@@ -212,6 +233,15 @@ async function verifyEvidenceChains(db: any) {
     if (!result.valid) {
       failures++;
       logger.error({ orgId: org.id, brokenAt: result.brokenAt }, "Evidence chain integrity failure detected");
+      if (eventBus) {
+        await eventBus.publish("sentinel.notifications", {
+          id: `evt-${org.id}-chain-broken`,
+          orgId: org.id,
+          topic: "evidence.chain_broken",
+          payload: { orgId: org.id, brokenAtIndex: result.brokenAt },
+          timestamp: new Date().toISOString(),
+        });
+      }
     }
   }
   logger.info({ checked, failures }, "Evidence chain integrity check completed");
@@ -310,7 +340,7 @@ if (process.env.NODE_ENV !== "test") {
   cron.schedule("30 5 * * *", async () => {
     logger.info("Running daily evidence chain integrity check...");
     try {
-      await verifyEvidenceChains(getDb());
+      await verifyEvidenceChains(getDb(), eventBus);
     } catch (err) {
       logger.error({ err }, "Evidence chain integrity check failed");
     }
