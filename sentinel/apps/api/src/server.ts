@@ -5,13 +5,30 @@ import { getDb, disconnectDb, withTenant } from "@sentinel/db";
 import { EventBus, getDlqDepth, readDlq } from "@sentinel/events";
 import { AuditLog } from "@sentinel/audit";
 import { verifyCertificate } from "@sentinel/assessor";
-import { withCorrelationId, registry, httpRequestDuration, dlqDepthGauge } from "@sentinel/telemetry";
+import { withCorrelationId, registry, httpRequestDuration, dlqDepthGauge, initTracing, shutdownTracing, sseConnectionsGauge } from "@sentinel/telemetry";
 import { configureGitHubApp } from "@sentinel/github";
+import {
+  BUILT_IN_FRAMEWORKS,
+  FRAMEWORK_MAP,
+  scoreFramework,
+  computeEvidenceHash,
+  verifyEvidenceChain,
+  VALID_REPORT_TYPES,
+  type FindingInput,
+} from "@sentinel/compliance";
 import { createAuthHook } from "./middleware/auth.js";
 import { buildScanRoutes } from "./routes/scans.js";
 import { registerWebhookRoutes } from "./routes/webhooks.js";
+import { buildWebhookRoutes } from "./routes/notification-endpoints.js";
+import { buildNotificationRuleRoutes } from "./routes/notification-rules.js";
+import { HttpWebhookAdapter, SseManager } from "@sentinel/notifications";
+import { randomUUID } from "node:crypto";
 import { createScanStore, createAuditEventStore } from "./stores.js";
 import { registerSecurityPlugins } from "./plugins/security.js";
+
+if (process.env.OTEL_EXPORTER_OTLP_ENDPOINT && process.env.NODE_ENV !== "test") {
+  initTracing({ serviceName: "sentinel-api" });
+}
 
 const app = Fastify({
   logger: {
@@ -50,6 +67,14 @@ const scanRoutes = buildScanRoutes({
   eventBus,
   auditLog,
 });
+
+// --- Webhook endpoint route handlers ---
+const webhookRoutes = buildWebhookRoutes({ db });
+
+// --- Notification rule route handlers ---
+const ruleRoutes = buildNotificationRuleRoutes({ db });
+
+const sseManager = new SseManager();
 
 // --- Security plugins ---
 await registerSecurityPlugins(app, { redis });
@@ -126,6 +151,13 @@ app.post("/v1/scans", { preHandler: authHook }, async (request, reply) => {
   const body = request.body as any;
   const orgId = (request as any).orgId ?? "default";
   const result = await scanRoutes.submitScan({ orgId, body });
+  await eventBus.publish("sentinel.notifications", {
+    id: `evt-${result.scanId}-submitted`,
+    orgId,
+    topic: "scan.submitted",
+    payload: { scanId: result.scanId, projectId: body.projectId, commitHash: body.commitHash, branch: body.branch },
+    timestamp: new Date().toISOString(),
+  });
   reply.code(201).send(result);
 });
 
@@ -221,6 +253,25 @@ app.patch("/v1/findings/:id", { preHandler: authHook }, async (request, reply) =
       data.suppressedAt = null;
     }
     const updated = await tx.finding.update({ where: { id }, data });
+    if (body.suppressed === true) {
+      await eventBus.publish("sentinel.evidence", {
+        orgId,
+        type: "finding_suppressed",
+        eventData: {
+          findingId: id,
+          suppressedBy: body.suppressedBy ?? null,
+          severity: finding.severity,
+          category: finding.category,
+        },
+      });
+      await eventBus.publish("sentinel.notifications", {
+        id: `evt-${id}-suppressed`,
+        orgId,
+        topic: "finding.suppressed",
+        payload: { findingId: id, suppressedBy: body.suppressedBy ?? null, severity: finding.severity },
+        timestamp: new Date().toISOString(),
+      });
+    }
     return updated;
   });
 });
@@ -309,6 +360,19 @@ app.post("/v1/certificates/:id/revoke", { preHandler: authHook }, async (request
       action: "certificate.revoked",
       resource: { type: "certificate", id },
       detail: { reason },
+    });
+
+    await eventBus.publish("sentinel.evidence", {
+      orgId,
+      type: "certificate_revoked",
+      eventData: { certificateId: id, reason },
+    });
+    await eventBus.publish("sentinel.notifications", {
+      id: `evt-${id}-revoked`,
+      orgId,
+      topic: "certificate.revoked",
+      payload: { certificateId: id, reason },
+      timestamp: new Date().toISOString(),
     });
 
     return { id, status: "revoked", revokedAt: now.toISOString() };
@@ -430,6 +494,18 @@ app.post("/v1/policies", { preHandler: authHook, schema: { body: policyBodySchem
   } catch (err) {
     request.log.error({ err }, "Failed to append audit log");
   }
+  await eventBus.publish("sentinel.evidence", {
+    orgId,
+    type: "policy_changed",
+    eventData: { policyId: policy.id, changeType: "created", name: policy.name, version: policy.version },
+  });
+  await eventBus.publish("sentinel.notifications", {
+    id: `evt-${policy.id}-created`,
+    orgId,
+    topic: "policy.created",
+    payload: { policyId: policy.id, name: policy.name, version: policy.version },
+    timestamp: new Date().toISOString(),
+  });
   reply.code(201).send(policy);
 });
 
@@ -472,6 +548,18 @@ app.put("/v1/policies/:id", { preHandler: authHook, schema: { body: policyBodySc
     } catch (err) {
       request.log.error({ err }, "Failed to append audit log");
     }
+    await eventBus.publish("sentinel.evidence", {
+      orgId,
+      type: "policy_changed",
+      eventData: { policyId: id, changeType: "updated", name: updated.name, version: updated.version },
+    });
+    await eventBus.publish("sentinel.notifications", {
+      id: `evt-${id}-updated`,
+      orgId,
+      topic: "policy.updated",
+      payload: { policyId: id, name: updated.name, version: updated.version },
+      timestamp: new Date().toISOString(),
+    });
     return updated;
   });
 });
@@ -514,6 +602,18 @@ app.delete("/v1/policies/:id", { preHandler: authHook }, async (request, reply) 
     } catch (err) {
       request.log.error({ err }, "Failed to append audit log");
     }
+    await eventBus.publish("sentinel.evidence", {
+      orgId,
+      type: "policy_changed",
+      eventData: { policyId: id, changeType: "deleted", name: existing.name },
+    });
+    await eventBus.publish("sentinel.notifications", {
+      id: `evt-${id}-deleted`,
+      orgId,
+      topic: "policy.deleted",
+      payload: { policyId: id, name: existing.name },
+      timestamp: new Date().toISOString(),
+    });
     reply.code(204).send();
   });
 });
@@ -555,11 +655,309 @@ app.get("/v1/admin/dlq", { preHandler: authHook }, async () => {
   return { depth, messages };
 });
 
+// --- Compliance ---
+
+app.get("/v1/compliance/frameworks", { preHandler: authHook }, async (request) => {
+  const orgId = (request as any).orgId ?? "default";
+  const custom = await withTenant(db, orgId, async (tx) => {
+    return tx.complianceFramework.findMany({ where: { orgId }, include: { controls: true } });
+  });
+  const builtIn = BUILT_IN_FRAMEWORKS.map((f) => ({ ...f, id: f.slug, orgId: null, createdAt: null }));
+  return [...builtIn, ...custom];
+});
+
+app.get("/v1/compliance/frameworks/:id", { preHandler: authHook }, async (request, reply) => {
+  const { id } = request.params as { id: string };
+  const builtIn = FRAMEWORK_MAP.get(id);
+  if (builtIn) return { ...builtIn, id: builtIn.slug, orgId: null };
+  const orgId = (request as any).orgId ?? "default";
+  const custom = await withTenant(db, orgId, async (tx) => {
+    return tx.complianceFramework.findUnique({ where: { id }, include: { controls: true } });
+  });
+  if (!custom) { reply.code(404).send({ error: "Framework not found" }); return; }
+  return custom;
+});
+
+app.post("/v1/compliance/frameworks", { preHandler: authHook }, async (request, reply) => {
+  const orgId = (request as any).orgId ?? "default";
+  const { slug, name, version, controls } = request.body as any;
+  if (FRAMEWORK_MAP.has(slug)) { reply.code(409).send({ error: "Cannot create framework with built-in slug" }); return; }
+  const framework = await db.complianceFramework.create({
+    data: { orgId, slug, name, version, controls: { create: controls } },
+    include: { controls: true },
+  });
+  reply.code(201).send(framework);
+});
+
+app.put("/v1/compliance/frameworks/:id", { preHandler: authHook }, async (request, reply) => {
+  const { id } = request.params as { id: string };
+  const fw = await db.complianceFramework.findUnique({ where: { id } });
+  if (!fw) { reply.code(404).send({ error: "Framework not found" }); return; }
+  if (!fw.orgId) { reply.code(403).send({ error: "Cannot modify built-in framework" }); return; }
+  const { name, version } = request.body as any;
+  const updated = await db.complianceFramework.update({ where: { id }, data: { name, version } });
+  return updated;
+});
+
+app.delete("/v1/compliance/frameworks/:id", { preHandler: authHook }, async (request, reply) => {
+  const { id } = request.params as { id: string };
+  const fw = await db.complianceFramework.findUnique({ where: { id } });
+  if (!fw) { reply.code(404).send({ error: "Framework not found" }); return; }
+  if (!fw.orgId) { reply.code(403).send({ error: "Cannot delete built-in framework" }); return; }
+  await db.complianceFramework.delete({ where: { id } });
+  reply.code(204).send();
+});
+
+app.post("/v1/compliance/controls/:id/override", { preHandler: authHook }, async (request, reply) => {
+  const orgId = (request as any).orgId ?? "default";
+  const { id: controlId } = request.params as { id: string };
+  const { matchRules, weight, enabled } = request.body as any;
+  const override = await db.complianceControlOverride.upsert({
+    where: { orgId_controlId: { orgId, controlId } },
+    update: { matchRules, weight, enabled },
+    create: { orgId, controlId, matchRules, weight, enabled },
+  });
+  reply.code(200).send(override);
+});
+
+app.delete("/v1/compliance/controls/:id/override", { preHandler: authHook }, async (request, reply) => {
+  const orgId = (request as any).orgId ?? "default";
+  const { id: controlId } = request.params as { id: string };
+  await db.complianceControlOverride.deleteMany({ where: { orgId, controlId } });
+  reply.code(204).send();
+});
+
+app.get("/v1/compliance/assess/:frameworkId", { preHandler: authHook }, async (request, reply) => {
+  const orgId = (request as any).orgId ?? "default";
+  const { frameworkId } = request.params as { frameworkId: string };
+  const fw = FRAMEWORK_MAP.get(frameworkId);
+  if (!fw) { reply.code(404).send({ error: "Framework not found" }); return; }
+  const findings = await withTenant(db, orgId, async (tx) => {
+    return tx.finding.findMany({ where: { suppressed: false }, orderBy: { createdAt: "desc" }, take: 5000 });
+  });
+  const inputs: FindingInput[] = findings.map((f: any) => ({
+    id: f.id, agentName: f.agentName, severity: f.severity, category: f.category, suppressed: f.suppressed,
+  }));
+  const result = scoreFramework(fw.controls, inputs);
+  return { frameworkSlug: frameworkId, ...result };
+});
+
+app.get("/v1/compliance/scores", { preHandler: authHook }, async (request) => {
+  const orgId = (request as any).orgId ?? "default";
+  const assessments = await withTenant(db, orgId, async (tx) => {
+    return tx.complianceAssessment.findMany({ orderBy: { assessedAt: "desc" }, distinct: ["frameworkId"], take: 50 });
+  });
+  return assessments;
+});
+
+app.get("/v1/compliance/trends/:frameworkId", { preHandler: authHook }, async (request) => {
+  const orgId = (request as any).orgId ?? "default";
+  const { frameworkId } = request.params as { frameworkId: string };
+  const snapshots = await withTenant(db, orgId, async (tx) => {
+    return tx.complianceSnapshot.findMany({
+      where: { frameworkId },
+      orderBy: { date: "desc" },
+      take: 90,
+    });
+  });
+  return snapshots;
+});
+
+// --- Evidence ---
+app.get("/v1/evidence", { preHandler: authHook }, async (request) => {
+  const orgId = (request as any).orgId ?? "default";
+  const { limit = "50", offset = "0" } = request.query as any;
+  return withTenant(db, orgId, async (tx) => {
+    const [records, total] = await Promise.all([
+      tx.evidenceRecord.findMany({ take: Number(limit), skip: Number(offset), orderBy: { createdAt: "desc" } }),
+      tx.evidenceRecord.count(),
+    ]);
+    return { records, total, limit: Number(limit), offset: Number(offset) };
+  });
+});
+
+app.get("/v1/evidence/:id", { preHandler: authHook }, async (request, reply) => {
+  const orgId = (request as any).orgId ?? "default";
+  const { id } = request.params as { id: string };
+  const record = await withTenant(db, orgId, async (tx) => {
+    return tx.evidenceRecord.findUnique({ where: { id } });
+  });
+  if (!record) { reply.code(404).send({ error: "Evidence record not found" }); return; }
+  return record;
+});
+
+app.get("/v1/evidence/verify", { preHandler: authHook }, async (request) => {
+  const orgId = (request as any).orgId ?? "default";
+  const records = await withTenant(db, orgId, async (tx) => {
+    return tx.evidenceRecord.findMany({ orderBy: { createdAt: "asc" } });
+  });
+  const chain = records.map((r: any) => ({ data: r.data, hash: r.hash, prevHash: r.prevHash }));
+  const result = verifyEvidenceChain(chain);
+  return { ...result, totalRecords: records.length };
+});
+
+// --- Reports ---
+app.post("/v1/reports", { preHandler: authHook }, async (request, reply) => {
+  const orgId = (request as any).orgId ?? "default";
+  const { type, frameworkId, parameters } = request.body as any;
+  if (!VALID_REPORT_TYPES.includes(type)) {
+    reply.code(400).send({ error: `Invalid report type. Must be one of: ${VALID_REPORT_TYPES.join(", ")}` });
+    return;
+  }
+  const report = await db.report.create({
+    data: { orgId, type, frameworkId, parameters: parameters ?? {}, requestedBy: "api" },
+  });
+  await eventBus.publish("sentinel.reports", { reportId: report.id, orgId, type, frameworkId, parameters });
+  reply.code(202).send(report);
+});
+
+app.get("/v1/reports", { preHandler: authHook }, async (request) => {
+  const orgId = (request as any).orgId ?? "default";
+  const { limit = "50", offset = "0" } = request.query as any;
+  return withTenant(db, orgId, async (tx) => {
+    const [reports, total] = await Promise.all([
+      tx.report.findMany({ take: Number(limit), skip: Number(offset), orderBy: { createdAt: "desc" } }),
+      tx.report.count(),
+    ]);
+    return { reports, total, limit: Number(limit), offset: Number(offset) };
+  });
+});
+
+app.get("/v1/reports/:id", { preHandler: authHook }, async (request, reply) => {
+  const orgId = (request as any).orgId ?? "default";
+  const { id } = request.params as { id: string };
+  const report = await withTenant(db, orgId, async (tx) => {
+    return tx.report.findUnique({ where: { id } });
+  });
+  if (!report) { reply.code(404).send({ error: "Report not found" }); return; }
+  return report;
+});
+
+// --- Webhooks ---
+app.post("/v1/webhooks", { preHandler: authHook }, async (request, reply) => {
+  const orgId = (request as any).orgId ?? "default";
+  const role = (request as any).role ?? "unknown";
+  const result = await webhookRoutes.createEndpoint({ orgId, body: request.body as any, createdBy: role });
+  reply.code(201).send(result);
+});
+
+app.get("/v1/webhooks", { preHandler: authHook }, async (request) => {
+  const orgId = (request as any).orgId ?? "default";
+  const { limit = "50", offset = "0" } = request.query as any;
+  return webhookRoutes.listEndpoints({ orgId, limit: Number(limit), offset: Number(offset) });
+});
+
+app.get("/v1/webhooks/:id", { preHandler: authHook }, async (request, reply) => {
+  const { id } = request.params as { id: string };
+  const ep = await webhookRoutes.getEndpoint(id);
+  if (!ep) { reply.code(404).send({ error: "Webhook endpoint not found" }); return; }
+  return ep;
+});
+
+app.put("/v1/webhooks/:id", { preHandler: authHook }, async (request, reply) => {
+  const { id } = request.params as { id: string };
+  const ep = await webhookRoutes.getEndpoint(id);
+  if (!ep) { reply.code(404).send({ error: "Webhook endpoint not found" }); return; }
+  const body = request.body as Record<string, unknown>;
+  return webhookRoutes.updateEndpoint(id, body);
+});
+
+app.delete("/v1/webhooks/:id", { preHandler: authHook }, async (request, reply) => {
+  const { id } = request.params as { id: string };
+  const ep = await webhookRoutes.getEndpoint(id);
+  if (!ep) { reply.code(404).send({ error: "Webhook endpoint not found" }); return; }
+  await webhookRoutes.deleteEndpoint(id);
+  reply.code(204).send();
+});
+
+app.get("/v1/webhooks/:id/deliveries", { preHandler: authHook }, async (request) => {
+  const { id } = request.params as { id: string };
+  const { limit = "50", offset = "0" } = request.query as any;
+  return webhookRoutes.getDeliveries({ endpointId: id, limit: Number(limit), offset: Number(offset) });
+});
+
+// --- Webhook test endpoint ---
+app.post("/v1/webhooks/:id/test", { preHandler: authHook }, async (request, reply) => {
+  const { id } = request.params as { id: string };
+  const ep = await webhookRoutes.getEndpoint(id);
+  if (!ep) { reply.code(404).send({ error: "Webhook endpoint not found" }); return; }
+  const adapter = new HttpWebhookAdapter();
+  const testEvent = {
+    id: `test-${Date.now()}`,
+    orgId: ep.orgId,
+    topic: "system.test",
+    payload: { message: "Test webhook from SENTINEL", endpointId: id },
+    timestamp: new Date().toISOString(),
+  };
+  const result = await adapter.deliver(ep, testEvent);
+  return { ...result, event: testEvent };
+});
+
+// --- Notification rules ---
+app.post("/v1/notifications/rules", { preHandler: authHook }, async (request, reply) => {
+  const orgId = (request as any).orgId ?? "default";
+  const role = (request as any).role ?? "unknown";
+  const result = await ruleRoutes.createRule({ orgId, body: request.body as any, createdBy: role });
+  reply.code(201).send(result);
+});
+
+app.get("/v1/notifications/rules", { preHandler: authHook }, async (request) => {
+  const orgId = (request as any).orgId ?? "default";
+  return ruleRoutes.listRules(orgId);
+});
+
+app.delete("/v1/notifications/rules/:id", { preHandler: authHook }, async (request, reply) => {
+  const { id } = request.params as { id: string };
+  await ruleRoutes.deleteRule(id);
+  reply.code(204).send();
+});
+
+// --- SSE Event Stream ---
+app.get("/v1/events/stream", { preHandler: authHook }, async (request, reply) => {
+  const orgId = (request as any).orgId ?? "default";
+  const { topics = "scan.*,finding.*" } = request.query as { topics?: string };
+  const topicList = topics.split(",").map((t: string) => t.trim()).filter(Boolean);
+
+  reply.raw.writeHead(200, {
+    "Content-Type": "text/event-stream",
+    "Cache-Control": "no-cache",
+    Connection: "keep-alive",
+    "X-Accel-Buffering": "no",
+  });
+
+  const clientId = randomUUID();
+  const client = {
+    id: clientId,
+    orgId,
+    topics: topicList,
+    write: (data: string) => {
+      try { reply.raw.write(data); return true; } catch { return false; }
+    },
+    close: () => {
+      try { reply.raw.end(); } catch { /* already closed */ }
+    },
+  };
+
+  sseManager.register(client);
+  sseConnectionsGauge.inc({ org_id: orgId });
+
+  const heartbeat = setInterval(() => {
+    try { reply.raw.write(": heartbeat\n\n"); } catch { clearInterval(heartbeat); }
+  }, 30_000);
+
+  request.raw.on("close", () => {
+    clearInterval(heartbeat);
+    sseManager.unregister(clientId, orgId);
+    sseConnectionsGauge.dec({ org_id: orgId });
+  });
+});
+
 // --- Graceful shutdown ---
 const shutdown = async () => {
   app.log.info("Shutting down...");
   await app.close();
   await eventBus.disconnect();
+  if (process.env.NODE_ENV !== "test") await shutdownTracing();
   await disconnectDb();
   process.exit(0);
 };
@@ -574,4 +972,16 @@ if (process.env.NODE_ENV !== "test") {
   });
 }
 
-export { app };
+// Redis pub/sub for SSE fan-out from notification-worker
+if (process.env.NODE_ENV !== "test" && typeof redis.duplicate === "function") {
+  const redisSub = redis.duplicate();
+  redisSub.subscribe("sentinel.events.fanout");
+  redisSub.on("message", (_channel: string, message: string) => {
+    try {
+      const event = JSON.parse(message);
+      sseManager.broadcast(event);
+    } catch { /* ignore malformed messages */ }
+  });
+}
+
+export { app, sseManager };

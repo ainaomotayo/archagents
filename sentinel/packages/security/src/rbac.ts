@@ -29,6 +29,38 @@ export const API_PERMISSIONS: EndpointPermission[] = [
   { method: "GET", path: "/v1/audit", roles: ["admin", "manager"] },
   { method: "GET", path: "/v1/policies/:id/versions", roles: ["admin", "manager", "developer", "viewer"] },
   { method: "GET", path: "/v1/admin/dlq", roles: ["admin"] },
+
+  // Compliance
+  { method: "GET", path: "/v1/compliance/frameworks", roles: ["admin", "manager", "developer", "viewer"] },
+  { method: "GET", path: "/v1/compliance/frameworks/:id", roles: ["admin", "manager", "developer", "viewer"] },
+  { method: "POST", path: "/v1/compliance/frameworks", roles: ["admin"] },
+  { method: "PUT", path: "/v1/compliance/frameworks/:id", roles: ["admin"] },
+  { method: "DELETE", path: "/v1/compliance/frameworks/:id", roles: ["admin"] },
+  { method: "POST", path: "/v1/compliance/controls/:id/override", roles: ["admin", "manager"] },
+  { method: "DELETE", path: "/v1/compliance/controls/:id/override", roles: ["admin", "manager"] },
+  { method: "GET", path: "/v1/compliance/assess/:frameworkId", roles: ["admin", "manager", "developer"] },
+  { method: "GET", path: "/v1/compliance/scores", roles: ["admin", "manager", "developer", "viewer"] },
+  { method: "GET", path: "/v1/compliance/trends/:frameworkId", roles: ["admin", "manager", "developer", "viewer"] },
+  { method: "GET", path: "/v1/evidence", roles: ["admin", "manager"] },
+  { method: "GET", path: "/v1/evidence/:id", roles: ["admin", "manager"] },
+  { method: "GET", path: "/v1/evidence/verify", roles: ["admin"] },
+  { method: "POST", path: "/v1/reports", roles: ["admin", "manager"] },
+  { method: "GET", path: "/v1/reports", roles: ["admin", "manager"] },
+  { method: "GET", path: "/v1/reports/:id", roles: ["admin", "manager"] },
+  // Webhooks
+  { method: "POST", path: "/v1/webhooks", roles: ["admin"] },
+  { method: "GET", path: "/v1/webhooks", roles: ["admin", "manager"] },
+  { method: "GET", path: "/v1/webhooks/:id", roles: ["admin", "manager"] },
+  { method: "PUT", path: "/v1/webhooks/:id", roles: ["admin"] },
+  { method: "DELETE", path: "/v1/webhooks/:id", roles: ["admin"] },
+  { method: "POST", path: "/v1/webhooks/:id/test", roles: ["admin"] },
+  { method: "GET", path: "/v1/webhooks/:id/deliveries", roles: ["admin", "manager"] },
+  // Notification rules
+  { method: "POST", path: "/v1/notifications/rules", roles: ["admin", "manager"] },
+  { method: "GET", path: "/v1/notifications/rules", roles: ["admin", "manager"] },
+  { method: "DELETE", path: "/v1/notifications/rules/:id", roles: ["admin", "manager"] },
+  // SSE stream
+  { method: "GET", path: "/v1/events/stream", roles: ["admin", "manager", "developer", "viewer", "service"] },
 ];
 
 /** Pre-computed HashMap for O(1) authorization lookups. */

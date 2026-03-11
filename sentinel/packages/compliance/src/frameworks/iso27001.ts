@@ -1,0 +1,30 @@
+import type { FrameworkDefinition } from "../types.js";
+
+export const ISO27001: FrameworkDefinition = {
+  slug: "iso27001",
+  name: "ISO 27001:2022",
+  version: "2022",
+  category: "governance",
+  controls: [
+    { code: "A.8.8", name: "Management of Technical Vulnerabilities", weight: 3.0, matchRules: [{ category: "vulnerability/*" }] },
+    { code: "A.8.9", name: "Configuration Management", weight: 2.0, matchRules: [{ agent: "quality", category: "quality/*" }] },
+    { code: "A.8.25", name: "Secure Development Lifecycle", weight: 2.0, matchRules: [{ agent: "security" }] },
+    { code: "A.8.26", name: "Application Security Requirements", weight: 2.0, matchRules: [{ category: "vulnerability/injection*" }] },
+    { code: "A.8.28", name: "Secure Coding", weight: 3.0, matchRules: [{ severity: ["critical", "high"] }] },
+    { code: "A.5.23", name: "Information Security for Cloud Services", weight: 1.0, matchRules: [{ category: "vulnerability/cloud*" }] },
+    { code: "A.8.6", name: "Capacity Management", weight: 1.0, matchRules: [{ agent: "dependency", category: "dependency/outdated" }] },
+    { code: "A.5.1", name: "Policies for Information Security", weight: 1.0, matchRules: [{ agent: "policy" }] },
+    { code: "A.5.10", name: "Acceptable Use of Information", weight: 1.0, matchRules: [{ agent: "ip-license" }] },
+    { code: "A.7.10", name: "Storage Media", weight: 1.0, matchRules: [{ category: "vulnerability/exposure*" }] },
+    { code: "A.8.3", name: "Information Access Restriction", weight: 2.0, matchRules: [{ category: "vulnerability/auth*" }] },
+    { code: "A.8.4", name: "Access to Source Code", weight: 2.0, matchRules: [{ agent: "security", category: "vulnerability/supply-chain*" }] },
+    { code: "A.8.5", name: "Secure Authentication", weight: 3.0, matchRules: [{ category: "vulnerability/auth*", severity: ["critical", "high"] }] },
+    { code: "A.8.7", name: "Protection Against Malware", weight: 2.0, matchRules: [{ agent: "dependency", severity: ["critical", "high"] }] },
+    { code: "A.8.10", name: "Information Deletion", weight: 1.0, matchRules: [{ category: "vulnerability/exposure*" }] },
+    { code: "A.8.11", name: "Data Masking", weight: 2.0, matchRules: [{ category: "vulnerability/crypto*" }] },
+    { code: "A.8.12", name: "Data Leakage Prevention", weight: 3.0, matchRules: [{ category: "vulnerability/exposure*", severity: ["critical", "high"] }] },
+    { code: "A.8.24", name: "Use of Cryptography", weight: 2.0, matchRules: [{ category: "vulnerability/crypto*" }] },
+    { code: "A.8.27", name: "Secure System Architecture", weight: 2.0, matchRules: [{ severity: ["critical", "high", "medium"] }] },
+    { code: "A.8.29", name: "Security Testing in Development", weight: 2.0, matchRules: [{ agent: "quality", category: "quality/review*" }] },
+  ],
+};

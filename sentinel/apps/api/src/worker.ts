@@ -8,10 +8,16 @@ import {
   agentResultsTotal,
   pendingScansGauge,
   scanDuration,
+  initTracing,
+  shutdownTracing,
 } from "@sentinel/telemetry";
 import { isArchiveEnabled, archiveToS3, getArchiveConfig } from "@sentinel/security";
 import http from "node:http";
 import { createAssessmentStore } from "./stores.js";
+
+if (process.env.OTEL_EXPORTER_OTLP_ENDPOINT) {
+  initTracing({ serviceName: "sentinel-worker" });
+}
 
 const logger = createLogger({ name: "sentinel-worker" });
 
@@ -118,6 +124,71 @@ async function finalizeScan(scanId: string, hasTimeouts: boolean) {
       certificateId: assessment.certificate?.id,
     });
 
+    // Publish evidence events for compliance audit trail
+    await eventBus.publish("sentinel.evidence", {
+      orgId: scan.orgId,
+      type: "scan_completed",
+      scanId,
+      eventData: {
+        status: assessment.status,
+        riskScore: assessment.riskScore,
+        findingsCount: pending.findings.reduce(
+          (sum, f) => sum + (Array.isArray(f.findings) ? f.findings.length : 0),
+          0,
+        ),
+      },
+    });
+
+    if (assessment.certificate) {
+      await eventBus.publish("sentinel.evidence", {
+        orgId: scan.orgId,
+        type: "certificate_issued",
+        scanId,
+        eventData: {
+          certificateId: assessment.certificate.id,
+          status: assessment.certificate.verdict?.status ?? assessment.status,
+        },
+      });
+      await eventBus.publish("sentinel.notifications", {
+        id: `evt-${assessment.certificate.id}-issued`,
+        orgId: scan.orgId,
+        topic: "certificate.issued",
+        payload: { certificateId: assessment.certificate.id, scanId, verdict: assessment.status, riskScore: assessment.riskScore },
+        timestamp: new Date().toISOString(),
+      });
+    }
+
+    const allFindings = pending.findings.flatMap((f) => Array.isArray(f.findings) ? f.findings : []);
+
+    await eventBus.publish("sentinel.notifications", {
+      id: `evt-${scanId}-completed`,
+      orgId: scan.orgId,
+      topic: "scan.completed",
+      payload: { scanId, riskScore: assessment.riskScore, verdict: assessment.status, findingCount: allFindings.length },
+      timestamp: new Date().toISOString(),
+    });
+
+    for (const finding of allFindings) {
+      await eventBus.publish("sentinel.notifications", {
+        id: `evt-${finding.id}-created`,
+        orgId: scan.orgId,
+        topic: "finding.created",
+        payload: { findingId: finding.id, severity: finding.severity, category: finding.category, agentName: finding.agentName, file: finding.file },
+        timestamp: new Date().toISOString(),
+      });
+    }
+
+    // After processing findings, notify for critical ones
+    for (const finding of allFindings.filter((f: any) => f.severity === "critical")) {
+      await eventBus.publish("sentinel.notifications", {
+        id: `evt-${finding.id}-critical`,
+        orgId: scan.orgId,
+        topic: "finding.critical",
+        payload: { findingId: finding.id, severity: "critical", category: finding.category, agentName: finding.agentName, file: finding.file },
+        timestamp: new Date().toISOString(),
+      });
+    }
+
     const durationSec = (performance.now() - pending.startedAt) / 1000;
     scanDuration.observe({ status: assessment.status }, durationSec);
 
@@ -127,6 +198,13 @@ async function finalizeScan(scanId: string, hasTimeouts: boolean) {
     await db.scan.update({
       where: { id: scanId },
       data: { status: "failed", completedAt: new Date() },
+    });
+    await eventBus.publish("sentinel.notifications", {
+      id: `evt-${scanId}-failed`,
+      orgId: scan.orgId,
+      topic: "scan.failed",
+      payload: { scanId, error: String(err) },
+      timestamp: new Date().toISOString(),
     });
   }
 }
@@ -153,6 +231,7 @@ const shutdown = async () => {
     await finalizeScan(scanId, true);
   }
   await eventBus.disconnect();
+  await shutdownTracing();
   await disconnectDb();
   process.exit(0);
 };

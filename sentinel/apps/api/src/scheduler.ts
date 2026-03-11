@@ -5,6 +5,7 @@ import { EventBus } from "@sentinel/events";
 import { SELF_SCAN_CONFIG, validateSelfScanConfig, runRetentionCleanup, DEFAULT_RETENTION_DAYS } from "@sentinel/security";
 import { getDb } from "@sentinel/db";
 import { createLogger } from "@sentinel/telemetry";
+import { BUILT_IN_FRAMEWORKS, scoreFramework, verifyEvidenceChain, type FindingInput } from "@sentinel/compliance";
 import { CronExpressionParser } from "cron-parser";
 
 const logger = createLogger({ name: "sentinel-scheduler" });
@@ -20,6 +21,14 @@ export interface SchedulerConfig {
 }
 
 export const RETENTION_SCHEDULE = "0 4 * * *";
+export const COMPLIANCE_SNAPSHOT_SCHEDULE = "0 5 * * *";
+export const HEALTH_CHECK_SCHEDULE = "*/5 * * * *";
+
+const SERVICE_HEALTH_ENDPOINTS = [
+  { name: "assessor-worker", url: `http://localhost:${process.env.WORKER_HEALTH_PORT ?? "9092"}/health` },
+  { name: "report-worker", url: `http://localhost:${process.env.REPORT_WORKER_PORT ?? "9094"}/health` },
+  { name: "notification-worker", url: `http://localhost:${process.env.NOTIFICATION_WORKER_PORT ?? "9095"}/health` },
+];
 
 export function buildSchedulerConfig(): SchedulerConfig {
   const enabled = process.env.SELF_SCAN_ENABLED !== "false";
@@ -143,6 +152,138 @@ export function createHealthServer(metrics: SchedulerMetrics, port: number): htt
   return server;
 }
 
+async function generateComplianceSnapshots(db: any, eventBus?: EventBus) {
+  const orgs = await db.organization.findMany({ select: { id: true } });
+  const today = new Date();
+  today.setUTCHours(0, 0, 0, 0);
+  let generated = 0;
+
+  for (const org of orgs) {
+    const findings = await db.finding.findMany({
+      where: { orgId: org.id, suppressed: false },
+      orderBy: { createdAt: "desc" },
+      take: 5000,
+    });
+    const inputs: FindingInput[] = findings.map((f: any) => ({
+      id: f.id, agentName: f.agentName, severity: f.severity, category: f.category, suppressed: f.suppressed,
+    }));
+
+    for (const fw of BUILT_IN_FRAMEWORKS) {
+      const result = scoreFramework(fw.controls, inputs);
+      await db.complianceSnapshot.upsert({
+        where: { orgId_frameworkId_date: { orgId: org.id, frameworkId: fw.slug, date: today } },
+        update: { score: result.score, controlBreakdown: result.controlScores },
+        create: { orgId: org.id, frameworkId: fw.slug, date: today, score: result.score, controlBreakdown: result.controlScores },
+      });
+      await db.complianceAssessment.create({
+        data: { orgId: org.id, frameworkId: fw.slug, score: result.score, verdict: result.verdict, controlScores: result.controlScores },
+      });
+      if (eventBus) {
+        await eventBus.publish("sentinel.evidence", {
+          orgId: org.id,
+          type: "compliance_assessed",
+          eventData: { frameworkSlug: fw.slug, score: result.score, verdict: result.verdict },
+        });
+        await eventBus.publish("sentinel.notifications", {
+          id: `evt-${org.id}-${fw.slug}-assessed`,
+          orgId: org.id,
+          topic: "compliance.assessed",
+          payload: { frameworkSlug: fw.slug, score: result.score, verdict: result.verdict },
+          timestamp: new Date().toISOString(),
+        });
+        // Check for compliance degradation
+        const prevSnapshot = await db.complianceSnapshot.findFirst({
+          where: { orgId: org.id, frameworkId: fw.slug, date: { lt: today } },
+          orderBy: { date: "desc" },
+        });
+        if (prevSnapshot && result.score < prevSnapshot.score) {
+          await eventBus.publish("sentinel.notifications", {
+            id: `evt-${org.id}-${fw.slug}-degraded`,
+            orgId: org.id,
+            topic: "compliance.degraded",
+            payload: { frameworkSlug: fw.slug, previousScore: prevSnapshot.score, newScore: result.score },
+            timestamp: new Date().toISOString(),
+          });
+        }
+      }
+      generated++;
+    }
+  }
+  logger.info({ generated }, "Compliance snapshots generated");
+}
+
+async function refreshComplianceTrends(db: any) {
+  try {
+    await db.$executeRawUnsafe("REFRESH MATERIALIZED VIEW CONCURRENTLY compliance_trends");
+    logger.info("Compliance trends materialized view refreshed");
+  } catch (err) {
+    // View may not exist yet (first deploy before migration runs)
+    logger.warn({ err }, "Failed to refresh compliance_trends view — may not exist yet");
+  }
+}
+
+async function verifyEvidenceChains(db: any, eventBus?: EventBus) {
+  const orgs = await db.organization.findMany({ select: { id: true } });
+  let checked = 0;
+  let failures = 0;
+
+  for (const org of orgs) {
+    const records = await db.evidenceRecord.findMany({
+      where: { orgId: org.id },
+      orderBy: { createdAt: "asc" },
+    });
+    if (records.length === 0) continue;
+
+    const chain = records.map((r: any) => ({ data: r.data, hash: r.hash, prevHash: r.prevHash }));
+    const result = verifyEvidenceChain(chain);
+    checked++;
+    if (!result.valid) {
+      failures++;
+      logger.error({ orgId: org.id, brokenAt: result.brokenAt }, "Evidence chain integrity failure detected");
+      if (eventBus) {
+        await eventBus.publish("sentinel.notifications", {
+          id: `evt-${org.id}-chain-broken`,
+          orgId: org.id,
+          topic: "evidence.chain_broken",
+          payload: { orgId: org.id, brokenAtIndex: result.brokenAt },
+          timestamp: new Date().toISOString(),
+        });
+      }
+    }
+  }
+  logger.info({ checked, failures }, "Evidence chain integrity check completed");
+}
+
+export async function checkServiceHealth(eventBus: EventBus) {
+  for (const svc of SERVICE_HEALTH_ENDPOINTS) {
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 5000);
+      const res = await fetch(svc.url, { signal: controller.signal });
+      clearTimeout(timeout);
+      if (!res.ok) {
+        logger.warn({ service: svc.name, status: res.status }, "Service health check returned non-OK");
+        await eventBus.publish("sentinel.notifications", {
+          id: `evt-health-${svc.name}-${Date.now()}`,
+          orgId: "system",
+          topic: "system.health_degraded",
+          payload: { service: svc.name, status: res.status, reason: "non-ok response" },
+          timestamp: new Date().toISOString(),
+        });
+      }
+    } catch (err) {
+      logger.warn({ service: svc.name, err }, "Service health check failed");
+      await eventBus.publish("sentinel.notifications", {
+        id: `evt-health-${svc.name}-${Date.now()}`,
+        orgId: "system",
+        topic: "system.health_degraded",
+        payload: { service: svc.name, reason: String(err) },
+        timestamp: new Date().toISOString(),
+      });
+    }
+  }
+}
+
 // --- Main entrypoint (when run as standalone process) ---
 if (process.env.NODE_ENV !== "test") {
   const config = buildSchedulerConfig();
@@ -208,6 +349,53 @@ if (process.env.NODE_ENV !== "test") {
       logger.error({ err }, "Data retention cleanup failed");
     }
   });
+
+  // Compliance snapshot generation — daily at 5 AM
+  cron.schedule(COMPLIANCE_SNAPSHOT_SCHEDULE, async () => {
+    logger.info("Running daily compliance snapshot generation...");
+    try {
+      const db = getDb();
+      await generateComplianceSnapshots(db, eventBus);
+    } catch (err) {
+      logger.error({ err }, "Compliance snapshot generation failed");
+    }
+  });
+  logger.info({ schedule: COMPLIANCE_SNAPSHOT_SCHEDULE }, "Compliance snapshot cron registered");
+
+  // Refresh compliance trends materialized view at 05:05 UTC (after snapshots at 05:00)
+  cron.schedule("5 5 * * *", async () => {
+    logger.info("Refreshing compliance trends materialized view...");
+    try {
+      await refreshComplianceTrends(getDb());
+    } catch (err) {
+      logger.error({ err }, "Compliance trends refresh failed");
+    }
+  });
+  logger.info("Compliance trends view refresh cron registered (05:05 UTC daily)");
+
+  // Evidence chain integrity check at 05:30 UTC daily
+  cron.schedule("30 5 * * *", async () => {
+    logger.info("Running daily evidence chain integrity check...");
+    try {
+      await verifyEvidenceChains(getDb(), eventBus);
+    } catch (err) {
+      logger.error({ err }, "Evidence chain integrity check failed");
+    }
+  });
+  logger.info("Evidence chain integrity check cron registered (05:30 UTC daily)");
+
+  // Service health checks — every 5 minutes
+  metrics.registerSchedule("health_check", HEALTH_CHECK_SCHEDULE);
+  cron.schedule(HEALTH_CHECK_SCHEDULE, async () => {
+    try {
+      await checkServiceHealth(eventBus);
+      metrics.recordTrigger("health_check");
+    } catch (err) {
+      metrics.recordError("health_check");
+      logger.error({ err }, "Service health check failed");
+    }
+  });
+  logger.info({ schedule: HEALTH_CHECK_SCHEDULE }, "Service health check cron registered");
 
   const shutdown = async () => {
     logger.info("Scheduler shutting down...");
