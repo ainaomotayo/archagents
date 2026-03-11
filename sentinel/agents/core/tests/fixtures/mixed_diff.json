@@ -1,0 +1,57 @@
+{
+  "scanId": "scan-mixed-001",
+  "projectId": "proj-001",
+  "commitHash": "badf00d",
+  "branch": "feature/mixed",
+  "author": "dev@test.com",
+  "timestamp": "2026-03-11T00:00:00Z",
+  "files": [
+    {
+      "path": "api/handler.py",
+      "language": "python",
+      "hunks": [
+        {
+          "oldStart": 0,
+          "oldCount": 0,
+          "newStart": 1,
+          "newCount": 8,
+          "content": "+import os\n+\n+def handle_request(data):\n+    token = os.environ.get('API_TOKEN')\n+    if not token:\n+        raise ValueError('Missing token')\n+    result = process(data)\n+    return result"
+        }
+      ],
+      "aiScore": 0.3
+    },
+    {
+      "path": "config.js",
+      "language": "javascript",
+      "hunks": [
+        {
+          "oldStart": 0,
+          "oldCount": 0,
+          "newStart": 1,
+          "newCount": 6,
+          "content": "+const config = {\n+  port: 3000,\n+  host: 'localhost',\n+  debug: process.env.DEBUG === 'true',\n+  version: '1.0.0',\n+};"
+        }
+      ],
+      "aiScore": 0.0
+    },
+    {
+      "path": "package.json",
+      "language": "json",
+      "hunks": [
+        {
+          "oldStart": 5,
+          "oldCount": 0,
+          "newStart": 5,
+          "newCount": 2,
+          "content": "+    \"express\": \"^4.18.0\",\n+    \"lodash\": \"^4.17.21\""
+        }
+      ],
+      "aiScore": 0.0
+    }
+  ],
+  "scanConfig": {
+    "securityLevel": "standard",
+    "licensePolicy": "default",
+    "qualityThreshold": 70
+  }
+}

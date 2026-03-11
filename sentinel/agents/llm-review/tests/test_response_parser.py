@@ -6,7 +6,7 @@ import json
 
 from sentinel_agents.types import Confidence, Severity
 
-from sentinel_llm.response_parser import parse_llm_findings
+from sentinel_llm.response_parser import extract_parse_errors, parse_llm_findings
 
 
 # ---------------------------------------------------------------------------
@@ -68,6 +68,38 @@ def test_parse_license_review_type():
     findings = parse_llm_findings(response, "vendor.c", "license")
     assert len(findings) == 1
     assert findings[0].type == "license"
+
+
+def test_parse_architecture_review_type():
+    response = json.dumps([{
+        "title": "God class",
+        "severity": "medium",
+        "confidence": "medium",
+        "line_start": 1,
+        "line_end": 200,
+        "description": "Class does too much",
+        "category": "solid-violation",
+        "remediation": "Split into smaller classes",
+    }])
+    findings = parse_llm_findings(response, "service.py", "architecture")
+    assert len(findings) == 1
+    assert findings[0].type == "architecture"
+
+
+def test_parse_performance_review_type():
+    response = json.dumps([{
+        "title": "N+1 query",
+        "severity": "high",
+        "confidence": "high",
+        "line_start": 10,
+        "line_end": 15,
+        "description": "Query in loop",
+        "category": "n-plus-1",
+        "remediation": "Batch the query",
+    }])
+    findings = parse_llm_findings(response, "dao.py", "performance")
+    assert len(findings) == 1
+    assert findings[0].type == "performance"
 
 
 # ---------------------------------------------------------------------------
@@ -151,3 +183,27 @@ def test_missing_line_start_defaults_to_1():
     assert len(findings) == 1
     assert findings[0].line_start == 1
     assert findings[0].line_end == 1
+
+
+# ---------------------------------------------------------------------------
+# Structured error extraction for reflection
+# ---------------------------------------------------------------------------
+
+def test_extract_parse_errors_empty():
+    errors = extract_parse_errors("")
+    assert "empty" in errors.lower()
+
+
+def test_extract_parse_errors_not_json():
+    errors = extract_parse_errors("Sorry, I can't do that")
+    assert "not valid JSON" in errors
+
+
+def test_extract_parse_errors_json_object_not_array():
+    errors = extract_parse_errors('{"key": "value"}')
+    assert "not a list" in errors
+
+
+def test_extract_parse_errors_invalid_json_syntax():
+    errors = extract_parse_errors('[{"title": "test"')
+    assert "syntax error" in errors.lower() or "not valid JSON" in errors

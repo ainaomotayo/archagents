@@ -4,6 +4,7 @@ version = "0.1.0"
 requires-python = ">=3.12"
 dependencies = [
     "sentinel-agent-framework",
+    "sentinel-agent-core",
     "redis>=5.0",
     "requests>=2.28",
 ]

@@ -134,3 +134,123 @@ class TestRequirePatternRule:
         rule = self._make_rule(r"Copyright \d{4}")
         violations = evaluate_rule(rule, "readme.md", "no copyright here")
         assert len(violations) == 0  # Rule only applies to **/*.py
+
+
+class TestRequireReviewRule:
+    def _make_rule(self, min_approvals: int = 1) -> PolicyRule:
+        return PolicyRule(
+            name="require-review",
+            type="require-review",
+            description="Code must be reviewed",
+            severity="high",
+            files="**/*.py",
+            min_approvals=min_approvals,
+        )
+
+    def test_no_review_markers(self):
+        rule = self._make_rule()
+        violations = evaluate_rule(rule, "src/app.py", "x = 1\ny = 2")
+        assert len(violations) == 1
+
+    def test_approved_by_present(self):
+        rule = self._make_rule()
+        code = "# Approved-by: alice\nx = 1"
+        violations = evaluate_rule(rule, "src/app.py", code)
+        assert len(violations) == 0
+
+    def test_lgtm_present(self):
+        rule = self._make_rule()
+        code = "# LGTM\nx = 1"
+        violations = evaluate_rule(rule, "src/app.py", code)
+        assert len(violations) == 0
+
+    def test_insufficient_approvals(self):
+        rule = self._make_rule(min_approvals=2)
+        code = "# Approved-by: alice\nx = 1"
+        violations = evaluate_rule(rule, "src/app.py", code)
+        assert len(violations) == 1
+        assert "1" in violations[0].message and "2" in violations[0].message
+
+
+class TestEnforceFormatRule:
+    def _make_rule(self, pattern: str) -> PolicyRule:
+        return PolicyRule(
+            name="enforce-snake",
+            type="enforce-format",
+            description="Use snake_case",
+            severity="low",
+            files="**/*.py",
+            pattern=pattern,
+            format_style="snake_case",
+        )
+
+    def test_snake_case_passes(self):
+        rule = self._make_rule(r"[a-z][a-z0-9_]*")
+        code = "def get_data():\n    pass"
+        violations = evaluate_rule(rule, "src/utils.py", code)
+        assert len(violations) == 0
+
+    def test_camel_case_fails(self):
+        rule = self._make_rule(r"[a-z][a-z0-9_]*")
+        code = "def getData():\n    pass"
+        violations = evaluate_rule(rule, "src/utils.py", code)
+        assert len(violations) == 1
+        assert "getData" in violations[0].message
+
+
+class TestDependencyAllowRule:
+    def _make_rule(self, allowlist: list[str]) -> PolicyRule:
+        return PolicyRule(
+            name="dep-allowlist",
+            type="dependency-allow",
+            description="Only approved deps",
+            severity="high",
+            files="**/*.py",
+            allowlist=allowlist,
+        )
+
+    def test_allowed_import(self):
+        rule = self._make_rule(["os", "sys"])
+        violations = evaluate_rule(rule, "app.py", "import os\nimport sys")
+        assert len(violations) == 0
+
+    def test_denied_import(self):
+        rule = self._make_rule(["os"])
+        violations = evaluate_rule(rule, "app.py", "import subprocess\nimport os")
+        assert len(violations) == 1
+        assert "subprocess" in violations[0].message
+
+    def test_from_import(self):
+        rule = self._make_rule(["os"])
+        violations = evaluate_rule(rule, "app.py", "from pathlib import Path")
+        assert len(violations) == 1
+        assert "pathlib" in violations[0].message
+
+
+class TestSecretScanRule:
+    def _make_rule(self, pattern: str) -> PolicyRule:
+        return PolicyRule(
+            name="no-secrets",
+            type="secret-scan",
+            description="No hardcoded secrets",
+            severity="critical",
+            files="**/*",
+            pattern=pattern,
+        )
+
+    def test_detects_aws_key(self):
+        rule = self._make_rule(r"AKIA[0-9A-Z]{16}")
+        code = 'AWS_KEY = "AKIAIOSFODNN7EXAMPLE"'
+        violations = evaluate_rule(rule, "config.py", code)
+        assert len(violations) == 1
+
+    def test_clean_code_no_violation(self):
+        rule = self._make_rule(r"AKIA[0-9A-Z]{16}")
+        violations = evaluate_rule(rule, "config.py", "x = 1\ny = 2")
+        assert len(violations) == 0
+
+    def test_multiple_secrets(self):
+        rule = self._make_rule(r"(?i)password\s*=\s*['\"]")
+        code = 'password = "secret"\ndb_password = "hunter2"'
+        violations = evaluate_rule(rule, "config.py", code)
+        assert len(violations) == 2

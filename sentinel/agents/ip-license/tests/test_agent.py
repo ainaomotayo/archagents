@@ -59,7 +59,7 @@ def test_clean_code_no_license_findings():
 def test_agent_metadata():
     agent = LicenseAgent()
     assert agent.name == "ip-license"
-    assert agent.version == "0.1.0"
+    assert agent.version == "0.2.0"
 
 
 def test_health():

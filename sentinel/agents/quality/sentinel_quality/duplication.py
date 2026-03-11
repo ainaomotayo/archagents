@@ -1,4 +1,8 @@
-"""Duplicate code block detection within diffs."""
+"""Duplicate code block detection within diffs.
+
+Uses AST-normalized fingerprinting (via agent_core) for supported languages,
+falls back to text-based hashing for others.
+"""
 
 from __future__ import annotations
 
@@ -7,6 +11,12 @@ import re
 from dataclasses import dataclass
 
 from sentinel_agents.types import DiffFile
+
+# Languages supported by agent_core tree-sitter fingerprinting
+_AST_LANGUAGES = {
+    "python", "javascript", "typescript", "js", "ts", "jsx", "tsx",
+    "go", "rust", "java", "ruby", "c", "cpp", "cc",
+}
 
 
 @dataclass
@@ -67,6 +77,12 @@ def _hash_block(normalized_lines: list[str]) -> str:
     return hashlib.sha256(combined.encode()).hexdigest()[:16]
 
 
+def _fingerprint_block(code: str, language: str) -> str:
+    """Create an AST-normalized fingerprint for a code block."""
+    from agent_core.analysis.fingerprint import fingerprint_code
+    return fingerprint_code(code, language)[:16]
+
+
 def detect_duplicates(
     files: list[DiffFile],
     min_block_lines: int = MIN_BLOCK_LINES,
@@ -97,11 +113,22 @@ def detect_duplicates(
                 if text.strip()
             ]
 
+            # Determine if we can use AST fingerprinting
+            lang = diff_file.language.lower()
+            use_ast = lang in _AST_LANGUAGES
+
             # Sliding window
             for i in range(len(non_blank) - min_block_lines + 1):
                 window = non_blank[i : i + min_block_lines]
                 normalized = [text for _, text in window]
-                block_hash = _hash_block(normalized)
+                if use_ast:
+                    try:
+                        block_code = "\n".join(normalized)
+                        block_hash = _fingerprint_block(block_code, lang)
+                    except Exception:
+                        block_hash = _hash_block(normalized)
+                else:
+                    block_hash = _hash_block(normalized)
                 loc = DuplicateLocation(
                     file=diff_file.path,
                     line_start=window[0][0],

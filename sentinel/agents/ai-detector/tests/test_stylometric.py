@@ -1,4 +1,9 @@
-from sentinel_aidetector.stylometric import analyze_entropy, analyze_naming_uniformity
+from sentinel_aidetector.stylometric import (
+    ASTEntropy,
+    analyze_ast_entropy,
+    analyze_entropy,
+    analyze_naming_uniformity,
+)
 
 
 def test_entropy_empty_string():
@@ -65,3 +70,47 @@ TOTAL_MAX = compute_result()
 """
     uniformity = analyze_naming_uniformity(code)
     assert uniformity < 0.8
+
+
+class TestASTEntropy:
+    def test_ast_entropy_python(self):
+        code = """
+def calculate_total(items):
+    total = 0
+    for item in items:
+        if item.price > 0:
+            total += item.price
+    return total
+"""
+        result = analyze_ast_entropy(code, "python")
+        assert isinstance(result, ASTEntropy)
+        assert result.token_entropy > 0.0
+        assert result.structure_entropy > 0.0
+        assert result.combined > 0.0
+
+    def test_ast_entropy_javascript(self):
+        code = "function hello() {\n  const x = 1;\n  return x;\n}\n"
+        result = analyze_ast_entropy(code, "javascript")
+        assert result.token_entropy > 0.0
+        assert result.structure_entropy > 0.0
+
+    def test_ast_entropy_unsupported_language(self):
+        code = "some code here"
+        result = analyze_ast_entropy(code, "cobol")
+        # Falls back to token-only: all three are the same
+        assert result.token_entropy == result.structure_entropy
+        assert result.token_entropy == result.naming_entropy
+
+    def test_ast_entropy_empty(self):
+        result = analyze_ast_entropy("", "python")
+        assert result.combined == 0.0
+
+    def test_combined_is_weighted_average(self):
+        code = "def foo():\n    x = 1\n    y = 2\n    return x + y\n"
+        result = analyze_ast_entropy(code, "python")
+        expected = (
+            0.4 * result.token_entropy
+            + 0.35 * result.structure_entropy
+            + 0.25 * result.naming_entropy
+        )
+        assert abs(result.combined - expected) < 0.01

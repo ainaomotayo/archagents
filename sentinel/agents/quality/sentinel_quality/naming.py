@@ -1,10 +1,20 @@
-"""Naming consistency analysis — detects mixed naming conventions in code."""
+"""Naming consistency analysis — detects mixed naming conventions in code.
+
+Uses tree-sitter AST (via agent_core) for supported languages,
+falls back to regex extraction for others.
+"""
 
 from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
 from enum import Enum
+
+# Languages supported by agent_core tree-sitter identifier extraction
+_AST_LANGUAGES = {
+    "python", "javascript", "typescript", "js", "ts", "jsx", "tsx",
+    "go", "rust", "java", "ruby", "c", "cpp", "cc",
+}
 
 
 class NamingStyle(Enum):
@@ -92,16 +102,21 @@ def classify_style(name: str) -> NamingStyle:
     return NamingStyle.UNKNOWN
 
 
-def _extract_identifiers(code: str, language: str) -> list[str]:
-    """Extract identifier names from source code.
+def _extract_identifiers_ast(code: str, language: str) -> list[str]:
+    """Extract identifiers using tree-sitter AST via agent_core."""
+    from agent_core.analysis.treesitter import parse_code, extract_identifiers as ast_extract
 
-    Args:
-        code: Source code text.
-        language: Programming language (python, javascript, typescript, etc.).
+    # Normalize aliases
+    lang_map = {"js": "javascript", "ts": "typescript", "jsx": "javascript", "cc": "cpp"}
+    normalized = lang_map.get(language, language)
 
-    Returns:
-        List of identifier name strings.
-    """
+    root = parse_code(code, normalized)
+    idents = ast_extract(root)
+    return [i.name for i in idents if i.name not in _SKIP_NAMES]
+
+
+def _extract_identifiers_regex(code: str, language: str) -> list[str]:
+    """Regex fallback for identifier extraction."""
     lang = language.lower()
     if lang in ("python", "py"):
         pattern = _PYTHON_IDENT_RE
@@ -112,11 +127,24 @@ def _extract_identifiers(code: str, language: str) -> list[str]:
 
     identifiers: list[str] = []
     for match in pattern.finditer(code):
-        # Each group in the alternation — pick the one that matched
         for group in match.groups():
             if group and group not in _SKIP_NAMES:
                 identifiers.append(group)
     return identifiers
+
+
+def _extract_identifiers(code: str, language: str) -> list[str]:
+    """Extract identifier names from source code.
+
+    Uses tree-sitter AST for supported languages, falls back to regex.
+    """
+    lang = language.lower()
+    if lang in _AST_LANGUAGES:
+        try:
+            return _extract_identifiers_ast(code, lang)
+        except Exception:
+            pass
+    return _extract_identifiers_regex(code, lang)
 
 
 def analyze_naming_consistency(code: str, language: str) -> NamingResult:

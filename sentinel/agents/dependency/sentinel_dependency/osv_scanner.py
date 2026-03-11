@@ -265,11 +265,22 @@ def _fetch_vuln_details(vuln_id: str) -> dict | None:
     return None
 
 
-def query_osv_batch(deps: list[DependencyDeclaration]) -> list[Finding]:
+def _cache_key(dep: DependencyDeclaration) -> str:
+    """Build a cache key for a dependency's OSV results."""
+    return f"{dep.ecosystem}:{dep.package_name}:{dep.version}"
+
+
+def query_osv_batch(
+    deps: list[DependencyDeclaration],
+    cache: Any | None = None,
+) -> list[Finding]:
     """Query OSV.dev for a list of dependencies.
 
     Uses the batch API to identify which deps have vulns, then fetches
     full details for each vulnerability (batch only returns IDs).
+
+    When *cache* is provided, results are looked up / stored by
+    (ecosystem, package, version) to avoid redundant API calls.
 
     Returns a list of Findings for any known vulnerabilities.
     """
@@ -277,10 +288,28 @@ def query_osv_batch(deps: list[DependencyDeclaration]) -> list[Finding]:
         return []
 
     all_findings: list[Finding] = []
+    uncached_deps: list[DependencyDeclaration] = []
 
-    # Process in batches
-    for start in range(0, len(deps), BATCH_SIZE):
-        batch = deps[start : start + BATCH_SIZE]
+    # Check cache first
+    if cache is not None:
+        for dep in deps:
+            try:
+                cached = cache.get_sync(_cache_key(dep))
+                if cached is not None:
+                    all_findings.extend(_parse_vulns(cached, dep))
+                    continue
+            except Exception:
+                pass
+            uncached_deps.append(dep)
+    else:
+        uncached_deps = list(deps)
+
+    if not uncached_deps:
+        return all_findings
+
+    # Process uncached deps in batches
+    for start in range(0, len(uncached_deps), BATCH_SIZE):
+        batch = uncached_deps[start : start + BATCH_SIZE]
         payload = build_batch_queries(batch)
         data = _post_with_retry(OSV_BATCH_URL, payload)
 
@@ -292,6 +321,12 @@ def query_osv_batch(deps: list[DependencyDeclaration]) -> list[Finding]:
         for dep, result in zip(batch, results):
             vuln_stubs = result.get("vulns", [])
             if not vuln_stubs:
+                # Cache empty result to avoid re-querying
+                if cache is not None:
+                    try:
+                        cache.set_sync(_cache_key(dep), [], ttl_seconds=86400)
+                    except Exception:
+                        pass
                 continue
 
             # Batch API returns abbreviated results (id + modified only).
@@ -299,6 +334,11 @@ def query_osv_batch(deps: list[DependencyDeclaration]) -> list[Finding]:
             if vuln_stubs[0].get("summary") or vuln_stubs[0].get("affected"):
                 # Full details already present (may happen in future API versions)
                 all_findings.extend(_parse_vulns(vuln_stubs, dep))
+                if cache is not None:
+                    try:
+                        cache.set_sync(_cache_key(dep), vuln_stubs, ttl_seconds=86400)
+                    except Exception:
+                        pass
             else:
                 # Fetch full details for each vuln
                 full_vulns: list[dict] = []
@@ -311,6 +351,11 @@ def query_osv_batch(deps: list[DependencyDeclaration]) -> list[Finding]:
                         full_vulns.append(detail)
                 if full_vulns:
                     all_findings.extend(_parse_vulns(full_vulns, dep))
+                    if cache is not None:
+                        try:
+                            cache.set_sync(_cache_key(dep), full_vulns, ttl_seconds=86400)
+                        except Exception:
+                            pass
 
     return all_findings
 
@@ -325,13 +370,26 @@ def query_osv_single(dep: DependencyDeclaration) -> list[Finding]:
     return _parse_vulns(vulns, dep)
 
 
-def scan_dependencies(deps: list[DependencyDeclaration]) -> list[Finding]:
+def scan_dependencies(
+    deps: list[DependencyDeclaration],
+    cache: Any | None = None,
+) -> list[Finding]:
     """Main entry point: filter deps with versions and query OSV.
 
     Skips dependencies without a concrete version since OSV needs one to
     check for vulnerabilities.
+
+    Parameters
+    ----------
+    deps:
+        Parsed dependency declarations.
+    cache:
+        Optional ``agent_core.cache.RedisCache`` instance for caching OSV
+        responses.  When provided, results are cached by (package, version,
+        ecosystem) to avoid redundant API calls.
     """
     with_version = [d for d in deps if d.version]
     if not with_version:
         return []
-    return query_osv_batch(with_version)
+    return query_osv_batch(with_version, cache=cache)
+

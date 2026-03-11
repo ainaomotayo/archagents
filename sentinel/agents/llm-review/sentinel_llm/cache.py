@@ -2,6 +2,8 @@
 
 Caches LLM results keyed by a SHA-256 content hash with a configurable
 TTL (default 30 days) so repeated reviews of identical code are instant.
+
+Supports ``agent_core.cache.RedisCache`` as backend when available.
 """
 
 from __future__ import annotations
@@ -21,10 +23,26 @@ _KEY_PREFIX = "sentinel:llm-review:cache:"
 
 
 class ReviewCache:
-    """Async Redis-backed cache for LLM review results."""
+    """Async Redis-backed cache for LLM review results.
 
-    def __init__(self, redis_client: Any) -> None:
+    Can be initialised with either:
+    - A raw Redis client (``redis_client``)
+    - An ``agent_core.cache.RedisCache`` instance (``core_cache``)
+    """
+
+    def __init__(
+        self,
+        redis_client: Any = None,
+        *,
+        core_cache: Any = None,
+    ) -> None:
         self._redis = redis_client
+        self._core_cache = core_cache
+
+    @classmethod
+    def from_core_cache(cls, core_cache: Any) -> ReviewCache:
+        """Create a ReviewCache backed by ``agent_core.cache.RedisCache``."""
+        return cls(core_cache=core_cache)
 
     # ------------------------------------------------------------------
     # Public API
@@ -32,6 +50,18 @@ class ReviewCache:
 
     async def get(self, content_hash: str) -> list[Finding] | None:
         """Return cached findings for *content_hash*, or ``None`` on miss."""
+        # Try agent_core cache first
+        if self._core_cache is not None:
+            try:
+                data = await self._core_cache.get(content_hash)
+                if data is None:
+                    return None
+                return [_finding_from_dict(d) for d in data]
+            except Exception:
+                logger.warning("Core cache GET failed", exc_info=True)
+                return None
+
+        # Fallback to raw Redis
         key = f"{_KEY_PREFIX}{content_hash}"
         try:
             raw = await self._redis.get(key)
@@ -56,11 +86,22 @@ class ReviewCache:
         ttl_days: int = _DEFAULT_TTL_DAYS,
     ) -> None:
         """Store *findings* under *content_hash* with the given TTL."""
-        key = f"{_KEY_PREFIX}{content_hash}"
         ttl_seconds = ttl_days * _SECONDS_PER_DAY
-        payload = json.dumps([_finding_to_dict(f) for f in findings])
+        payload = [_finding_to_dict(f) for f in findings]
+
+        # Try agent_core cache first
+        if self._core_cache is not None:
+            try:
+                await self._core_cache.set(content_hash, payload, ttl_seconds=ttl_seconds)
+                return
+            except Exception:
+                logger.warning("Core cache SET failed", exc_info=True)
+                return
+
+        # Fallback to raw Redis
+        key = f"{_KEY_PREFIX}{content_hash}"
         try:
-            await self._redis.set(key, payload, ex=ttl_seconds)
+            await self._redis.set(key, json.dumps(payload), ex=ttl_seconds)
         except Exception:
             logger.warning("Redis SET failed for %s", key, exc_info=True)
 
