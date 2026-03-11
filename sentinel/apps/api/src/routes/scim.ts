@@ -71,6 +71,44 @@ export function applyScimPatchOps(operations: any[]): { name?: string; externalI
   return result;
 }
 
+export function buildScimGroupResource(
+  id: string,
+  displayName: string,
+  members: Array<{ value: string; display?: string }>,
+) {
+  return {
+    schemas: ["urn:ietf:params:scim:schemas:core:2.0:Group"],
+    id,
+    displayName,
+    members,
+    meta: { resourceType: "Group" },
+  };
+}
+
+export function parseGroupPatchOps(operations: any[]): {
+  addMembers: string[];
+  removeMembers: string[];
+  displayName?: string;
+} {
+  const addMembers: string[] = [];
+  const removeMembers: string[] = [];
+  let displayName: string | undefined;
+
+  for (const op of operations) {
+    const opType = (op.op ?? "").toLowerCase();
+    if (opType === "add" && op.path === "members" && Array.isArray(op.value)) {
+      addMembers.push(...op.value.map((m: any) => m.value));
+    } else if (opType === "remove" && typeof op.path === "string" && op.path.startsWith("members")) {
+      const match = op.path.match(/members\[value\s+eq\s+"([^"]+)"\]/);
+      if (match) removeMembers.push(match[1]);
+    } else if (opType === "replace" && op.path === "displayName") {
+      displayName = op.value;
+    }
+  }
+
+  return { addMembers, removeMembers, displayName };
+}
+
 export const SCIM_USER_SCHEMA = {
   id: "urn:ietf:params:scim:schemas:core:2.0:User",
   name: "User",
@@ -139,13 +177,19 @@ export function registerScimRoutes(app: FastifyInstance) {
   app.get("/v1/scim/v2/ResourceTypes", async (_request: FastifyRequest, reply: FastifyReply) => {
     return reply.send({
       schemas: ["urn:ietf:params:scim:api:messages:2.0:ListResponse"],
-      totalResults: 1,
+      totalResults: 2,
       Resources: [{
         schemas: ["urn:ietf:params:scim:schemas:core:2.0:ResourceType"],
         id: "User",
         name: "User",
         endpoint: "/v1/scim/v2/Users",
         schema: "urn:ietf:params:scim:schemas:core:2.0:User",
+      }, {
+        schemas: ["urn:ietf:params:scim:schemas:core:2.0:ResourceType"],
+        id: "Group",
+        name: "Group",
+        endpoint: "/v1/scim/v2/Groups",
+        schema: "urn:ietf:params:scim:schemas:core:2.0:Group",
       }],
     });
   });
@@ -307,6 +351,135 @@ export function registerScimRoutes(app: FastifyInstance) {
     const userId = (request.params as any).id;
     const orgId = (request as any).orgId;
     await db.orgMembership.deleteMany({ where: { orgId, userId } });
+    return reply.status(204).send();
+  });
+
+  // ── SCIM Groups endpoints ──────────────────────────────────────────
+
+  // GET /v1/scim/v2/Groups — list groups (each distinct role = a group)
+  app.get("/v1/scim/v2/Groups", { preHandler: scimAuth }, async (request: FastifyRequest, reply: FastifyReply) => {
+    const { getDb } = await import("@sentinel/db");
+    const db = getDb();
+    const orgId = (request as any).orgId;
+    const query = request.query as Record<string, string | undefined>;
+    const { startIndex, skip, take } = parseScimListParams(query);
+
+    const memberships = await db.orgMembership.findMany({ where: { orgId }, include: { user: true } });
+
+    // Group memberships by role
+    const roleMap = new Map<string, Array<{ value: string; display?: string }>>();
+    for (const m of memberships) {
+      if (!roleMap.has(m.role)) roleMap.set(m.role, []);
+      roleMap.get(m.role)!.push({ value: m.userId, display: (m as any).user?.email });
+    }
+
+    const allRoles = Array.from(roleMap.keys()).sort();
+    const totalResults = allRoles.length;
+    const pagedRoles = allRoles.slice(skip, skip + take);
+
+    return reply.send({
+      schemas: ["urn:ietf:params:scim:api:messages:2.0:ListResponse"],
+      totalResults,
+      startIndex,
+      itemsPerPage: pagedRoles.length,
+      Resources: pagedRoles.map((role) =>
+        buildScimGroupResource(role, role, roleMap.get(role) ?? []),
+      ),
+    });
+  });
+
+  // GET /v1/scim/v2/Groups/:id — get single group by role name
+  app.get("/v1/scim/v2/Groups/:id", { preHandler: scimAuth }, async (request: FastifyRequest, reply: FastifyReply) => {
+    const { getDb } = await import("@sentinel/db");
+    const db = getDb();
+    const orgId = (request as any).orgId;
+    const role = (request.params as any).id;
+
+    const memberships = await db.orgMembership.findMany({
+      where: { orgId, role },
+      include: { user: true },
+    });
+
+    if (memberships.length === 0) {
+      return reply.status(404).send({
+        schemas: ["urn:ietf:params:scim:api:messages:2.0:Error"],
+        detail: "Group not found",
+        status: "404",
+      });
+    }
+
+    const members = memberships.map((m: any) => ({ value: m.userId, display: m.user?.email }));
+    return reply.send(buildScimGroupResource(role, role, members));
+  });
+
+  // PATCH /v1/scim/v2/Groups/:id — add/remove members via SCIM PatchOp
+  app.patch("/v1/scim/v2/Groups/:id", { preHandler: scimAuth }, async (request: FastifyRequest, reply: FastifyReply) => {
+    const { getDb } = await import("@sentinel/db");
+    const db = getDb();
+    const orgId = (request as any).orgId;
+    const role = (request.params as any).id;
+    const ops = ((request.body as any).Operations ?? []) as any[];
+    const { addMembers, removeMembers } = parseGroupPatchOps(ops);
+
+    // Remove members from this role
+    for (const userId of removeMembers) {
+      await db.orgMembership.deleteMany({ where: { orgId, userId, role } });
+    }
+
+    // Add members to this role
+    for (const userId of addMembers) {
+      await db.orgMembership.upsert({
+        where: { orgId_userId: { orgId, userId } },
+        create: { orgId, userId, role, source: "scim" },
+        update: { role, source: "scim" },
+      });
+    }
+
+    // Return updated group
+    const memberships = await db.orgMembership.findMany({
+      where: { orgId, role },
+      include: { user: true },
+    });
+    const members = memberships.map((m: any) => ({ value: m.userId, display: m.user?.email }));
+    return reply.send(buildScimGroupResource(role, role, members));
+  });
+
+  // PUT /v1/scim/v2/Groups/:id — full replace
+  app.put("/v1/scim/v2/Groups/:id", { preHandler: scimAuth }, async (request: FastifyRequest, reply: FastifyReply) => {
+    const { getDb } = await import("@sentinel/db");
+    const db = getDb();
+    const orgId = (request as any).orgId;
+    const role = (request.params as any).id;
+    const body = request.body as any;
+    const newMembers: Array<{ value: string }> = body.members ?? [];
+
+    // Delete all existing memberships for this role
+    await db.orgMembership.deleteMany({ where: { orgId, role } });
+
+    // Create new memberships
+    for (const member of newMembers) {
+      await db.orgMembership.upsert({
+        where: { orgId_userId: { orgId, userId: member.value } },
+        create: { orgId, userId: member.value, role, source: "scim" },
+        update: { role, source: "scim" },
+      });
+    }
+
+    const memberships = await db.orgMembership.findMany({
+      where: { orgId, role },
+      include: { user: true },
+    });
+    const members = memberships.map((m: any) => ({ value: m.userId, display: m.user?.email }));
+    return reply.send(buildScimGroupResource(role, role, members));
+  });
+
+  // DELETE /v1/scim/v2/Groups/:id — delete all memberships for this role
+  app.delete("/v1/scim/v2/Groups/:id", { preHandler: scimAuth }, async (request: FastifyRequest, reply: FastifyReply) => {
+    const { getDb } = await import("@sentinel/db");
+    const db = getDb();
+    const orgId = (request as any).orgId;
+    const role = (request.params as any).id;
+    await db.orgMembership.deleteMany({ where: { orgId, role } });
     return reply.status(204).send();
   });
 }
