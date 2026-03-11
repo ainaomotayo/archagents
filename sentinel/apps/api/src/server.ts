@@ -199,11 +199,12 @@ app.get("/v1/scans/:id/poll", { preHandler: authHook }, async (request, reply) =
 // --- Findings ---
 app.get("/v1/findings", { preHandler: authHook }, async (request) => {
   const orgId = (request as any).orgId ?? "default";
-  const { limit = "50", offset = "0", severity, category } = request.query as any;
+  const { limit = "50", offset = "0", severity, category, scanId } = request.query as any;
   return withTenant(db, orgId, async (tx) => {
     const where: any = {};
     if (severity) where.severity = severity;
     if (category) where.category = category;
+    if (scanId) where.scanId = scanId;
     const [findings, total] = await Promise.all([
       tx.finding.findMany({
         where,
@@ -279,16 +280,19 @@ app.patch("/v1/findings/:id", { preHandler: authHook }, async (request, reply) =
 // --- Certificates ---
 app.get("/v1/certificates", { preHandler: authHook }, async (request) => {
   const orgId = (request as any).orgId ?? "default";
-  const { limit = "50", offset = "0" } = request.query as any;
+  const { limit = "50", offset = "0", scanId } = request.query as any;
   return withTenant(db, orgId, async (tx) => {
+    const where: any = {};
+    if (scanId) where.scanId = scanId;
     const [certificates, total] = await Promise.all([
       tx.certificate.findMany({
+        where,
         take: Number(limit),
         skip: Number(offset),
         orderBy: { issuedAt: "desc" },
         include: { scan: { select: { commitHash: true, branch: true } } },
       }),
-      tx.certificate.count(),
+      tx.certificate.count({ where }),
     ]);
     return { certificates, total, limit: Number(limit), offset: Number(offset) };
   });

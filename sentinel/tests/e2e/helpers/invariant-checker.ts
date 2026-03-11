@@ -34,11 +34,14 @@ const invariants: Invariant[] = [
     detail: state.scan.status === "completed" && !state.certificate ? "Scan completed but no certificate" : undefined,
   }),
   // 3. Certificate risk score is non-negative
-  (state) => ({
-    name: "certificate_risk_score_valid",
-    passed: state.certificate == null || (state.certificate.riskScore >= 0 && state.certificate.riskScore <= 100),
-    detail: state.certificate ? `riskScore=${state.certificate.riskScore}` : undefined,
-  }),
+  (state) => {
+    const score = state.certificate?.verdict?.riskScore ?? null;
+    return {
+      name: "certificate_risk_score_valid",
+      passed: state.certificate == null || (score != null && score >= 0 && score <= 100),
+      detail: state.certificate ? `riskScore=${score}` : undefined,
+    };
+  },
   // 4. No findings have empty agentName
   (state) => {
     const bad = state.findings.filter((f) => !f.agentName);
