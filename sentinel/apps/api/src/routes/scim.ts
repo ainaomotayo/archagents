@@ -46,6 +46,46 @@ export function parseScimFilter(filter: string | undefined): { field: string; va
   return field ? { field, value: match[2] } : null;
 }
 
+export function applyScimPatchOps(operations: any[]): { name?: string; externalId?: string; deactivate?: boolean } {
+  const parts: { givenName?: string; familyName?: string; externalId?: string; deactivate?: boolean } = {};
+  for (const op of operations) {
+    const opType = (op.op ?? "").toLowerCase();
+    if (opType === "replace") {
+      if (op.path === "active" && (op.value === false || op.value === "false")) {
+        parts.deactivate = true;
+      } else if (op.path === "name.givenName") {
+        parts.givenName = op.value;
+      } else if (op.path === "name.familyName") {
+        parts.familyName = op.value;
+      } else if (op.path === "externalId") {
+        parts.externalId = op.value;
+      }
+    }
+  }
+  const result: any = {};
+  if (parts.givenName || parts.familyName) {
+    result.name = `${parts.givenName ?? ""} ${parts.familyName ?? ""}`.trim();
+  }
+  if (parts.externalId) result.externalId = parts.externalId;
+  if (parts.deactivate) result.deactivate = true;
+  return result;
+}
+
+export const SCIM_USER_SCHEMA = {
+  id: "urn:ietf:params:scim:schemas:core:2.0:User",
+  name: "User",
+  description: "SCIM User resource",
+  attributes: [
+    { name: "userName", type: "string", multiValued: false, required: true, mutability: "readWrite", uniqueness: "server" },
+    { name: "name", type: "complex", multiValued: false, required: false, subAttributes: [
+      { name: "formatted", type: "string" }, { name: "givenName", type: "string" }, { name: "familyName", type: "string" },
+    ]},
+    { name: "emails", type: "complex", multiValued: true, required: false },
+    { name: "active", type: "boolean", multiValued: false, required: false, mutability: "readWrite" },
+    { name: "externalId", type: "string", multiValued: false, required: false, mutability: "readWrite" },
+  ],
+};
+
 export function registerScimRoutes(app: FastifyInstance) {
   // SCIM auth middleware — validates Bearer token against SsoConfig.scimToken
   async function scimAuth(request: FastifyRequest, reply: FastifyReply) {
@@ -83,6 +123,30 @@ export function registerScimRoutes(app: FastifyInstance) {
       sort: { supported: false },
       etag: { supported: false },
       authenticationSchemes: [{ type: "oauthbearertoken", name: "OAuth Bearer Token", description: "SCIM bearer token" }],
+    });
+  });
+
+  // GET /v1/scim/v2/Schemas — SCIM schema discovery
+  app.get("/v1/scim/v2/Schemas", async (_request: FastifyRequest, reply: FastifyReply) => {
+    return reply.send({
+      schemas: ["urn:ietf:params:scim:api:messages:2.0:ListResponse"],
+      totalResults: 1,
+      Resources: [SCIM_USER_SCHEMA],
+    });
+  });
+
+  // GET /v1/scim/v2/ResourceTypes — SCIM resource type discovery
+  app.get("/v1/scim/v2/ResourceTypes", async (_request: FastifyRequest, reply: FastifyReply) => {
+    return reply.send({
+      schemas: ["urn:ietf:params:scim:api:messages:2.0:ListResponse"],
+      totalResults: 1,
+      Resources: [{
+        schemas: ["urn:ietf:params:scim:schemas:core:2.0:ResourceType"],
+        id: "User",
+        name: "User",
+        endpoint: "/v1/scim/v2/Users",
+        schema: "urn:ietf:params:scim:schemas:core:2.0:User",
+      }],
     });
   });
 
@@ -180,17 +244,30 @@ export function registerScimRoutes(app: FastifyInstance) {
     });
   });
 
-  // PATCH /v1/scim/v2/Users/:id — partial update (activate/deactivate)
+  // PATCH /v1/scim/v2/Users/:id — partial update (name, externalId, deactivate)
   app.patch("/v1/scim/v2/Users/:id", { preHandler: scimAuth }, async (request: FastifyRequest, reply: FastifyReply) => {
     const { getDb } = await import("@sentinel/db");
     const db = getDb();
+    const userId = (request.params as any).id;
+    const orgId = (request as any).orgId;
     const ops = ((request.body as any).Operations ?? []) as any[];
-    for (const op of ops) {
-      if (op.path === "active" && op.value === false) {
-        await db.orgMembership.deleteMany({
-          where: { orgId: (request as any).orgId, userId: (request.params as any).id },
-        });
-      }
+    const updates = applyScimPatchOps(ops);
+
+    if (updates.deactivate) {
+      await db.orgMembership.deleteMany({ where: { orgId, userId } });
+      return reply.status(204).send();
+    }
+
+    const data: any = {};
+    if (updates.name) data.name = updates.name;
+    if (updates.externalId) data.externalId = updates.externalId;
+
+    if (Object.keys(data).length > 0) {
+      const user = await db.user.update({ where: { id: userId }, data });
+      return reply.send({
+        schemas: ["urn:ietf:params:scim:schemas:core:2.0:User"],
+        id: user.id, userName: user.email, name: { formatted: user.name }, active: true,
+      });
     }
     return reply.status(204).send();
   });
@@ -221,5 +298,15 @@ export function registerScimRoutes(app: FastifyInstance) {
       name: { formatted: user.name },
       active: true,
     });
+  });
+
+  // DELETE /v1/scim/v2/Users/:id — deprovision user
+  app.delete("/v1/scim/v2/Users/:id", { preHandler: scimAuth }, async (request: FastifyRequest, reply: FastifyReply) => {
+    const { getDb } = await import("@sentinel/db");
+    const db = getDb();
+    const userId = (request.params as any).id;
+    const orgId = (request as any).orgId;
+    await db.orgMembership.deleteMany({ where: { orgId, userId } });
+    return reply.status(204).send();
   });
 }

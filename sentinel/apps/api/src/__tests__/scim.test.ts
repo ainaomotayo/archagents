@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { mapScimUserToSentinel, mapScimGroupsToRole, parseScimListParams, parseScimFilter } from "../routes/scim.js";
+import { mapScimUserToSentinel, mapScimGroupsToRole, parseScimListParams, parseScimFilter, applyScimPatchOps, SCIM_USER_SCHEMA } from "../routes/scim.js";
 
 describe("SCIM User Mapping", () => {
   it("maps SCIM user to Sentinel user fields", () => {
@@ -51,5 +51,56 @@ describe("SCIM pagination", () => {
 
   it("parseScimFilter returns null for unsupported filter", () => {
     expect(parseScimFilter('displayName co "alice"')).toBeNull();
+  });
+});
+
+describe("SCIM PATCH operations", () => {
+  it("handles replace on name fields", () => {
+    const updates = applyScimPatchOps([
+      { op: "replace", path: "name.givenName", value: "Alice" },
+      { op: "replace", path: "name.familyName", value: "Smith" },
+    ]);
+    expect(updates.name).toBe("Alice Smith");
+    expect(updates.deactivate).toBeUndefined();
+  });
+
+  it("handles replace active=false as deactivate", () => {
+    const updates = applyScimPatchOps([
+      { op: "replace", path: "active", value: false },
+    ]);
+    expect(updates.deactivate).toBe(true);
+  });
+
+  it("handles case-insensitive op", () => {
+    const updates = applyScimPatchOps([
+      { op: "Replace", path: "externalId", value: "ext-123" },
+    ]);
+    expect(updates.externalId).toBe("ext-123");
+  });
+
+  it("handles active=false as string", () => {
+    const updates = applyScimPatchOps([
+      { op: "replace", path: "active", value: "false" },
+    ]);
+    expect(updates.deactivate).toBe(true);
+  });
+
+  it("returns empty object for unknown ops", () => {
+    const updates = applyScimPatchOps([
+      { op: "add", path: "displayName", value: "Alice" },
+    ]);
+    expect(updates).toEqual({});
+  });
+});
+
+describe("SCIM discovery endpoints", () => {
+  it("SCIM_USER_SCHEMA has required attributes", () => {
+    expect(SCIM_USER_SCHEMA.id).toBe("urn:ietf:params:scim:schemas:core:2.0:User");
+    const attrNames = SCIM_USER_SCHEMA.attributes.map((a: any) => a.name);
+    expect(attrNames).toContain("userName");
+    expect(attrNames).toContain("name");
+    expect(attrNames).toContain("emails");
+    expect(attrNames).toContain("active");
+    expect(attrNames).toContain("externalId");
   });
 });
