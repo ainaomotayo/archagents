@@ -19,6 +19,12 @@ describe("SSO Discovery", () => {
     expect(result.orgId).toBeUndefined();
   });
 
+  it("scim token generation format", () => {
+    const { randomBytes } = require("node:crypto");
+    const token = `scim_${randomBytes(32).toString("base64url")}`;
+    expect(token).toMatch(/^scim_[A-Za-z0-9_-]{43}$/);
+  });
+
   it("does not leak secrets", async () => {
     const lookup = async (domain: string) => domain === "acme.com"
       ? { orgId: "org-1", orgName: "Acme", providers: [{ id: "oidc", name: "Acme SSO", enforced: true }] }

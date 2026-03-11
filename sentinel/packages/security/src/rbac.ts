@@ -70,6 +70,7 @@ export const API_PERMISSIONS: EndpointPermission[] = [
   { method: "POST", path: "/v1/sso-configs", roles: ["admin"] },
   { method: "PUT", path: "/v1/sso-configs/:id", roles: ["admin"] },
   { method: "DELETE", path: "/v1/sso-configs/:id", roles: ["admin"] },
+  { method: "POST", path: "/v1/sso-configs/:id/scim-token", roles: ["admin"] },
   // P10: Org Memberships
   { method: "GET", path: "/v1/memberships", roles: ["admin", "manager"] },
   { method: "POST", path: "/v1/memberships", roles: ["admin"] },
@@ -78,6 +79,11 @@ export const API_PERMISSIONS: EndpointPermission[] = [
   // P10: Encryption Admin
   { method: "POST", path: "/v1/admin/rotate-keys", roles: ["admin"] },
   { method: "POST", path: "/v1/admin/crypto-shred", roles: ["admin"] },
+  // Domains
+  { method: "GET", path: "/v1/domains", roles: ["admin", "manager"] },
+  { method: "POST", path: "/v1/domains", roles: ["admin"] },
+  { method: "POST", path: "/v1/domains/:domain/verify", roles: ["admin"] },
+  { method: "DELETE", path: "/v1/domains/:domain", roles: ["admin"] },
 ];
 
 /** Pre-computed HashMap for O(1) authorization lookups. */

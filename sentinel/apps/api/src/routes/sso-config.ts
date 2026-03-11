@@ -71,4 +71,24 @@ export function registerSsoConfigRoutes(app: FastifyInstance, authHook: any) {
     await db.ssoConfig.delete({ where: { id: existing.id } });
     return reply.status(204).send();
   });
+
+  // POST /v1/sso-configs/:id/scim-token — generate a new SCIM bearer token
+  app.post("/v1/sso-configs/:id/scim-token", { preHandler: authHook }, async (request: FastifyRequest, reply: FastifyReply) => {
+    const { getDb } = await import("@sentinel/db");
+    const { randomBytes } = await import("node:crypto");
+    const db = getDb();
+
+    const config = await db.ssoConfig.findFirst({
+      where: { id: (request.params as any).id, orgId: (request as any).orgId },
+    });
+    if (!config) return reply.status(404).send({ error: "SSO config not found" });
+
+    const token = `scim_${randomBytes(32).toString("base64url")}`;
+    await db.ssoConfig.update({
+      where: { id: config.id },
+      data: { scimToken: token },
+    });
+
+    return reply.send({ scimToken: token, message: "Store this token securely. It will not be shown again." });
+  });
 }
