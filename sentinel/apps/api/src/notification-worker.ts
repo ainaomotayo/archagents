@@ -151,6 +151,18 @@ export async function processRetryQueue(deps: WorkerDeps): Promise<void> {
       });
     }
   }
+
+  // Check DLQ depth and emit system event if threshold exceeded
+  const dlqCount = await deps.db.webhookDelivery.count({ where: { status: "dlq" } });
+  if (dlqCount > 100 && deps.redisPub) {
+    await deps.redisPub.publish("sentinel.events.fanout", JSON.stringify({
+      id: `evt-dlq-threshold-${Date.now()}`,
+      orgId: "system",
+      topic: "system.dlq_threshold",
+      payload: { stream: "sentinel.notifications", depth: dlqCount, threshold: 100 },
+      timestamp: new Date().toISOString(),
+    }));
+  }
 }
 
 // --- Main process (only when executed directly) ---
@@ -176,7 +188,7 @@ if (process.env.NODE_ENV !== "test") {
   eventBus.subscribe("sentinel.notifications", "notification-workers", `notif-${process.pid}`, wrappedHandler);
 
   const retryInterval = setInterval(async () => {
-    try { await processRetryQueue({ db, registry }); } catch (err) { logger.error({ err }, "Retry queue processing failed"); }
+    try { await processRetryQueue({ db, registry, redisPub }); } catch (err) { logger.error({ err }, "Retry queue processing failed"); }
   }, 5_000);
 
   const healthPort = parseInt(process.env.NOTIFICATION_WORKER_PORT ?? "9095", 10);
