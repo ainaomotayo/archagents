@@ -47,6 +47,31 @@ export function registerEncryptionAdminRoutes(app: FastifyInstance, authHook: an
     );
 
     console.log(`[ADMIN] Key rotation completed for org ${(request as any).orgId}, ${keys.length} keys`);
+
+    // Audit log: key rotation event (best-effort)
+    try {
+      const { createHash } = await import("node:crypto");
+      const orgId = (request as any).orgId;
+      const last = await db.auditEvent.findFirst({ where: { orgId }, orderBy: { timestamp: "desc" } });
+      const prevHash = last?.eventHash ?? "genesis";
+      const payload = JSON.stringify({ action: "encryption.keys_rotated", resourceId: orgId, detail: { keyCount: keys.length }, prevHash, ts: Date.now() });
+      const eventHash = createHash("sha256").update(payload).digest("hex");
+      await db.auditEvent.create({
+        data: {
+          orgId,
+          actorType: "api",
+          actorId: (request as any).role ?? "admin",
+          actorName: "API",
+          action: "encryption.keys_rotated",
+          resourceType: "encryption_key",
+          resourceId: orgId,
+          detail: { keyCount: keys.length },
+          previousEventHash: prevHash,
+          eventHash,
+        },
+      });
+    } catch { /* audit logging is best-effort */ }
+
     return reply.send({ message: "Key rotation completed", keyCount: keys.length });
   });
 
@@ -69,6 +94,31 @@ export function registerEncryptionAdminRoutes(app: FastifyInstance, authHook: an
     }
 
     console.log(`[ADMIN] Crypto-shred completed for org ${(request as any).orgId}, ${count} keys destroyed`);
+
+    // Audit log: crypto-shred event (best-effort)
+    try {
+      const { createHash } = await import("node:crypto");
+      const orgId = (request as any).orgId;
+      const last = await db.auditEvent.findFirst({ where: { orgId }, orderBy: { timestamp: "desc" } });
+      const prevHash = last?.eventHash ?? "genesis";
+      const payload = JSON.stringify({ action: "encryption.crypto_shred", resourceId: orgId, detail: { keysDestroyed: count }, prevHash, ts: Date.now() });
+      const eventHash = createHash("sha256").update(payload).digest("hex");
+      await db.auditEvent.create({
+        data: {
+          orgId,
+          actorType: "api",
+          actorId: (request as any).role ?? "admin",
+          actorName: "API",
+          action: "encryption.crypto_shred",
+          resourceType: "encryption_key",
+          resourceId: orgId,
+          detail: { keysDestroyed: count },
+          previousEventHash: prevHash,
+          eventHash,
+        },
+      });
+    } catch { /* audit logging is best-effort */ }
+
     return reply.send({ message: "Crypto-shred complete. All keys destroyed.", orgId: (request as any).orgId, keysDestroyed: count });
   });
 }
