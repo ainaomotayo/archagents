@@ -20,3 +20,10 @@ describe("org membership guards", () => {
     expect(existingRole === "admin").toBe(false);
   });
 });
+
+describe("membership audit logging", () => {
+  it("emitMembershipAudit is exported", async () => {
+    const { emitMembershipAudit } = await import("../routes/org-memberships.js");
+    expect(typeof emitMembershipAudit).toBe("function");
+  });
+});
