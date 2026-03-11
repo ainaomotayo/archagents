@@ -6,6 +6,10 @@ with regex fallback for unsupported languages.
 
 from __future__ import annotations
 
+import hashlib
+import logging
+from typing import Any
+
 from sentinel_agents.base import BaseAgent
 from sentinel_agents.types import Confidence, DiffEvent, DiffFile, Finding, Severity
 
@@ -13,6 +17,19 @@ from sentinel_quality.complexity import calculate_complexity
 from sentinel_quality.duplication import detect_duplicates
 from sentinel_quality.naming import analyze_naming_consistency
 from sentinel_quality.test_coverage import find_coverage_gaps
+
+logger = logging.getLogger(__name__)
+
+
+def _get_ast_cache(redis_client: Any = None):
+    """Create a RedisCache for memoizing AST analysis results."""
+    if redis_client is None:
+        return None
+    try:
+        from agent_core.cache import RedisCache
+        return RedisCache(redis_client, prefix="sentinel.ast_cache", default_ttl=3600)
+    except Exception:
+        return None
 
 # Complexity thresholds
 COMPLEXITY_HIGH = 15
@@ -39,6 +56,30 @@ class QualityAgent(BaseAgent):
     version = "0.1.0"
     ruleset_version = "rules-2026.03.09-a"
     ruleset_hash = "sha256:quality-v1"
+
+    def __init__(self, redis_client: Any = None) -> None:
+        self._ast_cache = _get_ast_cache(redis_client)
+
+    def _cache_key(self, code: str, lang: str, analysis: str) -> str:
+        """Generate cache key for memoized AST analysis."""
+        content_hash = hashlib.sha256(f"{code}:{lang}".encode()).hexdigest()[:16]
+        return f"{analysis}:{lang}:{content_hash}"
+
+    def _cached_complexity(self, code: str, lang: str):
+        """Memoized complexity analysis."""
+        if self._ast_cache:
+            key = self._cache_key(code, lang, "complexity")
+            cached = self._ast_cache.get_sync(key)
+            if cached is not None:
+                return cached
+        results = calculate_complexity(code, lang)
+        if self._ast_cache:
+            self._ast_cache.set_sync(
+                self._cache_key(code, lang, "complexity"),
+                [{"function_name": r.function_name, "complexity": r.complexity,
+                  "line_start": r.line_start, "line_end": r.line_end} for r in results],
+            )
+        return results
 
     def process(self, event: DiffEvent) -> list[Finding]:
         findings: list[Finding] = []
@@ -68,7 +109,7 @@ class QualityAgent(BaseAgent):
             if not code.strip():
                 continue
 
-            results = calculate_complexity(code, lang)
+            results = self._cached_complexity(code, lang)
             for result in results:
                 if result.complexity >= COMPLEXITY_MEDIUM:
                     if result.complexity >= COMPLEXITY_HIGH:
