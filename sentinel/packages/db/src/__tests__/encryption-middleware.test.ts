@@ -129,6 +129,21 @@ describe("Prisma Encryption Middleware", () => {
   });
 });
 
+describe("ENCRYPTED_FIELDS coverage", () => {
+  it("User includes name field", () => {
+    expect(ENCRYPTED_FIELDS.User.fields).toContain("name");
+  });
+
+  it("WebhookEndpoint includes url and headers", () => {
+    expect(ENCRYPTED_FIELDS.WebhookEndpoint.fields).toContain("url");
+    expect(ENCRYPTED_FIELDS.WebhookEndpoint.fields).toContain("headers");
+  });
+
+  it("SsoConfig includes samlMetadata", () => {
+    expect(ENCRYPTED_FIELDS.SsoConfig.fields).toContain("samlMetadata");
+  });
+});
+
 // Mock @prisma/client so we can test initEncryption without a real DB
 const mockExtends = vi.fn().mockReturnThis();
 vi.mock("@prisma/client", () => {

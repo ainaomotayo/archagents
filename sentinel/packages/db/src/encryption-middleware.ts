@@ -7,10 +7,10 @@ interface FieldConfig {
 }
 
 export const ENCRYPTED_FIELDS: Record<string, FieldConfig> = {
-  SsoConfig: { fields: ["clientId", "clientSecret", "scimToken"], mode: "envelope", purpose: "sso_secrets" },
-  WebhookEndpoint: { fields: ["secret"], mode: "envelope", purpose: "webhook_secret" },
+  SsoConfig: { fields: ["clientId", "clientSecret", "scimToken", "samlMetadata"], mode: "envelope", purpose: "sso_secrets" },
+  WebhookEndpoint: { fields: ["secret", "url", "headers"], mode: "envelope", purpose: "webhook_secret" },
   Certificate: { fields: ["signature"], mode: "envelope", purpose: "certificate" },
-  User: { fields: ["email", "externalId"], mode: "deterministic", purpose: "user_lookup" },
+  User: { fields: ["email", "externalId", "name"], mode: "deterministic", purpose: "user_lookup" },
 };
 
 type OrgIdResolver = () => string | null;
