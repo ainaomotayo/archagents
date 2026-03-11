@@ -74,5 +74,8 @@ export { AuthRateLimiter, type RateLimitConfig, type RateLimitResult } from "./a
 
 export type { KmsProvider } from "./kms-provider.js";
 export { LocalKmsProvider } from "./kms-local.js";
+export { AwsKmsProvider } from "./kms-aws-provider.js";
+export { GcpKmsProvider } from "./kms-gcp-provider.js";
+export { AzureKmsProvider } from "./kms-azure-provider.js";
 export { DekCache, type DekCacheOptions } from "./dek-cache.js";
 export { EnvelopeEncryption } from "./envelope.js";
