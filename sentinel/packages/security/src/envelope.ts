@@ -9,13 +9,31 @@ interface OrgKeyRecord {
   kekId: string;
 }
 
+export type KeyLoader = (orgId: string, purpose: string) => Promise<{ wrappedDek: Buffer; kekId: string } | null>;
+export type KeyProvisioner = (orgId: string, purpose: string, wrappedDek: Buffer, kekId: string) => Promise<void>;
+
 export class EnvelopeEncryption {
   private keyRecords = new Map<string, OrgKeyRecord>();
+  private keyLoader?: KeyLoader;
+  private keyProvisioner?: KeyProvisioner;
+  private defaultKekId = "default";
 
   constructor(
     private kms: KmsProvider,
     private cache: DekCache,
   ) {}
+
+  setKeyLoader(loader: KeyLoader): void {
+    this.keyLoader = loader;
+  }
+
+  setKeyProvisioner(provisioner: KeyProvisioner): void {
+    this.keyProvisioner = provisioner;
+  }
+
+  setDefaultKekId(kekId: string): void {
+    this.defaultKekId = kekId;
+  }
 
   async generateOrgKey(orgId: string, purpose: string, kekId: string): Promise<void> {
     const { plaintext, wrapped } = await this.kms.generateDataKey(kekId);
@@ -32,7 +50,28 @@ export class EnvelopeEncryption {
     const cached = this.cache.get(orgId, purpose);
     if (cached) return cached;
 
-    const record = this.keyRecords.get(`${orgId}\0${purpose}`);
+    // Check in-memory records
+    let record = this.keyRecords.get(`${orgId}\0${purpose}`);
+
+    // Try loading from external source (DB)
+    if (!record && this.keyLoader) {
+      const loaded = await this.keyLoader(orgId, purpose);
+      if (loaded) {
+        this.setKeyRecord(orgId, purpose, loaded.wrappedDek, loaded.kekId);
+        record = this.keyRecords.get(`${orgId}\0${purpose}`);
+      }
+    }
+
+    // Auto-provision if provisioner is configured and no key exists
+    if (!record && this.keyProvisioner) {
+      const kekId = this.defaultKekId;
+      const { plaintext, wrapped } = await this.kms.generateDataKey(kekId);
+      await this.keyProvisioner(orgId, purpose, wrapped, kekId);
+      this.setKeyRecord(orgId, purpose, wrapped, kekId);
+      this.cache.set(orgId, purpose, plaintext);
+      return plaintext;
+    }
+
     if (!record) throw new Error(`No encryption key for ${orgId}:${purpose}`);
 
     const plaintext = await this.kms.unwrapDataKey(record.kekId, record.wrappedDek);
