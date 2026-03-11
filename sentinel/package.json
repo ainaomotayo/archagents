@@ -7,7 +7,10 @@
     "build": "turbo build",
     "test": "turbo test",
     "lint": "turbo lint",
-    "dev": "turbo dev"
+    "dev": "turbo dev",
+    "test:e2e": "vitest run --config tests/e2e/vitest.config.e2e.ts",
+    "e2e:stack:up": "docker compose -f tests/e2e/docker-compose.e2e.yml up -d --build --wait",
+    "e2e:stack:down": "docker compose -f tests/e2e/docker-compose.e2e.yml down -v"
   },
   "devDependencies": {
     "turbo": "^2.4",
