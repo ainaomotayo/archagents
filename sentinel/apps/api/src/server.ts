@@ -151,6 +151,13 @@ app.post("/v1/scans", { preHandler: authHook }, async (request, reply) => {
   const body = request.body as any;
   const orgId = (request as any).orgId ?? "default";
   const result = await scanRoutes.submitScan({ orgId, body });
+  await eventBus.publish("sentinel.notifications", {
+    id: `evt-${result.scanId}-submitted`,
+    orgId,
+    topic: "scan.submitted",
+    payload: { scanId: result.scanId, projectId: body.projectId, commitHash: body.commitHash, branch: body.branch },
+    timestamp: new Date().toISOString(),
+  });
   reply.code(201).send(result);
 });
 
@@ -257,6 +264,13 @@ app.patch("/v1/findings/:id", { preHandler: authHook }, async (request, reply) =
           category: finding.category,
         },
       });
+      await eventBus.publish("sentinel.notifications", {
+        id: `evt-${id}-suppressed`,
+        orgId,
+        topic: "finding.suppressed",
+        payload: { findingId: id, suppressedBy: body.suppressedBy ?? null, severity: finding.severity },
+        timestamp: new Date().toISOString(),
+      });
     }
     return updated;
   });
@@ -352,6 +366,13 @@ app.post("/v1/certificates/:id/revoke", { preHandler: authHook }, async (request
       orgId,
       type: "certificate_revoked",
       eventData: { certificateId: id, reason },
+    });
+    await eventBus.publish("sentinel.notifications", {
+      id: `evt-${id}-revoked`,
+      orgId,
+      topic: "certificate.revoked",
+      payload: { certificateId: id, reason },
+      timestamp: new Date().toISOString(),
     });
 
     return { id, status: "revoked", revokedAt: now.toISOString() };
@@ -478,6 +499,13 @@ app.post("/v1/policies", { preHandler: authHook, schema: { body: policyBodySchem
     type: "policy_changed",
     eventData: { policyId: policy.id, changeType: "created", name: policy.name, version: policy.version },
   });
+  await eventBus.publish("sentinel.notifications", {
+    id: `evt-${policy.id}-created`,
+    orgId,
+    topic: "policy.created",
+    payload: { policyId: policy.id, name: policy.name, version: policy.version },
+    timestamp: new Date().toISOString(),
+  });
   reply.code(201).send(policy);
 });
 
@@ -525,6 +553,13 @@ app.put("/v1/policies/:id", { preHandler: authHook, schema: { body: policyBodySc
       type: "policy_changed",
       eventData: { policyId: id, changeType: "updated", name: updated.name, version: updated.version },
     });
+    await eventBus.publish("sentinel.notifications", {
+      id: `evt-${id}-updated`,
+      orgId,
+      topic: "policy.updated",
+      payload: { policyId: id, name: updated.name, version: updated.version },
+      timestamp: new Date().toISOString(),
+    });
     return updated;
   });
 });
@@ -571,6 +606,13 @@ app.delete("/v1/policies/:id", { preHandler: authHook }, async (request, reply) 
       orgId,
       type: "policy_changed",
       eventData: { policyId: id, changeType: "deleted", name: existing.name },
+    });
+    await eventBus.publish("sentinel.notifications", {
+      id: `evt-${id}-deleted`,
+      orgId,
+      topic: "policy.deleted",
+      payload: { policyId: id, name: existing.name },
+      timestamp: new Date().toISOString(),
     });
     reply.code(204).send();
   });
