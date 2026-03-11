@@ -44,6 +44,12 @@ export function registerOrgMembershipRoutes(app: FastifyInstance, authHook: any)
     });
     if (!existing) return reply.status(404).send({ error: "Membership not found" });
 
+    // Guard: prevent admin self-demotion
+    const requestUserId = request.headers["x-sentinel-user-id"] as string | undefined;
+    if (requestUserId && existing.userId === requestUserId && existing.role === "admin" && role !== "admin") {
+      return reply.status(400).send({ error: "Cannot demote yourself from admin. Ask another admin." });
+    }
+
     const updated = await db.orgMembership.update({
       where: { id: existing.id },
       data: { role },
@@ -59,6 +65,12 @@ export function registerOrgMembershipRoutes(app: FastifyInstance, authHook: any)
       where: { id: (request.params as any).id, orgId: (request as any).orgId },
     });
     if (!existing) return reply.status(404).send({ error: "Membership not found" });
+
+    // Guard: prevent self-removal
+    const requestUserId = request.headers["x-sentinel-user-id"] as string | undefined;
+    if (requestUserId && existing.userId === requestUserId) {
+      return reply.status(400).send({ error: "Cannot remove your own membership. Ask another admin." });
+    }
 
     await db.orgMembership.delete({ where: { id: existing.id } });
     return reply.status(204).send();
