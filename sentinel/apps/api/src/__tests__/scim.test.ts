@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { mapScimUserToSentinel, mapScimGroupsToRole } from "../routes/scim.js";
+import { mapScimUserToSentinel, mapScimGroupsToRole, parseScimListParams, parseScimFilter } from "../routes/scim.js";
 
 describe("SCIM User Mapping", () => {
   it("maps SCIM user to Sentinel user fields", () => {
@@ -26,5 +26,30 @@ describe("SCIM User Mapping", () => {
     const mapping = { "engineering": "developer" };
     const role = mapScimGroupsToRole(groups, mapping, "viewer");
     expect(role).toBe("viewer");
+  });
+});
+
+describe("SCIM pagination", () => {
+  it("parseScimListParams extracts startIndex and count", () => {
+    expect(parseScimListParams({ startIndex: "5", count: "10" }))
+      .toEqual({ startIndex: 5, count: 10, skip: 4, take: 10 });
+  });
+
+  it("defaults to startIndex=1, count=100", () => {
+    expect(parseScimListParams({}))
+      .toEqual({ startIndex: 1, count: 100, skip: 0, take: 100 });
+  });
+
+  it("clamps count to max 200", () => {
+    expect(parseScimListParams({ count: "999" }).count).toBe(200);
+  });
+
+  it("parseScimFilter parses userName eq filter", () => {
+    expect(parseScimFilter('userName eq "alice@acme.com"'))
+      .toEqual({ field: "email", value: "alice@acme.com" });
+  });
+
+  it("parseScimFilter returns null for unsupported filter", () => {
+    expect(parseScimFilter('displayName co "alice"')).toBeNull();
   });
 });

@@ -29,6 +29,23 @@ export function mapScimGroupsToRole(
   return bestRole;
 }
 
+export function parseScimListParams(query: Record<string, string | undefined>): {
+  startIndex: number; count: number; skip: number; take: number;
+} {
+  const startIndex = Math.max(1, parseInt(query.startIndex ?? "1", 10) || 1);
+  const count = Math.min(200, Math.max(1, parseInt(query.count ?? "100", 10) || 100));
+  return { startIndex, count, skip: startIndex - 1, take: count };
+}
+
+export function parseScimFilter(filter: string | undefined): { field: string; value: string } | null {
+  if (!filter) return null;
+  const match = filter.match(/^(\w+)\s+eq\s+"([^"]+)"$/);
+  if (!match) return null;
+  const fieldMap: Record<string, string> = { userName: "email", externalId: "externalId" };
+  const field = fieldMap[match[1]];
+  return field ? { field, value: match[2] } : null;
+}
+
 export function registerScimRoutes(app: FastifyInstance) {
   // SCIM auth middleware — validates Bearer token against SsoConfig.scimToken
   async function scimAuth(request: FastifyRequest, reply: FastifyReply) {
@@ -61,7 +78,7 @@ export function registerScimRoutes(app: FastifyInstance) {
       schemas: ["urn:ietf:params:scim:schemas:core:2.0:ServiceProviderConfig"],
       patch: { supported: true },
       bulk: { supported: false },
-      filter: { supported: true, maxResults: 100 },
+      filter: { supported: true, maxResults: 200 },
       changePassword: { supported: false },
       sort: { supported: false },
       etag: { supported: false },
@@ -100,20 +117,42 @@ export function registerScimRoutes(app: FastifyInstance) {
     });
   });
 
-  // GET /v1/scim/v2/Users — list/filter
+  // GET /v1/scim/v2/Users — list/filter with RFC 7644 pagination
   app.get("/v1/scim/v2/Users", { preHandler: scimAuth }, async (request: FastifyRequest, reply: FastifyReply) => {
     const { getDb } = await import("@sentinel/db");
     const db = getDb();
-    const users = await db.user.findMany({ where: { orgId: (request as any).orgId }, take: 100 });
+    const query = request.query as Record<string, string | undefined>;
+    const { startIndex, count, skip, take } = parseScimListParams(query);
+    const parsedFilter = parseScimFilter(query.filter);
+
+    const where: any = { orgId: (request as any).orgId };
+    if (parsedFilter) {
+      where[parsedFilter.field] = parsedFilter.value;
+    }
+
+    const [users, totalResults] = await Promise.all([
+      db.user.findMany({ where, skip, take }),
+      db.user.count({ where }),
+    ]);
+
     return reply.send({
       schemas: ["urn:ietf:params:scim:api:messages:2.0:ListResponse"],
-      totalResults: users.length,
+      totalResults,
+      startIndex,
+      itemsPerPage: users.length,
       Resources: users.map((u: any) => ({
         schemas: ["urn:ietf:params:scim:schemas:core:2.0:User"],
         id: u.id,
         userName: u.email,
+        externalId: u.externalId ?? undefined,
         name: { formatted: u.name },
+        emails: [{ value: u.email, primary: true }],
         active: true,
+        meta: {
+          resourceType: "User",
+          created: u.createdAt,
+          lastModified: u.updatedAt,
+        },
       })),
     });
   });
