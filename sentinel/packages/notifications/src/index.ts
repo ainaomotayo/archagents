@@ -10,3 +10,4 @@ export type {
 } from "./types.js";
 
 export { TopicTrie } from "./trie.js";
+export { HttpWebhookAdapter } from "./adapters/http-webhook.js";
