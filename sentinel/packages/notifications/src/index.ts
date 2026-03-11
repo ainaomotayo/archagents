@@ -15,3 +15,4 @@ export { SlackAdapter } from "./adapters/slack.js";
 export { EmailAdapter } from "./adapters/email.js";
 export { PagerDutyAdapter } from "./adapters/pagerduty.js";
 export { AdapterRegistry } from "./registry.js";
+export { SseManager } from "./sse-manager.js";
