@@ -27,3 +27,14 @@ describe("API key rate limiting", () => {
     expect(limiter.check("10.0.0.1").remaining).toBe(3);
   });
 });
+
+describe("API key lastUsedAt", () => {
+  it("updateApiKeyLastUsed option is accepted by createAuthHook", async () => {
+    const { createAuthHook } = await import("../middleware/auth.js");
+    const hook = createAuthHook({
+      getOrgSecret: async () => "secret",
+      updateApiKeyLastUsed: (_prefix: string) => {},
+    });
+    expect(typeof hook).toBe("function");
+  });
+});

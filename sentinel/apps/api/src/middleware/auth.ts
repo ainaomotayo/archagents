@@ -30,6 +30,7 @@ interface AuthHookOptions {
   getOrgSecret: (apiKey?: string) => Promise<string | null>;
   resolveRole?: (apiKey?: string) => Promise<ApiRole>;
   resolveDbRole?: (userId: string, orgId: string) => Promise<string | null>;
+  updateApiKeyLastUsed?: (prefix: string) => void;
 }
 
 export function createAuthHook(options: AuthHookOptions) {
@@ -60,6 +61,10 @@ export function createAuthHook(options: AuthHookOptions) {
       });
       if (apiKeyResult) {
         apiKeyRateLimiter.reset(clientIp);
+        if (options.updateApiKeyLastUsed) {
+          const keyMatch = authHeader!.match(/^Bearer (sk_[A-Za-z0-9_-]{8})/);
+          if (keyMatch) options.updateApiKeyLastUsed(keyMatch[1]);
+        }
         (request as any).orgId = apiKeyResult.orgId;
         setCurrentOrgId(apiKeyResult.orgId);
         (request as any).role = apiKeyResult.role as ApiRole;

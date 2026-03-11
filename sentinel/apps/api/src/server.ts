@@ -70,6 +70,12 @@ const authHook = createAuthHook({
   getOrgSecret: async (_apiKey) => {
     return process.env.SENTINEL_SECRET ?? null;
   },
+  updateApiKeyLastUsed: (prefix) => {
+    getDb().apiKey.updateMany({
+      where: { keyPrefix: prefix },
+      data: { lastUsedAt: new Date() },
+    }).catch(() => {}); // Fire-and-forget
+  },
 });
 
 // --- Scan route handlers ---
