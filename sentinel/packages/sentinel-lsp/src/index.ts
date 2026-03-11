@@ -65,8 +65,7 @@ if (isDirectRun && process.env.NODE_ENV !== "test") {
     const sendStatus = (status: ConnectionStatus) =>
       connection.sendNotification("sentinel/connectionStatus", { status });
 
-    apiClient.getFindings().then((raw) => {
-      const data = raw as { findings: SentinelFinding[]; total: number };
+    apiClient.getFindings().then((data) => {
       findingCache.upsert(data.findings);
       for (const doc of documents.all()) {
         connection.sendDiagnostics({ uri: doc.uri, diagnostics: server.getDiagnosticsForFile(doc.uri) });

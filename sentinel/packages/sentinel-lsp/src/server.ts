@@ -12,7 +12,7 @@ import type { SentinelApiClient } from "./api-client.js";
 import type { SseListener } from "./sse-listener.js";
 import type { FindingCache } from "./finding-cache.js";
 import { DiagnosticMapper } from "./diagnostic-mapper.js";
-import type { SentinelEvent, SentinelFinding } from "./types.js";
+import type { SentinelEvent } from "./types.js";
 
 export interface ServerDeps {
   apiClient: SentinelApiClient;
@@ -104,10 +104,7 @@ export function createSentinelLspServer(deps: ServerDeps) {
       event.topic === "scan.completed"
     ) {
       try {
-        const result = (await apiClient.getFindings()) as {
-          findings: SentinelFinding[];
-          total: number;
-        };
+        const result = await apiClient.getFindings();
         findingCache.upsert(result.findings);
       } catch {
         // API unreachable during SSE event — continue using cached findings

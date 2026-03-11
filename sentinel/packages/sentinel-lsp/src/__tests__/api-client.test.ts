@@ -44,6 +44,18 @@ describe("SentinelApiClient", () => {
     expect(JSON.parse(init.body)).toEqual({ suppressed: true });
   });
 
+  it("unsuppressFinding sends PATCH with { suppressed: false }", async () => {
+    fetchFn = mockFetch(200, { updated: true });
+    client = new SentinelApiClient("https://api.test", "test-secret", "org-123", fetchFn as any);
+
+    await client.unsuppressFinding("finding-42");
+
+    const [url, init] = fetchFn.mock.calls[0];
+    expect(url).toBe("https://api.test/v1/findings/finding-42");
+    expect(init.method).toBe("PATCH");
+    expect(JSON.parse(init.body)).toEqual({ suppressed: false });
+  });
+
   it("triggerScan sends POST to /v1/scans and returns { scanId }", async () => {
     fetchFn = mockFetch(200, { scanId: "scan-99" });
     client = new SentinelApiClient("https://api.test", "test-secret", "org-123", fetchFn as any);

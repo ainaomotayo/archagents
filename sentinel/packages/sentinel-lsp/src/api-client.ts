@@ -1,4 +1,5 @@
 import { createHmac } from "node:crypto";
+import type { SentinelFinding, SentinelProject } from "./types.js";
 
 export interface FindingsQuery {
   projectId?: string;
@@ -57,7 +58,7 @@ export class SentinelApiClient {
     return res.json() as Promise<T>;
   }
 
-  async getFindings(opts?: FindingsQuery): Promise<unknown> {
+  async getFindings(opts?: FindingsQuery): Promise<{ findings: SentinelFinding[]; total: number }> {
     const params = new URLSearchParams();
     if (opts) {
       if (opts.projectId) params.set("projectId", opts.projectId);
@@ -71,23 +72,23 @@ export class SentinelApiClient {
     return this.request("GET", path);
   }
 
-  async suppressFinding(findingId: string): Promise<unknown> {
+  async suppressFinding(findingId: string): Promise<{ updated: boolean }> {
     return this.request("PATCH", `/v1/findings/${findingId}`, { suppressed: true });
   }
 
-  async unsuppressFinding(findingId: string): Promise<unknown> {
+  async unsuppressFinding(findingId: string): Promise<{ updated: boolean }> {
     return this.request("PATCH", `/v1/findings/${findingId}`, { suppressed: false });
   }
 
-  async triggerScan(projectId: string, files: string[]): Promise<unknown> {
+  async triggerScan(projectId: string, files: string[]): Promise<{ scanId: string }> {
     return this.request("POST", "/v1/scans", { projectId, files });
   }
 
-  async getProjects(): Promise<unknown> {
+  async getProjects(): Promise<SentinelProject[]> {
     return this.request("GET", "/v1/projects");
   }
 
-  async getScanStatus(scanId: string): Promise<unknown> {
+  async getScanStatus(scanId: string): Promise<{ scanId: string; status: string }> {
     return this.request("GET", `/v1/scans/${scanId}`);
   }
 }
