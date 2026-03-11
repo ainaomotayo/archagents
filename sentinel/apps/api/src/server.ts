@@ -31,6 +31,7 @@ import { registerDiscoveryRoutes } from "./routes/auth-discovery.js";
 import { registerOrgMembershipRoutes } from "./routes/org-memberships.js";
 import { registerScimRoutes } from "./routes/scim.js";
 import { registerEncryptionAdminRoutes } from "./routes/encryption-admin.js";
+import { registerDomainRoutes } from "./routes/domain-verification.js";
 
 if (process.env.OTEL_EXPORTER_OTLP_ENDPOINT && process.env.NODE_ENV !== "test") {
   initTracing({ serviceName: "sentinel-api" });
@@ -969,6 +970,7 @@ registerDiscoveryRoutes(app);  // Public, no auth
 registerOrgMembershipRoutes(app, authHook);
 registerScimRoutes(app);  // Uses own SCIM auth
 registerEncryptionAdminRoutes(app, authHook);
+registerDomainRoutes(app, authHook);
 
 // --- Graceful shutdown ---
 const shutdown = async () => {
