@@ -20,6 +20,8 @@ import { createAuthHook } from "./middleware/auth.js";
 import { buildScanRoutes } from "./routes/scans.js";
 import { registerWebhookRoutes } from "./routes/webhooks.js";
 import { buildWebhookRoutes } from "./routes/notification-endpoints.js";
+import { buildNotificationRuleRoutes } from "./routes/notification-rules.js";
+import { HttpWebhookAdapter } from "@sentinel/notifications";
 import { createScanStore, createAuditEventStore } from "./stores.js";
 import { registerSecurityPlugins } from "./plugins/security.js";
 
@@ -67,6 +69,9 @@ const scanRoutes = buildScanRoutes({
 
 // --- Webhook endpoint route handlers ---
 const webhookRoutes = buildWebhookRoutes({ db });
+
+// --- Notification rule route handlers ---
+const ruleRoutes = buildNotificationRuleRoutes({ db });
 
 // --- Security plugins ---
 await registerSecurityPlugins(app, { redis });
@@ -824,6 +829,42 @@ app.get("/v1/webhooks/:id/deliveries", { preHandler: authHook }, async (request)
   const { id } = request.params as { id: string };
   const { limit = "50", offset = "0" } = request.query as any;
   return webhookRoutes.getDeliveries({ endpointId: id, limit: Number(limit), offset: Number(offset) });
+});
+
+// --- Webhook test endpoint ---
+app.post("/v1/webhooks/:id/test", { preHandler: authHook }, async (request, reply) => {
+  const { id } = request.params as { id: string };
+  const ep = await webhookRoutes.getEndpoint(id);
+  if (!ep) { reply.code(404).send({ error: "Webhook endpoint not found" }); return; }
+  const adapter = new HttpWebhookAdapter();
+  const testEvent = {
+    id: `test-${Date.now()}`,
+    orgId: ep.orgId,
+    topic: "system.test",
+    payload: { message: "Test webhook from SENTINEL", endpointId: id },
+    timestamp: new Date().toISOString(),
+  };
+  const result = await adapter.deliver(ep, testEvent);
+  return { ...result, event: testEvent };
+});
+
+// --- Notification rules ---
+app.post("/v1/notifications/rules", { preHandler: authHook }, async (request, reply) => {
+  const orgId = (request as any).orgId ?? "default";
+  const role = (request as any).role ?? "unknown";
+  const result = await ruleRoutes.createRule({ orgId, body: request.body as any, createdBy: role });
+  reply.code(201).send(result);
+});
+
+app.get("/v1/notifications/rules", { preHandler: authHook }, async (request) => {
+  const orgId = (request as any).orgId ?? "default";
+  return ruleRoutes.listRules(orgId);
+});
+
+app.delete("/v1/notifications/rules/:id", { preHandler: authHook }, async (request, reply) => {
+  const { id } = request.params as { id: string };
+  await ruleRoutes.deleteRule(id);
+  reply.code(204).send();
 });
 
 // --- Graceful shutdown ---
