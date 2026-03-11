@@ -8,3 +8,5 @@ export type {
   DeliveryStatus,
   SseClient,
 } from "./types.js";
+
+export { TopicTrie } from "./trie.js";
