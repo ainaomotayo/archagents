@@ -103,7 +103,15 @@ if (isDirectRun && process.env.NODE_ENV !== "test") {
 
   connection.onCodeAction((params) => server.getCodeActionsForFile(params.textDocument.uri, params.range));
   connection.onCodeLens((params) => server.getCodeLensesForFile(params.textDocument.uri));
-  connection.onExecuteCommand(async (params) => { await server.handleCommand(params.command, params.arguments ?? []); });
+  connection.onExecuteCommand(async (params) => {
+    await server.handleCommand(params.command, params.arguments ?? []);
+    // Refresh diagnostics after commands that mutate the cache (e.g., suppress)
+    if (params.command === "sentinel.suppress") {
+      for (const doc of documents.all()) {
+        connection.sendDiagnostics({ uri: doc.uri, diagnostics: server.getDiagnosticsForFile(doc.uri) });
+      }
+    }
+  });
 
   documents.listen(connection);
   connection.listen();
