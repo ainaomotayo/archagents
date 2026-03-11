@@ -5,10 +5,11 @@ from __future__ import annotations
 import time
 from collections.abc import AsyncIterator
 
+from .provider import LLMProvider
 from .types import Chunk, CompletionConfig, CompletionResult, Message, Role
 
 
-class AnthropicProvider:
+class AnthropicProvider(LLMProvider):
     """LLM provider using the Anthropic SDK."""
 
     name = "anthropic"

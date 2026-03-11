@@ -6,10 +6,11 @@ import json
 import time
 from collections.abc import AsyncIterator
 
+from .provider import LLMProvider
 from .types import Chunk, CompletionConfig, CompletionResult, Message
 
 
-class LocalProvider:
+class LocalProvider(LLMProvider):
     """LLM provider for local inference servers (Ollama, vLLM)."""
 
     name = "local"

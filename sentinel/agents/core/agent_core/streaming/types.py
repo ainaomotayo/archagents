@@ -16,6 +16,7 @@ class EventType(str, Enum):
     AGENT_COMPLETED = "agent.completed"
     SCAN_PROGRESS = "scan.progress"
     SCAN_COMPLETED = "scan.completed"
+    SCAN_CANCELLED = "scan.cancelled"
 
 
 @dataclass

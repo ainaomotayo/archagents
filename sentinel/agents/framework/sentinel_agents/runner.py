@@ -29,6 +29,7 @@ class RunnerStats:
         self.scans_failed: int = 0
         self.latencies: deque[float] = deque(maxlen=100)
         self.last_error: str | None = None
+        self.queue_depth: int = 0
 
     @property
     def latency_p99_ms(self) -> float:
@@ -155,6 +156,7 @@ def _start_health_server(agent: BaseAgent, port: int, stats: RunnerStats | None 
                     "scans_processed": stats.scans_processed,
                     "scans_failed": stats.scans_failed,
                     "latency_p99_ms": round(stats.latency_p99_ms, 1),
+                    "queue_depth": stats.queue_depth,
                     "last_error": stats.last_error,
                 }
             self.send_response(200 if health.status == "healthy" else 503)
