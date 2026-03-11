@@ -1,7 +1,7 @@
 // tests/e2e/__tests__/notifications.test.ts
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { createE2EContext, type E2EContext } from "../fixtures/factory.js";
-import { combinedVulnDiff } from "../fixtures/diffs.js";
+import { combinedVulnDiff, securityVulnDiff } from "../fixtures/diffs.js";
 import { RedisInspector } from "../helpers/redis-inspector.js";
 
 describe("E2E: Notifications & Events", () => {
@@ -42,7 +42,6 @@ describe("E2E: Notifications & Events", () => {
 
   it("publishes critical finding alerts for high-severity findings", async () => {
     // Submit a diff with known critical/high findings (SQL injection)
-    const { securityVulnDiff } = await import("../fixtures/diffs.js");
     const { scanId } = await ctx.scanService.submitDiff(securityVulnDiff(ctx.projectId));
     await ctx.scanService.pollUntilStatus(scanId, "completed", 45_000);
 

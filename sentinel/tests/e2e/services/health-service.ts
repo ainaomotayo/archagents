@@ -7,6 +7,7 @@ export interface ServiceHealth {
 const SERVICES = [
   { name: "api", url: "http://localhost:8081/health" },
   { name: "assessor-worker", url: "http://localhost:9092/health" },
+  { name: "notification-worker", url: "http://localhost:9095/health" },
   { name: "agent-security", url: "http://localhost:8082/health" },
   { name: "agent-dependency", url: "http://localhost:8084/health" },
 ];

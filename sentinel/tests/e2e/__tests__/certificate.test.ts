@@ -36,16 +36,29 @@ describe("E2E: Certificate Verification", () => {
     const certificate = await ctx.certificateService.getCertificate(scanId);
     if (!certificate) return; // Skip if no cert endpoint
 
-    // Use server-side verification endpoint — client-side HMAC may not match
-    // because the server signs `verdict` JSON, not the full certificate object
+    // Use server-side verification endpoint via POST
     const apiUrl = process.env.E2E_API_URL ?? "http://localhost:8081";
     try {
-      const res = await fetch(`${apiUrl}/v1/certificates/${certificate.id}/verify`);
+      const res = await fetch(`${apiUrl}/v1/certificates/${certificate.id}/verify`, {
+        method: "POST",
+      });
       const body = await res.json();
       console.log(`[VERIFY] Server verification: status=${res.status}, valid=${(body as any).valid}`);
     } catch (err) {
       console.log(`[VERIFY] Certificate verification endpoint not available: ${(err as Error).message}`);
     }
+  });
+
+  it("certificate can be retrieved by scanId via API", async () => {
+    const { scanId } = await ctx.scanService.submitDiff(combinedVulnDiff(ctx.projectId));
+    await ctx.scanService.pollUntilStatus(scanId, "completed", 45_000);
+
+    const certificate = await ctx.certificateService.getCertificate(scanId);
+    expect(certificate).not.toBeNull();
+    expect(certificate!.scanId).toBe(scanId);
+    expect(certificate!.id).toBeTruthy();
+
+    console.log(`[VERIFY] Certificate retrieved by scanId: id=${certificate!.id}`);
   });
 
   it("clean diff produces full_pass certificate with riskScore 0", async () => {
