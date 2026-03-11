@@ -1,5 +1,6 @@
 import { verifyRequest, verifyApiKey, extractPrefix } from "@sentinel/auth";
 import { isAuthorized, type ApiRole } from "@sentinel/security";
+import { setCurrentOrgId } from "@sentinel/db";
 import type { FastifyRequest, FastifyReply } from "fastify";
 
 export async function resolveApiKeyAuth(
@@ -26,6 +27,7 @@ export async function resolveApiKeyAuth(
 interface AuthHookOptions {
   getOrgSecret: (apiKey?: string) => Promise<string | null>;
   resolveRole?: (apiKey?: string) => Promise<ApiRole>;
+  resolveDbRole?: (userId: string, orgId: string) => Promise<string | null>;
 }
 
 export function createAuthHook(options: AuthHookOptions) {
@@ -49,6 +51,7 @@ export function createAuthHook(options: AuthHookOptions) {
       });
       if (apiKeyResult) {
         (request as any).orgId = apiKeyResult.orgId;
+        setCurrentOrgId(apiKeyResult.orgId);
         (request as any).role = apiKeyResult.role as ApiRole;
         // RBAC check
         const rawPath = request.routeOptions?.url ?? request.url;
@@ -85,20 +88,35 @@ export function createAuthHook(options: AuthHookOptions) {
       return;
     }
 
-    // Resolve role
-    const role: ApiRole = options.resolveRole
-      ? await options.resolveRole(apiKey)
-      : (request.headers["x-sentinel-role"] as ApiRole) ?? "service";
-
-    // Store on request for downstream use
-    (request as any).role = role;
-
     // Read org from dashboard header
     const orgHeader = request.headers["x-sentinel-org-id"] as string | undefined;
     if (orgHeader) {
       (request as any).orgId = orgHeader;
     }
     (request as any).orgId = (request as any).orgId ?? "default";
+    setCurrentOrgId((request as any).orgId);
+
+    // Resolve role — prefer DB lookup, fall back to resolveRole option or header
+    const userId = request.headers["x-sentinel-user-id"] as string | undefined;
+    let role: ApiRole;
+
+    if (options.resolveDbRole && userId) {
+      const dbRole = await options.resolveDbRole(userId, (request as any).orgId);
+      if (dbRole) {
+        role = dbRole as ApiRole;
+      } else {
+        role = options.resolveRole
+          ? await options.resolveRole(apiKey)
+          : (request.headers["x-sentinel-role"] as ApiRole) ?? "service";
+      }
+    } else {
+      role = options.resolveRole
+        ? await options.resolveRole(apiKey)
+        : (request.headers["x-sentinel-role"] as ApiRole) ?? "service";
+    }
+
+    // Store on request for downstream use
+    (request as any).role = role;
 
     // RBAC check — use Fastify route pattern for matching
     const rawPath = request.routeOptions?.url ?? request.url;
