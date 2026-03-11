@@ -47,6 +47,9 @@ importers:
       '@sentinel/github':
         specifier: workspace:*
         version: link:../../packages/github
+      '@sentinel/notifications':
+        specifier: workspace:*
+        version: link:../../packages/notifications
       '@sentinel/security':
         specifier: workspace:*
         version: link:../../packages/security
@@ -71,10 +74,16 @@ importers:
       node-cron:
         specifier: ^4.2.1
         version: 4.2.1
+      nodemailer:
+        specifier: ^6.9
+        version: 6.10.1
     devDependencies:
       '@octokit/rest':
         specifier: ^22.0.1
         version: 22.0.1
+      '@types/nodemailer':
+        specifier: ^6.4
+        version: 6.4.23
       tsx:
         specifier: ^4.19
         version: 4.21.0
