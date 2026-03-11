@@ -92,6 +92,9 @@ export function createSentinelLspServer(deps: ServerDeps) {
     } else if (command === "sentinel.showFindings") {
       const findingIds = args[0] as string[];
       return findingIds;
+    } else if (command === "sentinel.openDashboard") {
+      const findingId = args[0] as string | undefined;
+      return { command: "openDashboard", findingId };
     }
   }
 
@@ -100,11 +103,15 @@ export function createSentinelLspServer(deps: ServerDeps) {
       event.topic.startsWith("finding.") ||
       event.topic === "scan.completed"
     ) {
-      const result = (await apiClient.getFindings()) as {
-        findings: SentinelFinding[];
-        total: number;
-      };
-      findingCache.upsert(result.findings);
+      try {
+        const result = (await apiClient.getFindings()) as {
+          findings: SentinelFinding[];
+          total: number;
+        };
+        findingCache.upsert(result.findings);
+      } catch {
+        // API unreachable during SSE event — continue using cached findings
+      }
     }
   }
 

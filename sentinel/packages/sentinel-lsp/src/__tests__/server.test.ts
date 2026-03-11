@@ -147,6 +147,28 @@ describe("createSentinelLspServer", () => {
     expect(result).toEqual(["f-1", "f-2"]);
   });
 
+  it("handleCommand sentinel.openDashboard returns command info", async () => {
+    const deps = createMockDeps();
+    const server = createSentinelLspServer(deps);
+
+    const result = await server.handleCommand("sentinel.openDashboard", ["f-1"]);
+
+    expect(result).toEqual({ command: "openDashboard", findingId: "f-1" });
+  });
+
+  it("handleSseEvent does not throw when API fails", async () => {
+    const deps = createMockDeps();
+    (deps.apiClient.getFindings as ReturnType<typeof vi.fn>).mockRejectedValue(new Error("network error"));
+    const server = createSentinelLspServer(deps);
+
+    const event: SentinelEvent = {
+      id: "e-2", orgId: "org-1", topic: "scan.completed",
+      payload: { scanId: "s-1" }, timestamp: "2026-03-10T00:00:00Z",
+    };
+
+    await expect(server.handleSseEvent(event)).resolves.toBeUndefined();
+  });
+
   it("handleSseEvent upserts findings", async () => {
     const deps = createMockDeps();
     const server = createSentinelLspServer(deps);

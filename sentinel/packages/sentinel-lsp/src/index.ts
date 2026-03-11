@@ -15,8 +15,8 @@ import type { SentinelFinding, ConnectionStatus } from "./types.js";
 // Re-exports for library usage
 export { FindingCache } from "./finding-cache.js";
 export { DiagnosticMapper } from "./diagnostic-mapper.js";
-export { SentinelApiClient } from "./api-client.js";
-export { SseListener } from "./sse-listener.js";
+export { SentinelApiClient, type FindingsQuery } from "./api-client.js";
+export { SseListener, type EventSourceLike, type EventSourceConstructor } from "./sse-listener.js";
 export { createSentinelLspServer, type ServerDeps } from "./server.js";
 export type { SentinelFinding, SentinelProject, SentinelEvent, LspServerConfig, ConnectionStatus } from "./types.js";
 
@@ -45,10 +45,14 @@ if (isDirectRun && process.env.NODE_ENV !== "test") {
     apiUrl, apiToken, orgId,
     ["scan.*", "finding.*"],
     async (event) => {
-      await server.handleSseEvent(event);
-      for (const doc of documents.all()) {
-        const diagnostics = server.getDiagnosticsForFile(doc.uri);
-        connection.sendDiagnostics({ uri: doc.uri, diagnostics });
+      try {
+        await server.handleSseEvent(event);
+        for (const doc of documents.all()) {
+          const diagnostics = server.getDiagnosticsForFile(doc.uri);
+          connection.sendDiagnostics({ uri: doc.uri, diagnostics });
+        }
+      } catch {
+        // SSE event handling failed — cached findings remain valid
       }
     },
   );
@@ -70,7 +74,7 @@ if (isDirectRun && process.env.NODE_ENV !== "test") {
       findingCache.save(cacheDir, projectId);
       sendStatus("connected");
     }).catch((err: Error) => {
-      if (err.message?.includes("401")) {
+      if (err.message?.includes("401") || err.message?.includes("403")) {
         sendStatus("auth_error");
       } else {
         sendStatus("offline");
@@ -91,6 +95,10 @@ if (isDirectRun && process.env.NODE_ENV !== "test") {
 
   documents.onDidChangeContent((event: TextDocumentChangeEvent<TextDocument>) => {
     connection.sendDiagnostics({ uri: event.document.uri, diagnostics: server.getDiagnosticsForFile(event.document.uri) });
+  });
+
+  documents.onDidClose((event: TextDocumentChangeEvent<TextDocument>) => {
+    connection.sendDiagnostics({ uri: event.document.uri, diagnostics: [] });
   });
 
   connection.onCodeAction((params) => server.getCodeActionsForFile(params.textDocument.uri, params.range));
