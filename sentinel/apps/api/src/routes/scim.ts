@@ -124,6 +124,18 @@ export const SCIM_USER_SCHEMA = {
   ],
 };
 
+export const SCIM_GROUP_SCHEMA = {
+  id: "urn:ietf:params:scim:schemas:core:2.0:Group",
+  name: "Group",
+  description: "SCIM Group resource",
+  attributes: [
+    { name: "displayName", type: "string", multiValued: false, required: true, mutability: "readWrite", uniqueness: "server" },
+    { name: "members", type: "complex", multiValued: true, required: false, subAttributes: [
+      { name: "value", type: "string" }, { name: "display", type: "string" },
+    ]},
+  ],
+};
+
 export function registerScimRoutes(app: FastifyInstance) {
   // SCIM auth middleware — validates Bearer token against SsoConfig.scimToken
   async function scimAuth(request: FastifyRequest, reply: FastifyReply) {
@@ -168,8 +180,8 @@ export function registerScimRoutes(app: FastifyInstance) {
   app.get("/v1/scim/v2/Schemas", async (_request: FastifyRequest, reply: FastifyReply) => {
     return reply.send({
       schemas: ["urn:ietf:params:scim:api:messages:2.0:ListResponse"],
-      totalResults: 1,
-      Resources: [SCIM_USER_SCHEMA],
+      totalResults: 2,
+      Resources: [SCIM_USER_SCHEMA, SCIM_GROUP_SCHEMA],
     });
   });
 
@@ -355,6 +367,43 @@ export function registerScimRoutes(app: FastifyInstance) {
   });
 
   // ── SCIM Groups endpoints ──────────────────────────────────────────
+
+  // POST /v1/scim/v2/Groups — create a group (role assignment)
+  app.post("/v1/scim/v2/Groups", { preHandler: scimAuth }, async (request: FastifyRequest, reply: FastifyReply) => {
+    const { getDb } = await import("@sentinel/db");
+    const db = getDb();
+    const orgId = (request as any).orgId;
+    const body = request.body as any;
+    const displayName = body.displayName;
+    if (!displayName) {
+      return reply.status(400).send({
+        schemas: ["urn:ietf:params:scim:api:messages:2.0:Error"],
+        detail: "displayName is required",
+        status: "400",
+      });
+    }
+    const memberIds: string[] = (body.members ?? []).map((m: any) => m.value);
+
+    // Create memberships for all members with this role
+    if (memberIds.length > 0) {
+      await db.orgMembership.createMany({
+        data: memberIds.map((userId) => ({ orgId, userId, role: displayName, source: "scim" })),
+        skipDuplicates: true,
+      });
+    }
+
+    const memberships = await db.orgMembership.findMany({
+      where: { orgId, role: displayName },
+      include: { user: { select: { id: true, name: true, email: true } } },
+    });
+
+    const members = memberships.map((m: any) => ({
+      value: m.userId,
+      display: m.user?.name ?? m.user?.email ?? m.userId,
+    }));
+
+    return reply.status(201).send(buildScimGroupResource(displayName, displayName, members));
+  });
 
   // GET /v1/scim/v2/Groups — list groups (each distinct role = a group)
   app.get("/v1/scim/v2/Groups", { preHandler: scimAuth }, async (request: FastifyRequest, reply: FastifyReply) => {

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { buildScimGroupResource, parseGroupPatchOps } from "../routes/scim.js";
+import { buildScimGroupResource, parseGroupPatchOps, SCIM_GROUP_SCHEMA } from "../routes/scim.js";
 
 describe("SCIM Groups helpers", () => {
   it("buildScimGroupResource formats a group for SCIM response", () => {
@@ -40,5 +40,11 @@ describe("SCIM Groups helpers", () => {
     const resource = buildScimGroupResource("admin", "admin", []);
     expect(resource.members).toEqual([]);
     expect(resource.meta.resourceType).toBe("Group");
+  });
+
+  it("SCIM_GROUP_SCHEMA has correct structure", () => {
+    expect(SCIM_GROUP_SCHEMA.id).toBe("urn:ietf:params:scim:schemas:core:2.0:Group");
+    expect(SCIM_GROUP_SCHEMA.attributes).toBeDefined();
+    expect(SCIM_GROUP_SCHEMA.attributes.length).toBeGreaterThan(0);
   });
 });
