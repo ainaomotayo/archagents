@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import http from "node:http";
 import { Redis } from "ioredis";
 import { EventBus, withRetry } from "@sentinel/events";
@@ -28,6 +29,10 @@ function computeNextRetry(attempt: number): Date {
   const maxDelay = 3_600_000;
   const delay = Math.min(base * Math.pow(2, attempt) + jitter, maxDelay);
   return new Date(Date.now() + delay);
+}
+
+function computeIdempotencyKey(eventId: string, endpointId: string): string {
+  return createHash("sha256").update(`${eventId}:${endpointId}`).digest("hex");
 }
 
 // --- Core processing (exported for testing) ---
@@ -72,11 +77,20 @@ export async function processNotificationEvent(
     const adapter = deps.registry.get(ep.channelType);
     if (!adapter) continue;
 
+    const idempotencyKey = computeIdempotencyKey(event.id, ep.id);
+
+    // Check for existing delivery (deduplication on restart)
+    const existing = await deps.db.webhookDelivery.findUnique({
+      where: { idempotencyKey },
+    });
+    if (existing) continue;
+
     const result = await adapter.deliver(ep, event);
 
     if (result.success) {
       await deps.db.webhookDelivery.create({
         data: {
+          idempotencyKey,
           endpointId: ep.id, orgId: event.orgId, topic: event.topic,
           payload: event, status: "delivered",
           httpStatus: result.httpStatus ?? null, attempt: 1, deliveredAt: new Date(),
@@ -87,6 +101,7 @@ export async function processNotificationEvent(
     } else {
       await deps.db.webhookDelivery.create({
         data: {
+          idempotencyKey,
           endpointId: ep.id, orgId: event.orgId, topic: event.topic,
           payload: event, status: "pending",
           httpStatus: result.httpStatus ?? null, attempt: 1,
