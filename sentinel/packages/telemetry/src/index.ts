@@ -7,5 +7,9 @@ export {
   agentResultsTotal,
   pendingScansGauge,
   dlqDepthGauge,
+  notificationDeliveriesTotal,
+  notificationDeliveryDuration,
+  sseConnectionsGauge,
+  notificationRetryQueueDepth,
 } from "./metrics.js";
 export { initTracing, shutdownTracing, type TracingOptions } from "./tracer.js";

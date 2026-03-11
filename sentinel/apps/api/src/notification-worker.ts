@@ -11,6 +11,11 @@ import {
   type NotificationEvent,
 } from "@sentinel/notifications";
 import { createLogger, initTracing, shutdownTracing } from "@sentinel/telemetry";
+import {
+  notificationDeliveriesTotal,
+  notificationDeliveryDuration,
+  notificationRetryQueueDepth,
+} from "@sentinel/telemetry";
 
 const logger = createLogger({ name: "notification-worker" });
 
@@ -76,6 +81,8 @@ export async function processNotificationEvent(
           httpStatus: result.httpStatus ?? null, attempt: 1, deliveredAt: new Date(),
         },
       });
+      notificationDeliveriesTotal.inc({ channel: ep.channelType, status: "delivered" });
+      notificationDeliveryDuration.observe({ channel: ep.channelType, success: "true" }, result.durationMs / 1000);
     } else {
       await deps.db.webhookDelivery.create({
         data: {
@@ -85,6 +92,8 @@ export async function processNotificationEvent(
           lastError: result.error ?? null, nextRetryAt: computeNextRetry(1),
         },
       });
+      notificationDeliveriesTotal.inc({ channel: ep.channelType, status: "failed" });
+      notificationDeliveryDuration.observe({ channel: ep.channelType, success: "false" }, result.durationMs / 1000);
     }
   }
 
@@ -139,11 +148,13 @@ export async function processRetryQueue(deps: WorkerDeps): Promise<void> {
         where: { id: delivery.id },
         data: { status: "delivered", httpStatus: result.httpStatus ?? null, attempt: delivery.attempt + 1, deliveredAt: new Date(), lastError: null, nextRetryAt: null },
       });
+      notificationDeliveriesTotal.inc({ channel: ep.channelType, status: "delivered" });
     } else if (delivery.attempt >= delivery.maxAttempts) {
       await deps.db.webhookDelivery.update({
         where: { id: delivery.id },
         data: { status: "dlq", attempt: delivery.attempt + 1, lastError: result.error ?? null, nextRetryAt: null },
       });
+      notificationDeliveriesTotal.inc({ channel: ep.channelType, status: "dlq" });
     } else {
       await deps.db.webhookDelivery.update({
         where: { id: delivery.id },
@@ -151,6 +162,9 @@ export async function processRetryQueue(deps: WorkerDeps): Promise<void> {
       });
     }
   }
+
+  const retryDepth = await deps.db.webhookDelivery.count({ where: { status: "pending" } });
+  notificationRetryQueueDepth.set(retryDepth);
 
   // Check DLQ depth and emit system event if threshold exceeded
   const dlqCount = await deps.db.webhookDelivery.count({ where: { status: "dlq" } });
