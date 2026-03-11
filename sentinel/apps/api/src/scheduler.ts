@@ -22,6 +22,13 @@ export interface SchedulerConfig {
 
 export const RETENTION_SCHEDULE = "0 4 * * *";
 export const COMPLIANCE_SNAPSHOT_SCHEDULE = "0 5 * * *";
+export const HEALTH_CHECK_SCHEDULE = "*/5 * * * *";
+
+const SERVICE_HEALTH_ENDPOINTS = [
+  { name: "assessor-worker", url: `http://localhost:${process.env.WORKER_HEALTH_PORT ?? "9092"}/health` },
+  { name: "report-worker", url: `http://localhost:${process.env.REPORT_WORKER_PORT ?? "9094"}/health` },
+  { name: "notification-worker", url: `http://localhost:${process.env.NOTIFICATION_WORKER_PORT ?? "9095"}/health` },
+];
 
 export function buildSchedulerConfig(): SchedulerConfig {
   const enabled = process.env.SELF_SCAN_ENABLED !== "false";
@@ -247,6 +254,36 @@ async function verifyEvidenceChains(db: any, eventBus?: EventBus) {
   logger.info({ checked, failures }, "Evidence chain integrity check completed");
 }
 
+export async function checkServiceHealth(eventBus: EventBus) {
+  for (const svc of SERVICE_HEALTH_ENDPOINTS) {
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 5000);
+      const res = await fetch(svc.url, { signal: controller.signal });
+      clearTimeout(timeout);
+      if (!res.ok) {
+        logger.warn({ service: svc.name, status: res.status }, "Service health check returned non-OK");
+        await eventBus.publish("sentinel.notifications", {
+          id: `evt-health-${svc.name}-${Date.now()}`,
+          orgId: "system",
+          topic: "system.health_degraded",
+          payload: { service: svc.name, status: res.status, reason: "non-ok response" },
+          timestamp: new Date().toISOString(),
+        });
+      }
+    } catch (err) {
+      logger.warn({ service: svc.name, err }, "Service health check failed");
+      await eventBus.publish("sentinel.notifications", {
+        id: `evt-health-${svc.name}-${Date.now()}`,
+        orgId: "system",
+        topic: "system.health_degraded",
+        payload: { service: svc.name, reason: String(err) },
+        timestamp: new Date().toISOString(),
+      });
+    }
+  }
+}
+
 // --- Main entrypoint (when run as standalone process) ---
 if (process.env.NODE_ENV !== "test") {
   const config = buildSchedulerConfig();
@@ -346,6 +383,19 @@ if (process.env.NODE_ENV !== "test") {
     }
   });
   logger.info("Evidence chain integrity check cron registered (05:30 UTC daily)");
+
+  // Service health checks — every 5 minutes
+  metrics.registerSchedule("health_check", HEALTH_CHECK_SCHEDULE);
+  cron.schedule(HEALTH_CHECK_SCHEDULE, async () => {
+    try {
+      await checkServiceHealth(eventBus);
+      metrics.recordTrigger("health_check");
+    } catch (err) {
+      metrics.recordError("health_check");
+      logger.error({ err }, "Service health check failed");
+    }
+  });
+  logger.info({ schedule: HEALTH_CHECK_SCHEDULE }, "Service health check cron registered");
 
   const shutdown = async () => {
     logger.info("Scheduler shutting down...");
