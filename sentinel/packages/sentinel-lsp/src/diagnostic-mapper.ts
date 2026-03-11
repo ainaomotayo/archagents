@@ -102,7 +102,7 @@ export class DiagnosticMapper {
       lenses.push({
         range,
         command: Command.create(
-          `$(warning) ${group.length} Sentinel finding(s) (${maxSeverity})`,
+          `$(warning) ${group.length} Sentinel finding${group.length > 1 ? "s" : ""} (${maxSeverity})`,
           "sentinel.showFindings",
           group.map((f) => f.id),
         ),

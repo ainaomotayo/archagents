@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { createRequire } from "node:module";
 import {
   TextDocuments,
   ProposedFeatures,
@@ -10,7 +11,7 @@ import { createSentinelLspServer } from "./server.js";
 import { SentinelApiClient } from "./api-client.js";
 import { SseListener } from "./sse-listener.js";
 import { FindingCache } from "./finding-cache.js";
-import type { SentinelFinding, ConnectionStatus } from "./types.js";
+import type { ConnectionStatus } from "./types.js";
 
 // Re-exports for library usage
 export { FindingCache } from "./finding-cache.js";
@@ -20,9 +21,9 @@ export { SseListener, type EventSourceLike, type EventSourceConstructor } from "
 export { createSentinelLspServer, type ServerDeps } from "./server.js";
 export type { SentinelFinding, SentinelProject, SentinelEvent, LspServerConfig, ConnectionStatus } from "./types.js";
 
-// Node-specific createConnection (vscode-languageserver/node subpath has incomplete typings in v9)
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const { createConnection: createNodeConnection } = require("vscode-languageserver/node") as {
+// Node-specific createConnection (vscode-languageserver/node subpath has incomplete typings under NodeNext)
+const esmRequire = createRequire(import.meta.url);
+const { createConnection: createNodeConnection } = esmRequire("vscode-languageserver/node") as {
   createConnection: (...args: unknown[]) => ReturnType<typeof import("vscode-languageserver").createConnection>;
 };
 

@@ -124,11 +124,16 @@ describe("DiagnosticMapper", () => {
     // Arguments should be array of finding IDs
     expect(lens10.command!.arguments![0]).toEqual(["f-1", "f-2"]);
 
+    // Plural: "findings" for count > 1
+    expect(lens10.command!.title).toContain("findings");
+
     // Second group: line 20 with 1 finding, max severity low
     const lens20 = lenses.find((l) => l.range.start.line === 19)!;
     expect(lens20).toBeDefined();
     expect(lens20.command!.title).toContain("1");
     expect(lens20.command!.title).toContain("low");
     expect(lens20.command!.arguments![0]).toEqual(["f-3"]);
+    // Singular: "finding" (no s) for count === 1
+    expect(lens20.command!.title).toMatch(/1 Sentinel finding \(/);
   });
 });

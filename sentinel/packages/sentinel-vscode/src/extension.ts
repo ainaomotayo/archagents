@@ -96,9 +96,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   context.subscriptions.push(
     vscode.commands.registerCommand("sentinel.triggerScan", async () => {
       if (client) {
+        const scanProjectId = vscode.workspace.getConfiguration("sentinel").get<string>("projectId", "");
         await client.sendRequest("workspace/executeCommand", {
           command: "sentinel.triggerScan",
-          arguments: [],
+          arguments: [scanProjectId, []],
         });
         vscode.window.showInformationMessage("Sentinel scan triggered.");
       }
