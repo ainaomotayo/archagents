@@ -204,6 +204,22 @@ class QualityAgent(BaseAgent):
         findings: list[Finding] = []
         gaps = find_coverage_gaps(event.files)
         for gap in gaps:
+            untested = gap.untested_functions
+            desc = (
+                f"New source file `{gap.source_file}` ({gap.language}) "
+                f"has no corresponding test file in the diff."
+            )
+            if gap.exported_functions:
+                desc += (
+                    f" Exports {len(gap.exported_functions)} function(s): "
+                    f"{', '.join(gap.exported_functions[:5])}."
+                )
+                if untested:
+                    desc += (
+                        f" {len(untested)} untested: "
+                        f"{', '.join(untested[:5])}."
+                    )
+
             findings.append(
                 Finding(
                     type="quality",
@@ -213,16 +229,17 @@ class QualityAgent(BaseAgent):
                     severity=Severity.MEDIUM,
                     confidence=Confidence.MEDIUM,
                     title=f"No test file found for `{gap.source_file}`",
-                    description=(
-                        f"New source file `{gap.source_file}` ({gap.language}) "
-                        f"has no corresponding test file in the diff."
-                    ),
+                    description=desc,
                     remediation=(
                         f"Add a test file. Expected patterns: "
                         f"{', '.join(gap.expected_test_patterns[:4])}"
                     ),
                     category="test-coverage",
                     scanner="quality-agent",
+                    extra={
+                        "exported_functions": gap.exported_functions,
+                        "untested_functions": untested,
+                    },
                 )
             )
         return findings
