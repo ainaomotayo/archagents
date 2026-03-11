@@ -5,7 +5,7 @@ import { getDb, disconnectDb, withTenant } from "@sentinel/db";
 import { EventBus, getDlqDepth, readDlq } from "@sentinel/events";
 import { AuditLog } from "@sentinel/audit";
 import { verifyCertificate } from "@sentinel/assessor";
-import { withCorrelationId, registry, httpRequestDuration, dlqDepthGauge, initTracing, shutdownTracing } from "@sentinel/telemetry";
+import { withCorrelationId, registry, httpRequestDuration, dlqDepthGauge, initTracing, shutdownTracing, sseConnectionsGauge } from "@sentinel/telemetry";
 import { configureGitHubApp } from "@sentinel/github";
 import {
   BUILT_IN_FRAMEWORKS,
@@ -939,6 +939,7 @@ app.get("/v1/events/stream", { preHandler: authHook }, async (request, reply) =>
   };
 
   sseManager.register(client);
+  sseConnectionsGauge.inc({ org_id: orgId });
 
   const heartbeat = setInterval(() => {
     try { reply.raw.write(": heartbeat\n\n"); } catch { clearInterval(heartbeat); }
@@ -947,6 +948,7 @@ app.get("/v1/events/stream", { preHandler: authHook }, async (request, reply) =>
   request.raw.on("close", () => {
     clearInterval(heartbeat);
     sseManager.unregister(clientId, orgId);
+    sseConnectionsGauge.dec({ org_id: orgId });
   });
 });
 
