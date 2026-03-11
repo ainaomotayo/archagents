@@ -74,6 +74,25 @@ services:
       timeout: 5s
       retries: 20
 
+  notification-worker:
+    build:
+      context: ../..
+      dockerfile: apps/api/Dockerfile
+    command: ["node", "dist/notification-worker.js"]
+    environment:
+      <<: *api-env
+      NOTIFICATION_WORKER_PORT: "9095"
+    ports:
+      - "9095:9095"
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:9095/health || exit 1"]
+      interval: 3s
+      timeout: 5s
+      retries: 20
+
   agent-security:
     build:
       context: ../..
