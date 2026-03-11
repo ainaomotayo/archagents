@@ -11,3 +11,4 @@ export type {
 
 export { TopicTrie } from "./trie.js";
 export { HttpWebhookAdapter } from "./adapters/http-webhook.js";
+export { SlackAdapter } from "./adapters/slack.js";
