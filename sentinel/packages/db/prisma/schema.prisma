@@ -17,9 +17,14 @@ model Organization {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  projects Project[]
-  users    User[]
-  policies Policy[]
+  projects       Project[]
+  users          User[]
+  policies       Policy[]
+  ssoConfigs     SsoConfig[]
+  memberships    OrgMembership[]
+  encryptionKeys EncryptionKey[]
+  apiKeys        ApiKey[]
+  scimSyncState  ScimSyncState?
 
   @@map("organizations")
 }
@@ -193,18 +198,107 @@ model AuditEvent {
 }
 
 model User {
-  id           String   @id @default(uuid()) @db.Uuid
-  orgId        String   @map("org_id") @db.Uuid
-  email        String   @unique
-  name         String
-  role         String   @default("dev")
-  authProvider String   @default("github") @map("auth_provider")
-  createdAt    DateTime @default(now()) @map("created_at")
+  id            String    @id @default(uuid()) @db.Uuid
+  orgId         String    @map("org_id") @db.Uuid
+  email         String    @unique
+  name          String
+  role          String    @default("dev")
+  authProvider  String    @default("github") @map("auth_provider")
+  emailVerified Boolean   @default(false) @map("email_verified")
+  externalId    String?   @map("external_id")
+  lastLoginAt   DateTime? @map("last_login_at")
+  createdAt     DateTime  @default(now()) @map("created_at")
 
   organization Organization @relation(fields: [orgId], references: [id])
+  memberships  OrgMembership[]
 
   @@index([orgId])
+  @@index([externalId])
   @@map("users")
+}
+
+// --- P10: Enterprise SSO + Encryption ---
+
+model SsoConfig {
+  id           String   @id @default(uuid()) @db.Uuid
+  orgId        String   @map("org_id") @db.Uuid
+  provider     String
+  displayName  String   @map("display_name")
+  clientId     String   @map("client_id")
+  clientSecret String   @map("client_secret")
+  issuerUrl    String?  @map("issuer_url")
+  samlMetadata String?  @map("saml_metadata") @db.Text
+  scimToken    String?  @map("scim_token")
+  settings     Json     @default("{}")
+  enabled      Boolean  @default(true)
+  enforced     Boolean  @default(false)
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+  organization Organization @relation(fields: [orgId], references: [id])
+  @@unique([orgId, provider])
+  @@map("sso_configs")
+}
+
+model OrgMembership {
+  id        String   @id @default(uuid()) @db.Uuid
+  orgId     String   @map("org_id") @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  role      String   @default("viewer")
+  source    String   @default("manual")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  organization Organization @relation(fields: [orgId], references: [id])
+  user         User         @relation(fields: [userId], references: [id])
+  @@unique([orgId, userId])
+  @@index([userId])
+  @@map("org_memberships")
+}
+
+model EncryptionKey {
+  id           String    @id @default(uuid()) @db.Uuid
+  orgId        String    @map("org_id") @db.Uuid
+  purpose      String
+  wrappedDek   String    @map("wrapped_dek") @db.Text
+  kekId        String    @map("kek_id")
+  kekProvider  String    @map("kek_provider")
+  version      Int       @default(1)
+  active       Boolean   @default(true)
+  rotatedAt    DateTime? @map("rotated_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  organization Organization @relation(fields: [orgId], references: [id])
+  @@index([orgId, purpose, active])
+  @@map("encryption_keys")
+}
+
+model ApiKey {
+  id         String    @id @default(uuid()) @db.Uuid
+  orgId      String    @map("org_id") @db.Uuid
+  name       String
+  keyHash    String    @map("key_hash")
+  keySalt    String    @map("key_salt")
+  keyPrefix  String    @map("key_prefix")
+  role       String    @default("service")
+  expiresAt  DateTime? @map("expires_at")
+  lastUsedAt DateTime? @map("last_used_at")
+  revokedAt  DateTime? @map("revoked_at")
+  createdAt  DateTime  @default(now()) @map("created_at")
+  organization Organization @relation(fields: [orgId], references: [id])
+  @@index([keyPrefix])
+  @@map("api_keys")
+}
+
+model ScimSyncState {
+  id           String   @id @default(uuid()) @db.Uuid
+  orgId        String   @unique @map("org_id") @db.Uuid
+  lastSyncAt   DateTime @map("last_sync_at")
+  usersCreated Int      @default(0) @map("users_created")
+  usersUpdated Int      @default(0) @map("users_updated")
+  usersDeleted Int      @default(0) @map("users_deleted")
+  status       String   @default("idle")
+  errorDetail  String?  @map("error_detail")
+  createdAt    DateTime @default(now()) @map("created_at")
+  organization Organization @relation(fields: [orgId], references: [id])
+  @@map("scim_sync_states")
 }
 
 model GitHubInstallation {
