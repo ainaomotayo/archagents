@@ -258,7 +258,7 @@ model EncryptionKey {
   id           String    @id @default(uuid()) @db.Uuid
   orgId        String    @map("org_id") @db.Uuid
   purpose      String
-  wrappedDek   String    @map("wrapped_dek") @db.Text
+  wrappedDek   Bytes     @map("wrapped_dek")
   kekId        String    @map("kek_id")
   kekProvider  String    @map("kek_provider")
   version      Int       @default(1)

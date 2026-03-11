@@ -3,14 +3,19 @@ import type { KmsProvider, DekCache } from "@sentinel/security";
 import { LocalKmsProvider } from "@sentinel/security";
 
 export async function rotateOrgKeys(
-  keys: Array<{ id: string; purpose: string; wrappedDek: string; kekId: string; version: number }>,
+  keys: Array<{ id: string; purpose: string; wrappedDek: string | Buffer | Uint8Array<ArrayBuffer>; kekId: string; version: number }>,
   kms: KmsProvider,
   kekId: string,
-): Promise<Array<{ id: string; newWrapped: string; newVersion: number }>> {
+): Promise<Array<{ id: string; newWrapped: Uint8Array; newVersion: number }>> {
   const results = [];
   for (const key of keys) {
-    const rewrapped = await kms.rewrapDataKey(kekId, Buffer.from(key.wrappedDek, "base64"));
-    results.push({ id: key.id, newWrapped: rewrapped.toString("base64"), newVersion: key.version + 1 });
+    const wrappedBuf = typeof key.wrappedDek === "string"
+      ? Buffer.from(key.wrappedDek, "base64")
+      : Buffer.isBuffer(key.wrappedDek)
+        ? key.wrappedDek
+        : Buffer.from(key.wrappedDek);
+    const rewrapped = await kms.rewrapDataKey(kekId, wrappedBuf);
+    results.push({ id: key.id, newWrapped: Uint8Array.from(rewrapped), newVersion: key.version + 1 });
   }
   return results;
 }
@@ -36,7 +41,7 @@ export function registerEncryptionAdminRoutes(app: FastifyInstance, authHook: an
       rotated.map((r) =>
         db.encryptionKey.update({
           where: { id: r.id },
-          data: { wrappedDek: r.newWrapped, version: r.newVersion, rotatedAt: new Date() },
+          data: { wrappedDek: new Uint8Array(r.newWrapped) as Uint8Array<ArrayBuffer>, version: r.newVersion, rotatedAt: new Date() },
         }),
       ),
     );

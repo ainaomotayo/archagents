@@ -35,9 +35,9 @@ describe("Key Rotation", () => {
 
     const results = await rotateOrgKeys(keys as any, mockKms as any, "kek-2");
     expect(results).toHaveLength(3);
-    expect(results[0]).toEqual({ id: "k1", newWrapped: expect.any(String), newVersion: 4 });
-    expect(results[1]).toEqual({ id: "k2", newWrapped: expect.any(String), newVersion: 8 });
-    expect(results[2]).toEqual({ id: "k3", newWrapped: expect.any(String), newVersion: 2 });
+    expect(results[0]).toEqual({ id: "k1", newWrapped: expect.any(Uint8Array), newVersion: 4 });
+    expect(results[1]).toEqual({ id: "k2", newWrapped: expect.any(Uint8Array), newVersion: 8 });
+    expect(results[2]).toEqual({ id: "k3", newWrapped: expect.any(Uint8Array), newVersion: 2 });
   });
 
   it("crypto-shred should support cache eviction", () => {
