@@ -1,0 +1,22 @@
+{
+  "name": "@sentinel/notifications",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run",
+    "lint": "echo 'lint placeholder'"
+  },
+  "dependencies": {
+    "nodemailer": "^6.9"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/nodemailer": "^6.4",
+    "typescript": "^5.7",
+    "vitest": "^3.0"
+  }
+}
