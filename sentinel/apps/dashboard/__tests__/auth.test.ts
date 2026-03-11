@@ -234,6 +234,12 @@ describe("provider health endpoint", () => {
   });
 });
 
+describe("SSO enforcement", () => {
+  test("authOptions has signIn callback", () => {
+    expect(typeof authOptions.callbacks?.signIn).toBe("function");
+  });
+});
+
 describe("events.signIn wiring", () => {
   test("events.signIn calls rateLimiter.reset and providerHealth.recordSuccess", async () => {
     const resetSpy = vi.spyOn(rateLimiter, "reset");

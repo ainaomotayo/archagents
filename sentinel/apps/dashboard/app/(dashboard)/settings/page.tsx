@@ -389,11 +389,19 @@ export default function SettingsPage() {
         </SectionCard>
 
         <LinkSectionCard
+          title="Single Sign-On"
+          description="Configure OIDC, SAML, and other SSO providers for your organization."
+          href="/settings/sso"
+          Icon={IconShield}
+          animationDelay="0.2s"
+        />
+
+        <LinkSectionCard
           title="Audit & Compliance"
           description="Data retention, export settings, and compliance configuration."
           href="/audit"
           Icon={IconActivity}
-          animationDelay="0.2s"
+          animationDelay="0.25s"
         />
       </div>
     </div>

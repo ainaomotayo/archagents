@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 import Fastify from "fastify";
 import { Redis } from "ioredis";
-import { getDb, disconnectDb, withTenant } from "@sentinel/db";
+import { getDb, disconnectDb, withTenant, initEncryption } from "@sentinel/db";
 import { EventBus, getDlqDepth, readDlq } from "@sentinel/events";
 import { AuditLog } from "@sentinel/audit";
 import { verifyCertificate } from "@sentinel/assessor";
@@ -25,6 +25,18 @@ import { HttpWebhookAdapter, SseManager } from "@sentinel/notifications";
 import { randomUUID } from "node:crypto";
 import { createScanStore, createAuditEventStore } from "./stores.js";
 import { registerSecurityPlugins } from "./plugins/security.js";
+import { registerApiKeyRoutes } from "./routes/api-keys.js";
+import { registerSsoConfigRoutes } from "./routes/sso-config.js";
+import { registerDiscoveryRoutes } from "./routes/auth-discovery.js";
+import { registerSamlMetadataRoute } from "./routes/saml-metadata.js";
+import { registerOrgMembershipRoutes } from "./routes/org-memberships.js";
+import { registerScimRoutes } from "./routes/scim.js";
+import { registerEncryptionAdminRoutes } from "./routes/encryption-admin.js";
+import { registerDomainRoutes } from "./routes/domain-verification.js";
+import { DekCache, EnvelopeEncryption, LocalKmsProvider } from "@sentinel/security";
+
+// Module-level DEK cache for encryption — shared with crypto-shred handler for eviction
+let dekCache: DekCache | undefined;
 
 if (process.env.OTEL_EXPORTER_OTLP_ENDPOINT && process.env.NODE_ENV !== "test") {
   initTracing({ serviceName: "sentinel-api" });
@@ -58,6 +70,22 @@ const auditLog = new AuditLog(createAuditEventStore(db));
 const authHook = createAuthHook({
   getOrgSecret: async (_apiKey) => {
     return process.env.SENTINEL_SECRET ?? null;
+  },
+  resolveDbRole: async (userId: string, orgId: string) => {
+    try {
+      const membership = await db.orgMembership.findUnique({
+        where: { orgId_userId: { orgId, userId } },
+      });
+      return membership?.role ?? null;
+    } catch {
+      return null; // Fail-open: fall back to header role
+    }
+  },
+  updateApiKeyLastUsed: (prefix) => {
+    getDb().apiKey.updateMany({
+      where: { keyPrefix: prefix },
+      data: { lastUsedAt: new Date() },
+    }).catch(() => {}); // Fire-and-forget
   },
 });
 
@@ -199,11 +227,12 @@ app.get("/v1/scans/:id/poll", { preHandler: authHook }, async (request, reply) =
 // --- Findings ---
 app.get("/v1/findings", { preHandler: authHook }, async (request) => {
   const orgId = (request as any).orgId ?? "default";
-  const { limit = "50", offset = "0", severity, category } = request.query as any;
+  const { limit = "50", offset = "0", severity, category, scanId } = request.query as any;
   return withTenant(db, orgId, async (tx) => {
     const where: any = {};
     if (severity) where.severity = severity;
     if (category) where.category = category;
+    if (scanId) where.scanId = scanId;
     const [findings, total] = await Promise.all([
       tx.finding.findMany({
         where,
@@ -279,16 +308,19 @@ app.patch("/v1/findings/:id", { preHandler: authHook }, async (request, reply) =
 // --- Certificates ---
 app.get("/v1/certificates", { preHandler: authHook }, async (request) => {
   const orgId = (request as any).orgId ?? "default";
-  const { limit = "50", offset = "0" } = request.query as any;
+  const { limit = "50", offset = "0", scanId } = request.query as any;
   return withTenant(db, orgId, async (tx) => {
+    const where: any = {};
+    if (scanId) where.scanId = scanId;
     const [certificates, total] = await Promise.all([
       tx.certificate.findMany({
+        where,
         take: Number(limit),
         skip: Number(offset),
         orderBy: { issuedAt: "desc" },
         include: { scan: { select: { commitHash: true, branch: true } } },
       }),
-      tx.certificate.count(),
+      tx.certificate.count({ where }),
     ]);
     return { certificates, total, limit: Number(limit), offset: Number(offset) };
   });
@@ -951,6 +983,43 @@ app.get("/v1/events/stream", { preHandler: authHook }, async (request, reply) =>
     sseConnectionsGauge.dec({ org_id: orgId });
   });
 });
+
+// --- P10: SSO + Encryption routes ---
+registerApiKeyRoutes(app, authHook);
+registerSsoConfigRoutes(app, authHook);
+registerDiscoveryRoutes(app);  // Public, no auth
+registerSamlMetadataRoute(app);  // Public, no auth
+registerOrgMembershipRoutes(app, authHook);
+registerScimRoutes(app);  // Uses own SCIM auth
+// --- Encryption wiring ---
+dekCache = new DekCache();
+const kms = new LocalKmsProvider();
+const envelope = new EnvelopeEncryption(kms, dekCache);
+
+// Wire key loader: loads wrapped DEK from DB for a given org+purpose
+envelope.setKeyLoader(async (orgId, purpose) => {
+  const record = await db.encryptionKey.findFirst({
+    where: { orgId, purpose, active: true },
+    orderBy: { version: "desc" },
+  });
+  if (!record) return null;
+  return { wrappedDek: Buffer.from(record.wrappedDek), kekId: record.kekId };
+});
+
+// Wire key provisioner: persists newly generated DEK to DB
+envelope.setKeyProvisioner(async (orgId, purpose, wrappedDek, kekId) => {
+  await db.encryptionKey.create({
+    data: { orgId, purpose, wrappedDek: new Uint8Array(wrappedDek), kekId, kekProvider: kms.name },
+  });
+});
+
+envelope.setDefaultKekId("default");
+
+// Activate encryption middleware on Prisma client
+initEncryption(envelope);
+
+registerEncryptionAdminRoutes(app, authHook, dekCache);
+registerDomainRoutes(app, authHook);
 
 // --- Graceful shutdown ---
 const shutdown = async () => {

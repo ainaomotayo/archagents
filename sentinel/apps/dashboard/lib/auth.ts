@@ -60,7 +60,8 @@ export function resolveRole(username: string | undefined | null): Role {
 
 /**
  * Build the list of OAuth providers based on which env vars are set.
- * This allows zero-config: only providers with credentials are enabled.
+ * NOTE: These are global providers. Per-org provider filtering is handled
+ * by the login page via /v1/auth/discovery and the signIn callback.
  */
 export function getConfiguredProviders(): any[] {
   const providers: any[] = [];
@@ -194,6 +195,21 @@ export const authOptions: AuthOptions = {
     updateAge: 60 * 60,         // Rotate JWT every 1 hour of activity
   },
 
+  jwt: {
+    async encode({ token, secret }) {
+      if (!token) return "";
+      const { encryptJwe } = await import("./jwe");
+      const key = typeof secret === "string" ? secret : secret.toString("base64");
+      return encryptJwe(token as Record<string, unknown>, key);
+    },
+    async decode({ token, secret }) {
+      if (!token) return null;
+      const { decryptJwe } = await import("./jwe");
+      const key = typeof secret === "string" ? secret : secret.toString("base64");
+      return decryptJwe(token, key) as any;
+    },
+  },
+
   cookies: {
     sessionToken: {
       name: "next-auth.session-token",
@@ -207,6 +223,35 @@ export const authOptions: AuthOptions = {
   },
 
   callbacks: {
+    async signIn({ account, profile }) {
+      // Enforce SSO restrictions if configured
+      if (account?.provider && profile?.email) {
+        try {
+          const apiUrl = process.env.SENTINEL_API_URL ?? "http://localhost:8080";
+          const res = await fetch(
+            `${apiUrl}/v1/auth/discovery?email=${encodeURIComponent(profile.email as string)}`,
+          );
+          if (res.ok) {
+            const data = await res.json();
+            if (data.enforced) {
+              const allowed = data.providers.map((p: any) => p.id);
+              if (!allowed.includes(account.provider)) {
+                logAuthEvent("auth.login.blocked", {
+                  provider: account.provider,
+                  email: profile.email,
+                  reason: "sso_enforcement",
+                });
+                return false;
+              }
+            }
+          }
+        } catch {
+          // Fail-open if discovery API is unavailable
+        }
+      }
+      return true;
+    },
+
     async jwt({ token, profile, account }) {
       if (profile) {
         // GitHub: profile.login, GitLab: profile.username
