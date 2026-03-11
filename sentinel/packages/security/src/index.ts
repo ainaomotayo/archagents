@@ -71,3 +71,7 @@ export { buildRetentionQuery, runRetentionCleanup, DEFAULT_RETENTION_DAYS } from
 export { ProviderHealthMonitor, type ProviderStatus } from "./provider-health.js";
 
 export { AuthRateLimiter, type RateLimitConfig, type RateLimitResult } from "./auth-rate-limit.js";
+
+export type { KmsProvider } from "./kms-provider.js";
+export { LocalKmsProvider } from "./kms-local.js";
+export { DekCache, type DekCacheOptions } from "./dek-cache.js";
