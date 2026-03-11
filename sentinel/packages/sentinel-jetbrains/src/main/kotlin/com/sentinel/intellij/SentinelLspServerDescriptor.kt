@@ -22,7 +22,9 @@ class SentinelLspServerDescriptor : LanguageServerFactory {
         val token = getStoredToken() ?: System.getenv("SENTINEL_API_TOKEN")
         token?.let { env["SENTINEL_API_TOKEN"] = it }
 
-        return ProcessStreamConnectionProvider(listOf(nodePath, serverPath, "--stdio"), project.basePath, env)
+        val provider = ProcessStreamConnectionProvider(listOf(nodePath, serverPath, "--stdio"), project.basePath)
+        provider.setUserEnvironmentVariables(env)
+        return provider
     }
 
     private fun getStoredToken(): String? {

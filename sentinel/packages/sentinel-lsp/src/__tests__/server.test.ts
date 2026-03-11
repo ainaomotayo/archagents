@@ -169,7 +169,7 @@ describe("createSentinelLspServer", () => {
     await expect(server.handleSseEvent(event)).resolves.toBeUndefined();
   });
 
-  it("handleSseEvent upserts findings", async () => {
+  it("handleSseEvent clears stale cache then upserts fresh findings", async () => {
     const deps = createMockDeps();
     const server = createSentinelLspServer(deps);
 
@@ -184,6 +184,11 @@ describe("createSentinelLspServer", () => {
     await server.handleSseEvent(event);
 
     expect(deps.apiClient.getFindings).toHaveBeenCalled();
+    expect(deps.findingCache.clear).toHaveBeenCalled();
     expect(deps.findingCache.upsert).toHaveBeenCalled();
+    // clear must be called before upsert
+    const clearOrder = (deps.findingCache.clear as ReturnType<typeof vi.fn>).mock.invocationCallOrder[0];
+    const upsertOrder = (deps.findingCache.upsert as ReturnType<typeof vi.fn>).mock.invocationCallOrder[0];
+    expect(clearOrder).toBeLessThan(upsertOrder);
   });
 });

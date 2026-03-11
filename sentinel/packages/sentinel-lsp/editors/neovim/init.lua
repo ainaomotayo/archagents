@@ -23,10 +23,10 @@ if not configs.sentinel then
 end
 
 lspconfig.sentinel.setup({
-  on_attach = function(client, bufnr)
-    -- sentinel/connectionStatus notification handler
-    client.handlers = client.handlers or {}
-    client.handlers["sentinel/connectionStatus"] = function(_, result)
+  handlers = {
+    -- Registered at setup time (not on_attach) so notifications arriving
+    -- during initialize are not dropped
+    ["sentinel/connectionStatus"] = function(_, result)
       local status = result and result.status or "unknown"
       if status == "connected" then
         vim.notify("Sentinel: connected", vim.log.levels.INFO)
@@ -35,6 +35,6 @@ lspconfig.sentinel.setup({
       elseif status == "auth_error" then
         vim.notify("Sentinel: authentication error — check API token", vim.log.levels.ERROR)
       end
-    end
-  end,
+    end,
+  },
 })

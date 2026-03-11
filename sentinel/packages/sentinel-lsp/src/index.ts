@@ -67,6 +67,7 @@ if (isDirectRun && process.env.NODE_ENV !== "test") {
       connection.sendNotification("sentinel/connectionStatus", { status });
 
     apiClient.getFindings().then((data) => {
+      findingCache.clear();
       findingCache.upsert(data.findings);
       for (const doc of documents.all()) {
         connection.sendDiagnostics({ uri: doc.uri, diagnostics: server.getDiagnosticsForFile(doc.uri) });

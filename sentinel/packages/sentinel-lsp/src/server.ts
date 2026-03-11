@@ -105,6 +105,7 @@ export function createSentinelLspServer(deps: ServerDeps) {
     ) {
       try {
         const result = await apiClient.getFindings();
+        findingCache.clear();
         findingCache.upsert(result.findings);
       } catch {
         // API unreachable during SSE event — continue using cached findings
