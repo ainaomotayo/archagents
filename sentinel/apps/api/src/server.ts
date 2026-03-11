@@ -25,6 +25,12 @@ import { HttpWebhookAdapter, SseManager } from "@sentinel/notifications";
 import { randomUUID } from "node:crypto";
 import { createScanStore, createAuditEventStore } from "./stores.js";
 import { registerSecurityPlugins } from "./plugins/security.js";
+import { registerApiKeyRoutes } from "./routes/api-keys.js";
+import { registerSsoConfigRoutes } from "./routes/sso-config.js";
+import { registerDiscoveryRoutes } from "./routes/auth-discovery.js";
+import { registerOrgMembershipRoutes } from "./routes/org-memberships.js";
+import { registerScimRoutes } from "./routes/scim.js";
+import { registerEncryptionAdminRoutes } from "./routes/encryption-admin.js";
 
 if (process.env.OTEL_EXPORTER_OTLP_ENDPOINT && process.env.NODE_ENV !== "test") {
   initTracing({ serviceName: "sentinel-api" });
@@ -955,6 +961,14 @@ app.get("/v1/events/stream", { preHandler: authHook }, async (request, reply) =>
     sseConnectionsGauge.dec({ org_id: orgId });
   });
 });
+
+// --- P10: SSO + Encryption routes ---
+registerApiKeyRoutes(app, authHook);
+registerSsoConfigRoutes(app, authHook);
+registerDiscoveryRoutes(app);  // Public, no auth
+registerOrgMembershipRoutes(app, authHook);
+registerScimRoutes(app);  // Uses own SCIM auth
+registerEncryptionAdminRoutes(app, authHook);
 
 // --- Graceful shutdown ---
 const shutdown = async () => {
