@@ -128,3 +128,64 @@ describe("Prisma Encryption Middleware", () => {
     expect(ENCRYPTED_FIELDS.User.mode).toBe("deterministic");
   });
 });
+
+// Mock @prisma/client so we can test initEncryption without a real DB
+const mockExtends = vi.fn().mockReturnThis();
+vi.mock("@prisma/client", () => {
+  return {
+    PrismaClient: vi.fn().mockImplementation(() => ({
+      $extends: mockExtends,
+      $disconnect: vi.fn(),
+    })),
+  };
+});
+
+describe("initEncryption and setCurrentOrgId wiring", () => {
+  beforeEach(() => {
+    vi.resetModules();
+    mockExtends.mockClear();
+  });
+
+  it("initEncryption is exported and callable", async () => {
+    const mod = await import("../index.js");
+    expect(typeof mod.initEncryption).toBe("function");
+  });
+
+  it("setCurrentOrgId is exported and callable", async () => {
+    const mod = await import("../index.js");
+    expect(typeof mod.setCurrentOrgId).toBe("function");
+  });
+
+  it("initEncryption registers middleware on the Prisma client via $extends", async () => {
+    const { initEncryption, disconnectDb } = await import("../index.js");
+
+    const fakeEnvelope = {
+      encrypt: vi.fn(),
+      decrypt: vi.fn(),
+      encryptDeterministic: vi.fn(),
+      decryptDeterministic: vi.fn(),
+    } as any;
+
+    initEncryption(fakeEnvelope);
+
+    expect(mockExtends).toHaveBeenCalledOnce();
+    expect(mockExtends).toHaveBeenCalledWith(
+      expect.objectContaining({
+        query: expect.objectContaining({
+          $allOperations: expect.any(Function),
+        }),
+      }),
+    );
+
+    await disconnectDb();
+  });
+
+  it("setCurrentOrgId accepts string and null without throwing", async () => {
+    const { setCurrentOrgId, disconnectDb } = await import("../index.js");
+
+    expect(() => setCurrentOrgId("org-123")).not.toThrow();
+    expect(() => setCurrentOrgId(null)).not.toThrow();
+
+    await disconnectDb();
+  });
+});
