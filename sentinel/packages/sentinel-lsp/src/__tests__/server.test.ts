@@ -129,6 +129,24 @@ describe("createSentinelLspServer", () => {
     expect(deps.findingCache.remove).toHaveBeenCalledWith(["f-1"]);
   });
 
+  it("handleCommand sentinel.triggerScan calls API", async () => {
+    const deps = createMockDeps();
+    const server = createSentinelLspServer(deps);
+
+    await server.handleCommand("sentinel.triggerScan", ["proj-1", ["src/app.ts"]]);
+
+    expect(deps.apiClient.triggerScan).toHaveBeenCalledWith("proj-1", ["src/app.ts"]);
+  });
+
+  it("handleCommand sentinel.showFindings returns finding IDs", async () => {
+    const deps = createMockDeps();
+    const server = createSentinelLspServer(deps);
+
+    const result = await server.handleCommand("sentinel.showFindings", [["f-1", "f-2"]]);
+
+    expect(result).toEqual(["f-1", "f-2"]);
+  });
+
   it("handleSseEvent upserts findings", async () => {
     const deps = createMockDeps();
     const server = createSentinelLspServer(deps);

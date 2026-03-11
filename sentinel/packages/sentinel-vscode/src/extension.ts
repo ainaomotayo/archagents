@@ -117,6 +117,27 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     }),
   );
 
+  // Listen for connection status notifications from the LSP server
+  client.onNotification("sentinel/connectionStatus", (params: { status: string }) => {
+    switch (params.status) {
+      case "connected":
+        statusBar.text = "$(shield) Sentinel";
+        statusBar.tooltip = "Sentinel Security — Connected";
+        statusBar.backgroundColor = undefined;
+        break;
+      case "offline":
+        statusBar.text = "$(shield) Sentinel (offline)";
+        statusBar.tooltip = "Sentinel Security — API unreachable, showing cached findings";
+        statusBar.backgroundColor = new vscode.ThemeColor("statusBarItem.warningBackground");
+        break;
+      case "auth_error":
+        statusBar.text = "$(shield) Sentinel (auth error)";
+        statusBar.tooltip = "Sentinel Security — Invalid API token. Run 'Sentinel: Configure API Token'";
+        statusBar.backgroundColor = new vscode.ThemeColor("statusBarItem.errorBackground");
+        break;
+    }
+  });
+
   // Start the client
   await client.start();
 }

@@ -86,4 +86,8 @@ export class SentinelApiClient {
   async getProjects(): Promise<unknown> {
     return this.request("GET", "/v1/projects");
   }
+
+  async getScanStatus(scanId: string): Promise<unknown> {
+    return this.request("GET", `/v1/scans/${scanId}`);
+  }
 }

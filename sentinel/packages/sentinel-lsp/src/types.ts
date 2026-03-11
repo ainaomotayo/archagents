@@ -39,3 +39,5 @@ export interface LspServerConfig {
   projectId?: string;
   topics?: string[];
 }
+
+export type ConnectionStatus = "connected" | "offline" | "auth_error";

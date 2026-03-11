@@ -80,11 +80,18 @@ export function createSentinelLspServer(deps: ServerDeps) {
     return diagnosticMapper.toCodeLenses(findings);
   }
 
-  async function handleCommand(command: string, args: unknown[]): Promise<void> {
+  async function handleCommand(command: string, args: unknown[]): Promise<unknown> {
     if (command === "sentinel.suppress") {
       const findingId = args[0] as string;
       await apiClient.suppressFinding(findingId);
       findingCache.remove([findingId]);
+    } else if (command === "sentinel.triggerScan") {
+      const projectId = args[0] as string;
+      const files = (args[1] as string[] | undefined) ?? [];
+      return apiClient.triggerScan(projectId, files);
+    } else if (command === "sentinel.showFindings") {
+      const findingIds = args[0] as string[];
+      return findingIds;
     }
   }
 

@@ -29,24 +29,29 @@ export class DiagnosticMapper {
   toDiagnostic(finding: SentinelFinding): Diagnostic {
     const range: Range = {
       start: { line: finding.lineStart - 1, character: 0 },
-      end: { line: finding.lineEnd - 1, character: 0 },
+      end: { line: finding.lineEnd - 1, character: Number.MAX_VALUE },
     };
 
-    return Diagnostic.create(
+    const diag = Diagnostic.create(
       range,
       finding.title ?? finding.description ?? finding.category ?? "Unknown finding",
       severityMap[finding.severity],
       finding.cweId ?? finding.category ?? undefined,
       `sentinel/${finding.agentName}`,
     );
+    diag.data = { findingId: finding.id };
+    return diag;
   }
 
   toCodeActions(finding: SentinelFinding): CodeAction[] {
     const title = finding.title ?? finding.description ?? finding.category ?? "finding";
 
+    const diagnostic = this.toDiagnostic(finding);
+
     const suppressAction: CodeAction = {
       title: `Suppress: ${title}`,
       kind: CodeActionKind.QuickFix,
+      diagnostics: [diagnostic],
       command: Command.create(
         `Suppress: ${title}`,
         "sentinel.suppress",
@@ -57,6 +62,7 @@ export class DiagnosticMapper {
     const viewAction: CodeAction = {
       title: "View in Sentinel Dashboard",
       kind: CodeActionKind.QuickFix,
+      diagnostics: [diagnostic],
       command: Command.create(
         "View in Sentinel Dashboard",
         "sentinel.openDashboard",
@@ -96,9 +102,9 @@ export class DiagnosticMapper {
       lenses.push({
         range,
         command: Command.create(
-          `Sentinel: ${group.length} finding(s) [${maxSeverity}]`,
+          `$(warning) ${group.length} Sentinel finding(s) (${maxSeverity})`,
           "sentinel.showFindings",
-          line,
+          group.map((f) => f.id),
         ),
       });
     }

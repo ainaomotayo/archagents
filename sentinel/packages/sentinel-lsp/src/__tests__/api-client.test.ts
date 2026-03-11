@@ -64,6 +64,18 @@ describe("SentinelApiClient", () => {
     await expect(client.getFindings()).rejects.toThrow("API request failed: 401 Unauthorized");
   });
 
+  it("getScanStatus sends GET to /v1/scans/:scanId", async () => {
+    fetchFn = mockFetch(200, { status: "completed", scanId: "scan-42" });
+    client = new SentinelApiClient("https://api.test", "test-secret", "org-123", fetchFn as any);
+
+    const result = await client.getScanStatus("scan-42");
+
+    const [url, init] = fetchFn.mock.calls[0];
+    expect(url).toBe("https://api.test/v1/scans/scan-42");
+    expect(init.method).toBe("GET");
+    expect(result).toEqual({ status: "completed", scanId: "scan-42" });
+  });
+
   it("HMAC signature uses correct format pattern", async () => {
     await client.getProjects();
 

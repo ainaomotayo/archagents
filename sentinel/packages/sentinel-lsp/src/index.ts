@@ -10,7 +10,7 @@ import { createSentinelLspServer } from "./server.js";
 import { SentinelApiClient } from "./api-client.js";
 import { SseListener } from "./sse-listener.js";
 import { FindingCache } from "./finding-cache.js";
-import type { SentinelFinding } from "./types.js";
+import type { SentinelFinding, ConnectionStatus } from "./types.js";
 
 // Re-exports for library usage
 export { FindingCache } from "./finding-cache.js";
@@ -18,7 +18,7 @@ export { DiagnosticMapper } from "./diagnostic-mapper.js";
 export { SentinelApiClient } from "./api-client.js";
 export { SseListener } from "./sse-listener.js";
 export { createSentinelLspServer, type ServerDeps } from "./server.js";
-export type { SentinelFinding, SentinelProject, SentinelEvent, LspServerConfig } from "./types.js";
+export type { SentinelFinding, SentinelProject, SentinelEvent, LspServerConfig, ConnectionStatus } from "./types.js";
 
 // Node-specific createConnection (vscode-languageserver/node subpath has incomplete typings in v9)
 // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -58,6 +58,9 @@ if (isDirectRun && process.env.NODE_ENV !== "test") {
   connection.onInitialize((params) => {
     const result = server.onInitialize(params);
     findingCache.load(cacheDir, projectId);
+    const sendStatus = (status: ConnectionStatus) =>
+      connection.sendNotification("sentinel/connectionStatus", { status });
+
     apiClient.getFindings().then((raw) => {
       const data = raw as { findings: SentinelFinding[]; total: number };
       findingCache.upsert(data.findings);
@@ -65,7 +68,14 @@ if (isDirectRun && process.env.NODE_ENV !== "test") {
         connection.sendDiagnostics({ uri: doc.uri, diagnostics: server.getDiagnosticsForFile(doc.uri) });
       }
       findingCache.save(cacheDir, projectId);
-    }).catch(() => { /* use cached */ });
+      sendStatus("connected");
+    }).catch((err: Error) => {
+      if (err.message?.includes("401")) {
+        sendStatus("auth_error");
+      } else {
+        sendStatus("offline");
+      }
+    });
     sseListener.connect();
     return result;
   });

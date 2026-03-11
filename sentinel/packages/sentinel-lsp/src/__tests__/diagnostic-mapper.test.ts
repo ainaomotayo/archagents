@@ -68,13 +68,19 @@ describe("DiagnosticMapper", () => {
     expect(diag.code).toBe("injection");
   });
 
-  it("sets correct line range (1-indexed finding -> 0-indexed LSP)", () => {
+  it("sets correct line range (1-indexed finding -> 0-indexed LSP) with full-line highlight", () => {
     const finding = makeFinding({ lineStart: 10, lineEnd: 12 });
     const diag = mapper.toDiagnostic(finding);
     expect(diag.range.start.line).toBe(9);
     expect(diag.range.end.line).toBe(11);
     expect(diag.range.start.character).toBe(0);
-    expect(diag.range.end.character).toBe(0);
+    expect(diag.range.end.character).toBe(Number.MAX_VALUE);
+  });
+
+  it("includes findingId in diagnostic data", () => {
+    const finding = makeFinding({ id: "f-42" });
+    const diag = mapper.toDiagnostic(finding);
+    expect(diag.data).toEqual({ findingId: "f-42" });
   });
 
   it("toCodeActions returns suppress and view actions (2 actions)", () => {
@@ -92,6 +98,14 @@ describe("DiagnosticMapper", () => {
     expect(actions[1].kind).toBe(CodeActionKind.QuickFix);
   });
 
+  it("code actions include linked diagnostics", () => {
+    const finding = makeFinding();
+    const actions = mapper.toCodeActions(finding);
+    expect(actions[0].diagnostics).toHaveLength(1);
+    expect(actions[0].diagnostics![0].data).toEqual({ findingId: finding.id });
+    expect(actions[1].diagnostics).toHaveLength(1);
+  });
+
   it("toCodeLenses groups findings by first line, shows count and max severity", () => {
     const findings = [
       makeFinding({ id: "f-1", lineStart: 10, severity: "medium" }),
@@ -106,11 +120,15 @@ describe("DiagnosticMapper", () => {
     expect(lens10).toBeDefined();
     expect(lens10.command!.title).toContain("2");
     expect(lens10.command!.title).toContain("critical");
+    expect(lens10.command!.title).toMatch(/\$\(warning\)/);
+    // Arguments should be array of finding IDs
+    expect(lens10.command!.arguments![0]).toEqual(["f-1", "f-2"]);
 
     // Second group: line 20 with 1 finding, max severity low
     const lens20 = lenses.find((l) => l.range.start.line === 19)!;
     expect(lens20).toBeDefined();
     expect(lens20.command!.title).toContain("1");
     expect(lens20.command!.title).toContain("low");
+    expect(lens20.command!.arguments![0]).toEqual(["f-3"]);
   });
 });
