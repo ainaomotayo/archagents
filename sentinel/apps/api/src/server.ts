@@ -19,6 +19,7 @@ import {
 import { createAuthHook } from "./middleware/auth.js";
 import { buildScanRoutes } from "./routes/scans.js";
 import { registerWebhookRoutes } from "./routes/webhooks.js";
+import { buildWebhookRoutes } from "./routes/notification-endpoints.js";
 import { createScanStore, createAuditEventStore } from "./stores.js";
 import { registerSecurityPlugins } from "./plugins/security.js";
 
@@ -63,6 +64,9 @@ const scanRoutes = buildScanRoutes({
   eventBus,
   auditLog,
 });
+
+// --- Webhook endpoint route handlers ---
+const webhookRoutes = buildWebhookRoutes({ db });
 
 // --- Security plugins ---
 await registerSecurityPlugins(app, { redis });
@@ -777,6 +781,49 @@ app.get("/v1/reports/:id", { preHandler: authHook }, async (request, reply) => {
   });
   if (!report) { reply.code(404).send({ error: "Report not found" }); return; }
   return report;
+});
+
+// --- Webhooks ---
+app.post("/v1/webhooks", { preHandler: authHook }, async (request, reply) => {
+  const orgId = (request as any).orgId ?? "default";
+  const role = (request as any).role ?? "unknown";
+  const result = await webhookRoutes.createEndpoint({ orgId, body: request.body as any, createdBy: role });
+  reply.code(201).send(result);
+});
+
+app.get("/v1/webhooks", { preHandler: authHook }, async (request) => {
+  const orgId = (request as any).orgId ?? "default";
+  const { limit = "50", offset = "0" } = request.query as any;
+  return webhookRoutes.listEndpoints({ orgId, limit: Number(limit), offset: Number(offset) });
+});
+
+app.get("/v1/webhooks/:id", { preHandler: authHook }, async (request, reply) => {
+  const { id } = request.params as { id: string };
+  const ep = await webhookRoutes.getEndpoint(id);
+  if (!ep) { reply.code(404).send({ error: "Webhook endpoint not found" }); return; }
+  return ep;
+});
+
+app.put("/v1/webhooks/:id", { preHandler: authHook }, async (request, reply) => {
+  const { id } = request.params as { id: string };
+  const ep = await webhookRoutes.getEndpoint(id);
+  if (!ep) { reply.code(404).send({ error: "Webhook endpoint not found" }); return; }
+  const body = request.body as Record<string, unknown>;
+  return webhookRoutes.updateEndpoint(id, body);
+});
+
+app.delete("/v1/webhooks/:id", { preHandler: authHook }, async (request, reply) => {
+  const { id } = request.params as { id: string };
+  const ep = await webhookRoutes.getEndpoint(id);
+  if (!ep) { reply.code(404).send({ error: "Webhook endpoint not found" }); return; }
+  await webhookRoutes.deleteEndpoint(id);
+  reply.code(204).send();
+});
+
+app.get("/v1/webhooks/:id/deliveries", { preHandler: authHook }, async (request) => {
+  const { id } = request.params as { id: string };
+  const { limit = "50", offset = "0" } = request.query as any;
+  return webhookRoutes.getDeliveries({ endpointId: id, limit: Number(limit), offset: Number(offset) });
 });
 
 // --- Graceful shutdown ---
