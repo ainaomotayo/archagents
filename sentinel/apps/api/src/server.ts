@@ -21,7 +21,8 @@ import { buildScanRoutes } from "./routes/scans.js";
 import { registerWebhookRoutes } from "./routes/webhooks.js";
 import { buildWebhookRoutes } from "./routes/notification-endpoints.js";
 import { buildNotificationRuleRoutes } from "./routes/notification-rules.js";
-import { HttpWebhookAdapter } from "@sentinel/notifications";
+import { HttpWebhookAdapter, SseManager } from "@sentinel/notifications";
+import { randomUUID } from "node:crypto";
 import { createScanStore, createAuditEventStore } from "./stores.js";
 import { registerSecurityPlugins } from "./plugins/security.js";
 
@@ -72,6 +73,8 @@ const webhookRoutes = buildWebhookRoutes({ db });
 
 // --- Notification rule route handlers ---
 const ruleRoutes = buildNotificationRuleRoutes({ db });
+
+const sseManager = new SseManager();
 
 // --- Security plugins ---
 await registerSecurityPlugins(app, { redis });
@@ -867,6 +870,44 @@ app.delete("/v1/notifications/rules/:id", { preHandler: authHook }, async (reque
   reply.code(204).send();
 });
 
+// --- SSE Event Stream ---
+app.get("/v1/events/stream", { preHandler: authHook }, async (request, reply) => {
+  const orgId = (request as any).orgId ?? "default";
+  const { topics = "scan.*,finding.*" } = request.query as { topics?: string };
+  const topicList = topics.split(",").map((t: string) => t.trim()).filter(Boolean);
+
+  reply.raw.writeHead(200, {
+    "Content-Type": "text/event-stream",
+    "Cache-Control": "no-cache",
+    Connection: "keep-alive",
+    "X-Accel-Buffering": "no",
+  });
+
+  const clientId = randomUUID();
+  const client = {
+    id: clientId,
+    orgId,
+    topics: topicList,
+    write: (data: string) => {
+      try { reply.raw.write(data); return true; } catch { return false; }
+    },
+    close: () => {
+      try { reply.raw.end(); } catch { /* already closed */ }
+    },
+  };
+
+  sseManager.register(client);
+
+  const heartbeat = setInterval(() => {
+    try { reply.raw.write(": heartbeat\n\n"); } catch { clearInterval(heartbeat); }
+  }, 30_000);
+
+  request.raw.on("close", () => {
+    clearInterval(heartbeat);
+    sseManager.unregister(clientId, orgId);
+  });
+});
+
 // --- Graceful shutdown ---
 const shutdown = async () => {
   app.log.info("Shutting down...");
@@ -887,4 +928,14 @@ if (process.env.NODE_ENV !== "test") {
   });
 }
 
-export { app };
+// Redis pub/sub for SSE fan-out from notification-worker
+const redisSub = redis.duplicate();
+redisSub.subscribe("sentinel.events.fanout");
+redisSub.on("message", (_channel: string, message: string) => {
+  try {
+    const event = JSON.parse(message);
+    sseManager.broadcast(event);
+  } catch { /* ignore malformed messages */ }
+});
+
+export { app, sseManager };
