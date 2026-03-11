@@ -1,5 +1,5 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
-import type { KmsProvider } from "@sentinel/security";
+import type { KmsProvider, DekCache } from "@sentinel/security";
 import { LocalKmsProvider } from "@sentinel/security";
 
 export async function rotateOrgKeys(
@@ -15,7 +15,7 @@ export async function rotateOrgKeys(
   return results;
 }
 
-export function registerEncryptionAdminRoutes(app: FastifyInstance, authHook: any) {
+export function registerEncryptionAdminRoutes(app: FastifyInstance, authHook: any, dekCache?: DekCache) {
   // POST /v1/admin/rotate-keys — rotate encryption keys for org
   app.post("/v1/admin/rotate-keys", { preHandler: authHook }, async (request: FastifyRequest, reply: FastifyReply) => {
     const { getDb } = await import("@sentinel/db");
@@ -57,6 +57,11 @@ export function registerEncryptionAdminRoutes(app: FastifyInstance, authHook: an
     const { count } = await db.encryptionKey.deleteMany({
       where: { orgId: (request as any).orgId },
     });
+
+    // Evict plaintext DEKs from in-memory cache
+    if (dekCache) {
+      dekCache.evict((request as any).orgId);
+    }
 
     console.log(`[ADMIN] Crypto-shred completed for org ${(request as any).orgId}, ${count} keys destroyed`);
     return reply.send({ message: "Crypto-shred complete. All keys destroyed.", orgId: (request as any).orgId, keysDestroyed: count });

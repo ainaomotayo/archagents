@@ -32,6 +32,10 @@ import { registerOrgMembershipRoutes } from "./routes/org-memberships.js";
 import { registerScimRoutes } from "./routes/scim.js";
 import { registerEncryptionAdminRoutes } from "./routes/encryption-admin.js";
 import { registerDomainRoutes } from "./routes/domain-verification.js";
+import { DekCache } from "@sentinel/security";
+
+// Module-level DEK cache for encryption — shared with crypto-shred handler for eviction
+let dekCache: DekCache | undefined;
 
 if (process.env.OTEL_EXPORTER_OTLP_ENDPOINT && process.env.NODE_ENV !== "test") {
   initTracing({ serviceName: "sentinel-api" });
@@ -969,7 +973,8 @@ registerSsoConfigRoutes(app, authHook);
 registerDiscoveryRoutes(app);  // Public, no auth
 registerOrgMembershipRoutes(app, authHook);
 registerScimRoutes(app);  // Uses own SCIM auth
-registerEncryptionAdminRoutes(app, authHook);
+dekCache = new DekCache();
+registerEncryptionAdminRoutes(app, authHook, dekCache);
 registerDomainRoutes(app, authHook);
 
 // --- Graceful shutdown ---

@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import { rotateOrgKeys } from "../routes/encryption-admin.js";
+import { DekCache } from "@sentinel/security";
 
 describe("Key Rotation", () => {
   it("re-wraps all DEKs for an org", async () => {
@@ -37,6 +38,14 @@ describe("Key Rotation", () => {
     expect(results[0]).toEqual({ id: "k1", newWrapped: expect.any(String), newVersion: 4 });
     expect(results[1]).toEqual({ id: "k2", newWrapped: expect.any(String), newVersion: 8 });
     expect(results[2]).toEqual({ id: "k3", newWrapped: expect.any(String), newVersion: 2 });
+  });
+
+  it("crypto-shred should support cache eviction", () => {
+    const cache = new DekCache();
+    cache.set("org-1", "test", Buffer.alloc(32, 0xaa));
+    expect(cache.size).toBe(1);
+    cache.evict("org-1");
+    expect(cache.size).toBe(0);
   });
 
   it("calls rewrapDataKey once per key with the correct kekId", async () => {
