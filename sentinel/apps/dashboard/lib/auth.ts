@@ -195,13 +195,17 @@ export const authOptions: AuthOptions = {
   },
 
   jwt: {
-    async encode({ token, secret }: { token: any; secret: string }) {
-      const { encryptJwe } = await import("./jwe.js");
-      return encryptJwe(token as Record<string, unknown>, secret);
+    async encode({ token, secret }) {
+      if (!token) return "";
+      const { encryptJwe } = await import("./jwe");
+      const key = typeof secret === "string" ? secret : secret.toString("base64");
+      return encryptJwe(token as Record<string, unknown>, key);
     },
-    async decode({ token, secret }: { token: string; secret: string }) {
-      const { decryptJwe } = await import("./jwe.js");
-      return decryptJwe(token, secret) as any;
+    async decode({ token, secret }) {
+      if (!token) return null;
+      const { decryptJwe } = await import("./jwe");
+      const key = typeof secret === "string" ? secret : secret.toString("base64");
+      return decryptJwe(token, key) as any;
     },
   },
 
