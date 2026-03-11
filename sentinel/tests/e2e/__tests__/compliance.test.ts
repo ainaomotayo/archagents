@@ -36,16 +36,24 @@ describe("E2E: Compliance Pipeline", () => {
     expect(typeof scan.riskScore).toBe("number");
 
     // Certificate should have verdict breakdown
-    let certificate;
-    try {
-      certificate = await ctx.certificateService.getCertificate(scanId);
-    } catch {
-      certificate = null;
-    }
+    const certificate = await ctx.certificateService.getCertificate(scanId);
 
     if (certificate) {
       console.log(`[VERIFY] Certificate verdict keys: ${Object.keys(certificate.verdict).join(", ")}`);
       expect(certificate.verdict).toBeTruthy();
+    }
+  });
+
+  it("certificate includes compliance metadata", async () => {
+    const { scanId } = await ctx.scanService.submitDiff(combinedVulnDiff(ctx.projectId));
+    await ctx.scanService.pollUntilStatus(scanId, "completed", 45_000);
+
+    const certificate = await ctx.certificateService.getCertificate(scanId);
+    if (certificate) {
+      console.log(`[VERIFY] Certificate compliance: ${JSON.stringify((certificate as any).compliance)}`);
+      expect((certificate as any).compliance).toBeDefined();
+      // Compliance field should be an object (may be empty if no frameworks configured)
+      expect(typeof (certificate as any).compliance).toBe("object");
     }
   });
 });

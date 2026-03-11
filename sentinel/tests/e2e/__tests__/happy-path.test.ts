@@ -51,12 +51,7 @@ describe("E2E: Happy Path — Full Pipeline", () => {
     }
 
     // VERIFY: Certificate issued
-    let certificate;
-    try {
-      certificate = await ctx.certificateService.getCertificate(scanId);
-    } catch {
-      certificate = null;
-    }
+    const certificate = await ctx.certificateService.getCertificate(scanId);
     console.log(`[VERIFY] Certificate: status=${certificate?.status}, riskScore=${certificate?.riskScore}`);
     expect(certificate).not.toBeNull();
     expect(certificate!.riskScore).toBeGreaterThan(0);
@@ -79,12 +74,7 @@ describe("E2E: Happy Path — Full Pipeline", () => {
     console.log(`[VERIFY] ${findings.length} findings (expected 0)`);
     expect(findings.length).toBe(0);
 
-    let certificate;
-    try {
-      certificate = await ctx.certificateService.getCertificate(scanId);
-    } catch {
-      certificate = null;
-    }
+    const certificate = await ctx.certificateService.getCertificate(scanId);
     console.log(`[VERIFY] Certificate: status=${certificate?.status}`);
     if (certificate) {
       expect(certificate.status).toBe("full_pass");

@@ -27,6 +27,30 @@ describe("E2E: Multi-Agent Coordination", () => {
     assertAllInvariantsHold({ scan, findings, certificate: null });
   });
 
+  it("handles concurrent scan submissions without interference", async () => {
+    const [result1, result2] = await Promise.all([
+      ctx.scanService.submitDiff(combinedVulnDiff(ctx.projectId)),
+      ctx.scanService.submitDiff(combinedVulnDiff(ctx.projectId)),
+    ]);
+
+    const [scan1, scan2] = await Promise.all([
+      ctx.scanService.pollUntilStatus(result1.scanId, "completed", 60_000),
+      ctx.scanService.pollUntilStatus(result2.scanId, "completed", 60_000),
+    ]);
+
+    expect(scan1.id).not.toBe(scan2.id);
+
+    const [findings1, findings2] = await Promise.all([
+      ctx.findingService.getFindings({ scanId: result1.scanId }),
+      ctx.findingService.getFindings({ scanId: result2.scanId }),
+    ]);
+
+    // Each scan should have its own findings
+    expect(findings1.findings.length).toBeGreaterThan(0);
+    expect(findings2.findings.length).toBeGreaterThan(0);
+    console.log(`[VERIFY] Concurrent scans: ${findings1.findings.length} + ${findings2.findings.length} findings`);
+  });
+
   it("only security-relevant findings when diff has no manifests", async () => {
     const { scanId } = await ctx.scanService.submitDiff(securityVulnDiff(ctx.projectId));
     const scan = await ctx.scanService.pollUntilStatus(scanId, "completed", 45_000);

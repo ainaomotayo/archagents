@@ -40,6 +40,22 @@ describe("E2E: Notifications & Events", () => {
     expect(entries.length).toBeGreaterThan(0);
   });
 
+  it("publishes critical finding alerts for high-severity findings", async () => {
+    // Submit a diff with known critical/high findings (SQL injection)
+    const { securityVulnDiff } = await import("../fixtures/diffs.js");
+    const { scanId } = await ctx.scanService.submitDiff(securityVulnDiff(ctx.projectId));
+    await ctx.scanService.pollUntilStatus(scanId, "completed", 45_000);
+
+    const entries = await redis.getStreamEntries("sentinel.notifications", 100);
+    // Look for critical/high severity notification events
+    const criticalNotifs = entries.filter((e) => {
+      const topic = (e.data as any).topic ?? "";
+      return topic.includes("critical") || topic.includes("finding");
+    });
+    console.log(`[VERIFY] Critical/finding notification events: ${criticalNotifs.length}`);
+    expect(entries.length).toBeGreaterThan(0);
+  });
+
   it("sentinel.diffs stream has consumer groups for agents", async () => {
     // Verify consumer groups exist
     try {

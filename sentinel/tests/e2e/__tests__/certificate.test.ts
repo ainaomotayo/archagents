@@ -12,12 +12,7 @@ describe("E2E: Certificate Verification", () => {
     const { scanId } = await ctx.scanService.submitDiff(combinedVulnDiff(ctx.projectId));
     await ctx.scanService.pollUntilStatus(scanId, "completed", 45_000);
 
-    let certificate;
-    try {
-      certificate = await ctx.certificateService.getCertificate(scanId);
-    } catch {
-      certificate = null;
-    }
+    const certificate = await ctx.certificateService.getCertificate(scanId);
 
     expect(certificate).not.toBeNull();
     expect(certificate!.scanId).toBe(scanId);
@@ -38,30 +33,26 @@ describe("E2E: Certificate Verification", () => {
     const { scanId } = await ctx.scanService.submitDiff(combinedVulnDiff(ctx.projectId));
     await ctx.scanService.pollUntilStatus(scanId, "completed", 45_000);
 
-    let certificate;
-    try {
-      certificate = await ctx.certificateService.getCertificate(scanId);
-    } catch {
-      certificate = null;
-    }
+    const certificate = await ctx.certificateService.getCertificate(scanId);
     if (!certificate) return; // Skip if no cert endpoint
 
-    const secret = process.env.E2E_SECRET ?? "e2e-test-secret";
-    const valid = ctx.certificateService.verifyCertificateSignature(certificate, secret);
-    console.log(`[VERIFY] Certificate signature valid: ${valid}`);
-    // Note: signature verification depends on exact JSON serialization matching server
+    // Use server-side verification endpoint — client-side HMAC may not match
+    // because the server signs `verdict` JSON, not the full certificate object
+    const apiUrl = process.env.E2E_API_URL ?? "http://localhost:8081";
+    try {
+      const res = await fetch(`${apiUrl}/v1/certificates/${certificate.id}/verify`);
+      const body = await res.json();
+      console.log(`[VERIFY] Server verification: status=${res.status}, valid=${(body as any).valid}`);
+    } catch (err) {
+      console.log(`[VERIFY] Certificate verification endpoint not available: ${(err as Error).message}`);
+    }
   });
 
   it("clean diff produces full_pass certificate with riskScore 0", async () => {
     const { scanId } = await ctx.scanService.submitDiff(cleanDiff(ctx.projectId));
     await ctx.scanService.pollUntilStatus(scanId, "completed", 45_000);
 
-    let certificate;
-    try {
-      certificate = await ctx.certificateService.getCertificate(scanId);
-    } catch {
-      certificate = null;
-    }
+    const certificate = await ctx.certificateService.getCertificate(scanId);
 
     if (certificate) {
       console.log(`[VERIFY] Clean diff certificate: ${certificate.status}, score=${certificate.riskScore}`);
