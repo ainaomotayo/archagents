@@ -1,5 +1,6 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import type { KmsProvider } from "@sentinel/security";
+import { LocalKmsProvider } from "@sentinel/security";
 
 export async function rotateOrgKeys(
   keys: Array<{ id: string; purpose: string; wrappedDek: string; kekId: string; version: number }>,
@@ -23,8 +24,25 @@ export function registerEncryptionAdminRoutes(app: FastifyInstance, authHook: an
       where: { orgId: (request as any).orgId, active: true },
     });
 
-    console.log(`[ADMIN] Key rotation requested for org ${(request as any).orgId}, ${keys.length} keys`);
-    return reply.send({ message: "Key rotation initiated", keyCount: keys.length });
+    if (keys.length === 0) {
+      return reply.send({ message: "No active keys to rotate", keyCount: 0 });
+    }
+
+    const kms = new LocalKmsProvider();
+    const kekId = keys[0].kekId;
+    const rotated = await rotateOrgKeys(keys, kms, kekId);
+
+    await db.$transaction(
+      rotated.map((r) =>
+        db.encryptionKey.update({
+          where: { id: r.id },
+          data: { wrappedDek: r.newWrapped, version: r.newVersion, rotatedAt: new Date() },
+        }),
+      ),
+    );
+
+    console.log(`[ADMIN] Key rotation completed for org ${(request as any).orgId}, ${keys.length} keys`);
+    return reply.send({ message: "Key rotation completed", keyCount: keys.length });
   });
 
   // POST /v1/admin/crypto-shred — initiate crypto-shredding for org
@@ -36,12 +54,11 @@ export function registerEncryptionAdminRoutes(app: FastifyInstance, authHook: an
 
     const { getDb } = await import("@sentinel/db");
     const db = getDb();
-    await db.encryptionKey.updateMany({
+    const { count } = await db.encryptionKey.deleteMany({
       where: { orgId: (request as any).orgId },
-      data: { active: false },
     });
 
-    console.log(`[ADMIN] Crypto-shred initiated for org ${(request as any).orgId}`);
-    return reply.send({ message: "Crypto-shred initiated. KEK deletion scheduled.", orgId: (request as any).orgId });
+    console.log(`[ADMIN] Crypto-shred completed for org ${(request as any).orgId}, ${count} keys destroyed`);
+    return reply.send({ message: "Crypto-shred complete. All keys destroyed.", orgId: (request as any).orgId, keysDestroyed: count });
   });
 }

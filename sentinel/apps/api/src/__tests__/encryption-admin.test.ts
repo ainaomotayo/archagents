@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { rotateOrgKeys } from "../routes/encryption-admin.js";
 
 describe("Key Rotation", () => {
@@ -20,5 +20,39 @@ describe("Key Rotation", () => {
     expect(rewrapCalls).toEqual(["kek-1", "kek-1"]);
     expect(results[0].newVersion).toBe(2);
     expect(results[1].newVersion).toBe(2);
+  });
+
+  it("returns incremented versions for keys at different version levels", async () => {
+    const mockKms = {
+      rewrapDataKey: async (_kekId: string, _wrapped: Buffer) => Buffer.from("new-wrapped"),
+    };
+    const keys = [
+      { id: "k1", purpose: "data", wrappedDek: "YQ==", kekId: "kek-2", version: 3 },
+      { id: "k2", purpose: "webhook", wrappedDek: "Yg==", kekId: "kek-2", version: 7 },
+      { id: "k3", purpose: "audit", wrappedDek: "Yw==", kekId: "kek-2", version: 1 },
+    ];
+
+    const results = await rotateOrgKeys(keys as any, mockKms as any, "kek-2");
+    expect(results).toHaveLength(3);
+    expect(results[0]).toEqual({ id: "k1", newWrapped: expect.any(String), newVersion: 4 });
+    expect(results[1]).toEqual({ id: "k2", newWrapped: expect.any(String), newVersion: 8 });
+    expect(results[2]).toEqual({ id: "k3", newWrapped: expect.any(String), newVersion: 2 });
+  });
+
+  it("calls rewrapDataKey once per key with the correct kekId", async () => {
+    const rewrapSpy = vi.fn(async (_kekId: string, _wrapped: Buffer) => Buffer.from("out"));
+    const mockKms = { rewrapDataKey: rewrapSpy };
+    const keys = [
+      { id: "k1", purpose: "data", wrappedDek: "YQ==", kekId: "kek-1", version: 1 },
+      { id: "k2", purpose: "webhook", wrappedDek: "Yg==", kekId: "kek-1", version: 2 },
+      { id: "k3", purpose: "audit", wrappedDek: "Yw==", kekId: "kek-1", version: 5 },
+    ];
+
+    await rotateOrgKeys(keys as any, mockKms as any, "kek-1");
+    expect(rewrapSpy).toHaveBeenCalledTimes(3);
+    for (const call of rewrapSpy.mock.calls) {
+      expect(call[0]).toBe("kek-1");
+      expect(Buffer.isBuffer(call[1])).toBe(true);
+    }
   });
 });
