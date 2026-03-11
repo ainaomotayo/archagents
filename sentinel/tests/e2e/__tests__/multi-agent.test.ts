@@ -45,10 +45,15 @@ describe("E2E: Multi-Agent Coordination", () => {
       ctx.findingService.getFindings({ scanId: result2.scanId }),
     ]);
 
-    // Each scan should have its own findings
+    // Each scan should have its own isolated findings
     expect(findings1.findings.length).toBeGreaterThan(0);
     expect(findings2.findings.length).toBeGreaterThan(0);
-    console.log(`[VERIFY] Concurrent scans: ${findings1.findings.length} + ${findings2.findings.length} findings`);
+
+    // Verify findings are isolated per scan (no cross-contamination)
+    for (const f of findings1.findings) expect(f.scanId).toBe(result1.scanId);
+    for (const f of findings2.findings) expect(f.scanId).toBe(result2.scanId);
+
+    console.log(`[VERIFY] Concurrent scans: ${findings1.findings.length} + ${findings2.findings.length} findings (isolated)`);
   });
 
   it("only security-relevant findings when diff has no manifests", async () => {

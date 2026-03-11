@@ -5,7 +5,7 @@ import { E2EApiClient } from "./api-client.js";
 export interface CertificateVerdict {
   status: "pass" | "provisional" | "fail";
   riskScore: number;
-  categories: Record<string, "pass" | "warn" | "fail">;
+  categories?: Record<string, "pass" | "warn" | "fail">;
 }
 
 export interface Certificate {
