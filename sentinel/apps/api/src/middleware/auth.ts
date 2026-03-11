@@ -1,6 +1,27 @@
-import { verifyRequest } from "@sentinel/auth";
+import { verifyRequest, verifyApiKey, extractPrefix } from "@sentinel/auth";
 import { isAuthorized, type ApiRole } from "@sentinel/security";
 import type { FastifyRequest, FastifyReply } from "fastify";
+
+export async function resolveApiKeyAuth(
+  authHeader: string | undefined,
+  lookupByPrefix: (prefix: string) => Promise<{ keyHash: string; keySalt: string; orgId: string; role: string; revokedAt: string | null; expiresAt: string | null } | null>,
+): Promise<{ orgId: string; role: string } | null> {
+  if (!authHeader) return null;
+  const match = authHeader.match(/^Bearer (sk_.+)$/);
+  if (!match) return null;
+
+  const key = match[1];
+  const prefix = extractPrefix(key);
+  const record = await lookupByPrefix(prefix);
+  if (!record) return null;
+  if (record.revokedAt) return null;
+  if (record.expiresAt && new Date(record.expiresAt) < new Date()) return null;
+
+  const valid = await verifyApiKey(key, record.keyHash, record.keySalt);
+  if (!valid) return null;
+
+  return { orgId: record.orgId, role: record.role };
+}
 
 interface AuthHookOptions {
   getOrgSecret: (apiKey?: string) => Promise<string | null>;
@@ -9,6 +30,38 @@ interface AuthHookOptions {
 
 export function createAuthHook(options: AuthHookOptions) {
   return async function authHook(request: FastifyRequest, reply: FastifyReply) {
+    // Try API key auth first (Bearer sk_...)
+    const authHeader = request.headers.authorization as string | undefined;
+    if (authHeader?.startsWith("Bearer sk_")) {
+      const apiKeyResult = await resolveApiKeyAuth(authHeader, async (prefix) => {
+        const { getDb } = await import("@sentinel/db");
+        const db = getDb();
+        const apiKey = await db.apiKey.findFirst({ where: { keyPrefix: prefix } });
+        if (!apiKey) return null;
+        return {
+          keyHash: apiKey.keyHash,
+          keySalt: apiKey.keySalt,
+          orgId: apiKey.orgId,
+          role: apiKey.role,
+          revokedAt: apiKey.revokedAt?.toISOString() ?? null,
+          expiresAt: apiKey.expiresAt?.toISOString() ?? null,
+        };
+      });
+      if (apiKeyResult) {
+        (request as any).orgId = apiKeyResult.orgId;
+        (request as any).role = apiKeyResult.role as ApiRole;
+        // RBAC check
+        const rawPath = request.routeOptions?.url ?? request.url;
+        const routePath = rawPath.length > 1 ? rawPath.replace(/\/+$/, "") : rawPath;
+        if (!isAuthorized(apiKeyResult.role as ApiRole, request.method, routePath)) {
+          reply.code(403).send({ error: "Forbidden: insufficient permissions" });
+          return;
+        }
+        return; // Authenticated via API key
+      }
+    }
+
+    // Existing HMAC flow
     const signature = request.headers["x-sentinel-signature"] as string | undefined;
     if (!signature) {
       reply.code(401).send({ error: "Missing X-Sentinel-Signature header" });
