@@ -222,6 +222,35 @@ export const authOptions: AuthOptions = {
   },
 
   callbacks: {
+    async signIn({ account, profile }) {
+      // Enforce SSO restrictions if configured
+      if (account?.provider && profile?.email) {
+        try {
+          const apiUrl = process.env.SENTINEL_API_URL ?? "http://localhost:8080";
+          const res = await fetch(
+            `${apiUrl}/v1/auth/discovery?email=${encodeURIComponent(profile.email as string)}`,
+          );
+          if (res.ok) {
+            const data = await res.json();
+            if (data.enforced) {
+              const allowed = data.providers.map((p: any) => p.id);
+              if (!allowed.includes(account.provider)) {
+                logAuthEvent("auth.login.blocked", {
+                  provider: account.provider,
+                  email: profile.email,
+                  reason: "sso_enforcement",
+                });
+                return false;
+              }
+            }
+          }
+        } catch {
+          // Fail-open if discovery API is unavailable
+        }
+      }
+      return true;
+    },
+
     async jwt({ token, profile, account }) {
       if (profile) {
         // GitHub: profile.login, GitLab: profile.username
