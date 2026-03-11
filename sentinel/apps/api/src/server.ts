@@ -28,6 +28,7 @@ import { registerSecurityPlugins } from "./plugins/security.js";
 import { registerApiKeyRoutes } from "./routes/api-keys.js";
 import { registerSsoConfigRoutes } from "./routes/sso-config.js";
 import { registerDiscoveryRoutes } from "./routes/auth-discovery.js";
+import { registerSamlMetadataRoute } from "./routes/saml-metadata.js";
 import { registerOrgMembershipRoutes } from "./routes/org-memberships.js";
 import { registerScimRoutes } from "./routes/scim.js";
 import { registerEncryptionAdminRoutes } from "./routes/encryption-admin.js";
@@ -987,6 +988,7 @@ app.get("/v1/events/stream", { preHandler: authHook }, async (request, reply) =>
 registerApiKeyRoutes(app, authHook);
 registerSsoConfigRoutes(app, authHook);
 registerDiscoveryRoutes(app);  // Public, no auth
+registerSamlMetadataRoute(app);  // Public, no auth
 registerOrgMembershipRoutes(app, authHook);
 registerScimRoutes(app);  // Uses own SCIM auth
 // --- Encryption wiring ---
