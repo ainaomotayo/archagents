@@ -1,0 +1,16 @@
+<idea-plugin>
+    <id>com.sentinel.intellij</id>
+    <name>Sentinel Security</name>
+    <vendor>Sentinel</vendor>
+    <description>Show Sentinel security findings inline in your JetBrains IDE</description>
+    <depends>com.intellij.modules.platform</depends>
+    <depends>com.redhat.devtools.lsp4ij</depends>
+    <extensions defaultExtensionNs="com.redhat.devtools.lsp4ij">
+        <server id="sentinelLsp"
+                name="Sentinel"
+                factoryClass="com.sentinel.intellij.SentinelLspServerDescriptor">
+            <description><![CDATA[Sentinel security scanner — shows findings inline as diagnostics]]></description>
+        </server>
+        <languageMapping language="" serverId="sentinelLsp"/>
+    </extensions>
+</idea-plugin>

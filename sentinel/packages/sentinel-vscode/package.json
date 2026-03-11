@@ -1,0 +1,38 @@
+{
+  "name": "sentinel-vscode",
+  "displayName": "Sentinel Security",
+  "description": "Show Sentinel security findings inline in your editor",
+  "version": "0.1.0",
+  "publisher": "sentinel",
+  "engines": { "vscode": "^1.85.0" },
+  "categories": ["Linters"],
+  "activationEvents": ["onStartupFinished"],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "commands": [
+      { "command": "sentinel.configure", "title": "Sentinel: Configure API Token" },
+      { "command": "sentinel.openDashboard", "title": "Sentinel: Open Dashboard" },
+      { "command": "sentinel.triggerScan", "title": "Sentinel: Trigger Scan" },
+      { "command": "sentinel.refresh", "title": "Sentinel: Refresh Findings" }
+    ],
+    "configuration": {
+      "title": "Sentinel",
+      "properties": {
+        "sentinel.apiUrl": { "type": "string", "default": "http://localhost:8080", "description": "Sentinel API URL" },
+        "sentinel.orgId": { "type": "string", "default": "default", "description": "Organization ID" },
+        "sentinel.projectId": { "type": "string", "default": "", "description": "Project ID" }
+      }
+    }
+  },
+  "scripts": {
+    "build": "echo 'VS Code extension — build via vsce package'",
+    "test": "echo 'no tests yet'"
+  },
+  "dependencies": {
+    "vscode-languageclient": "^9.0.1"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.85.0",
+    "typescript": "^5.7"
+  }
+}
