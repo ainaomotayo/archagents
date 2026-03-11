@@ -971,13 +971,15 @@ if (process.env.NODE_ENV !== "test") {
 }
 
 // Redis pub/sub for SSE fan-out from notification-worker
-const redisSub = redis.duplicate();
-redisSub.subscribe("sentinel.events.fanout");
-redisSub.on("message", (_channel: string, message: string) => {
-  try {
-    const event = JSON.parse(message);
-    sseManager.broadcast(event);
-  } catch { /* ignore malformed messages */ }
-});
+if (process.env.NODE_ENV !== "test" && typeof redis.duplicate === "function") {
+  const redisSub = redis.duplicate();
+  redisSub.subscribe("sentinel.events.fanout");
+  redisSub.on("message", (_channel: string, message: string) => {
+    try {
+      const event = JSON.parse(message);
+      sseManager.broadcast(event);
+    } catch { /* ignore malformed messages */ }
+  });
+}
 
 export { app, sseManager };
