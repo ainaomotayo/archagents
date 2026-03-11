@@ -70,6 +70,16 @@ const authHook = createAuthHook({
   getOrgSecret: async (_apiKey) => {
     return process.env.SENTINEL_SECRET ?? null;
   },
+  resolveDbRole: async (userId: string, orgId: string) => {
+    try {
+      const membership = await db.orgMembership.findUnique({
+        where: { orgId_userId: { orgId, userId } },
+      });
+      return membership?.role ?? null;
+    } catch {
+      return null; // Fail-open: fall back to header role
+    }
+  },
   updateApiKeyLastUsed: (prefix) => {
     getDb().apiKey.updateMany({
       where: { keyPrefix: prefix },
