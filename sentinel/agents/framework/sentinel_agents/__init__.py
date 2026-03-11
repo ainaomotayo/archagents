@@ -8,6 +8,7 @@ from sentinel_agents.types import (
     Confidence,
 )
 from sentinel_agents.events import RedisEventConsumer, RedisEventProducer
+from sentinel_agents.orchestrator import ScanOrchestrator, ScanResult
 
 __all__ = [
     "BaseAgent",
@@ -19,4 +20,6 @@ __all__ = [
     "Confidence",
     "RedisEventConsumer",
     "RedisEventProducer",
+    "ScanOrchestrator",
+    "ScanResult",
 ]

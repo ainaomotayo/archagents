@@ -1,4 +1,7 @@
-"""Parse structured LLM JSON responses into Finding objects."""
+"""Parse structured LLM JSON responses into Finding objects.
+
+Includes structured error extraction for the reflection loop.
+"""
 
 from __future__ import annotations
 
@@ -59,12 +62,73 @@ def _extract_json_array(text: str) -> list[dict[str, Any]]:
 
 
 # ---------------------------------------------------------------------------
+# Structured error extraction for reflection loop
+# ---------------------------------------------------------------------------
+
+def extract_parse_errors(response_text: str) -> str:
+    """Extract structured error information from a failed parse attempt.
+
+    Returns a human-readable error description that can be fed back to the LLM
+    in the reflection loop.
+    """
+    if not response_text or not response_text.strip():
+        return "Response was empty. Expected a JSON array of findings."
+
+    # Try to parse and identify the specific error
+    cleaned = re.sub(r"```(?:json)?\s*", "", response_text).strip()
+
+    try:
+        parsed = json.loads(cleaned)
+        if not isinstance(parsed, list):
+            return (
+                f"Response parsed as JSON but was {type(parsed).__name__}, "
+                f"not a list. Expected a JSON array of finding objects."
+            )
+        # Check if items are valid dicts
+        for i, item in enumerate(parsed):
+            if not isinstance(item, dict):
+                return (
+                    f"Item at index {i} is {type(item).__name__}, not a dict. "
+                    f"Each finding must be a JSON object."
+                )
+            missing = []
+            for field in ("title", "severity", "line_start"):
+                if field not in item:
+                    missing.append(field)
+            if missing:
+                return (
+                    f"Item at index {i} is missing required fields: {', '.join(missing)}. "
+                    f"Each finding needs: title, description, severity, confidence, "
+                    f"line_start, line_end, category, remediation."
+                )
+        return "Response appeared valid but could not be processed."
+    except json.JSONDecodeError as exc:
+        # Find the first JSON array in the text
+        match = re.search(r"\[[\s\S]*\]", cleaned)
+        if match:
+            try:
+                json.loads(match.group())
+            except json.JSONDecodeError as inner_exc:
+                return (
+                    f"Found JSON-like content but it has syntax errors: "
+                    f"{inner_exc.msg} at position {inner_exc.pos}."
+                )
+        return (
+            f"Response is not valid JSON: {exc.msg} at position {exc.pos}. "
+            f"Expected a JSON array like: "
+            f'[{{"title": "...", "severity": "high", ...}}]'
+        )
+
+
+# ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
 
 _REVIEW_TYPE_MAP: dict[str, str] = {
     "security": "security",
     "license": "license",
+    "architecture": "architecture",
+    "performance": "performance",
 }
 
 
@@ -82,7 +146,7 @@ def parse_llm_findings(
     file_path:
         The file being reviewed — used as ``Finding.file``.
     review_type:
-        ``"security"`` or ``"license"`` — determines ``Finding.type``.
+        ``"security"``, ``"license"``, ``"architecture"``, or ``"performance"``.
 
     Returns
     -------

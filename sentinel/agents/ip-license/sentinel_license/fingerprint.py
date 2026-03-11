@@ -1,29 +1,69 @@
+"""Code fingerprinting for OSS detection.
+
+Uses AST-normalized fingerprinting (via agent_core) for supported languages,
+with text-based normalization fallback. Includes binary format detection.
+"""
+
 from __future__ import annotations
 
 import hashlib
 import re
+from dataclasses import dataclass
 
-from sentinel_agents.types import DiffEvent, Finding, Severity, Confidence
+from sentinel_agents.types import Confidence, DiffEvent, Finding, Severity
 
-# Simulated OSS fingerprint database (in production, this would be a real database)
-# Maps normalized code hash -> (source_url, license)
-KNOWN_OSS_HASHES: dict[str, tuple[str, str]] = {
-    # These would be populated from scanning top OSS repos
-    # Format: hash -> (source_url, license)
+# Languages supported by agent_core tree-sitter fingerprinting
+_AST_LANGUAGES = {
+    "python", "javascript", "typescript", "js", "ts", "jsx", "tsx",
+    "go", "rust", "java", "ruby", "c", "cpp", "cc",
 }
 
+# Simulated OSS fingerprint database
+# Maps normalized code hash -> (source_url, license)
+KNOWN_OSS_HASHES: dict[str, tuple[str, str]] = {}
+
+
+# --- Binary Format Detection ---
+
+@dataclass
+class BinaryInfo:
+    """Detected binary format."""
+
+    format: str  # "ELF", "MachO", "PE", "JAR", "WASM"
+    detail: str
+
+
+# Magic bytes for common binary formats
+_MAGIC_BYTES: list[tuple[bytes, str, str]] = [
+    (b"\x7fELF", "ELF", "Linux/Unix executable"),
+    (b"\xfe\xed\xfa\xce", "MachO", "macOS executable (32-bit)"),
+    (b"\xfe\xed\xfa\xcf", "MachO", "macOS executable (64-bit)"),
+    (b"\xcf\xfa\xed\xfe", "MachO", "macOS executable (64-bit, reversed)"),
+    (b"MZ", "PE", "Windows executable"),
+    (b"PK\x03\x04", "JAR", "Java archive / ZIP"),
+    (b"\x00asm", "WASM", "WebAssembly binary"),
+]
+
+
+def detect_binary(content: bytes) -> BinaryInfo | None:
+    """Detect binary format from magic bytes."""
+    for magic, fmt, detail in _MAGIC_BYTES:
+        if content[:len(magic)] == magic:
+            return BinaryInfo(format=fmt, detail=detail)
+    return None
+
+
+# --- Code Normalization ---
 
 def normalize_code(code: str) -> str:
     """Normalize code for fingerprinting: strip whitespace, comments, blank lines."""
     lines = []
     for line in code.splitlines():
         stripped = line.strip()
-        # Skip empty lines and common comment styles
         if not stripped:
             continue
         if stripped.startswith(("#", "//", "/*", "*", "*/", "'''", '"""')):
             continue
-        # Normalize whitespace
         normalized = re.sub(r"\s+", " ", stripped)
         lines.append(normalized)
     return "\n".join(lines)
@@ -33,6 +73,14 @@ def hash_fragment(code: str) -> str:
     """Hash a normalized code fragment."""
     return hashlib.sha256(code.encode()).hexdigest()[:16]
 
+
+def _ast_fingerprint(code: str, language: str) -> str:
+    """AST-normalized fingerprint via agent_core."""
+    from agent_core.analysis.fingerprint import fingerprint_code as ast_fp
+    return ast_fp(code, language)[:16]
+
+
+# --- Fingerprinting Pipeline ---
 
 def fingerprint_code(event: DiffEvent) -> list[Finding]:
     """Fingerprint added code fragments against known OSS corpus."""
@@ -56,16 +104,30 @@ def fingerprint_code(event: DiffEvent) -> list[Finding]:
                     current_line += 1
 
         if len(added_lines) < 5:
-            continue  # Too short to fingerprint meaningfully
+            continue
+
+        lang = diff_file.language.lower()
+        use_ast = lang in _AST_LANGUAGES
 
         # Fingerprint sliding windows of 10 lines
         window_size = 10
         for i in range(0, len(added_lines) - window_size + 1, 5):
             window = "\n".join(added_lines[i : i + window_size])
-            normalized = normalize_code(window)
-            if not normalized:
-                continue
-            fprint = hash_fragment(normalized)
+
+            # Try AST fingerprint first, fall back to text normalization
+            if use_ast:
+                try:
+                    fprint = _ast_fingerprint(window, lang)
+                except Exception:
+                    normalized = normalize_code(window)
+                    if not normalized:
+                        continue
+                    fprint = hash_fragment(normalized)
+            else:
+                normalized = normalize_code(window)
+                if not normalized:
+                    continue
+                fprint = hash_fragment(normalized)
 
             if fprint in KNOWN_OSS_HASHES:
                 source, license_name = KNOWN_OSS_HASHES[fprint]

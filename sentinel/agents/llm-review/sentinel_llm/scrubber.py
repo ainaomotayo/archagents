@@ -2,6 +2,10 @@
 
 This module is **non-configurable** and **cannot be disabled**.  Every piece of
 code destined for an LLM call MUST pass through ``scrub()`` first.
+
+Integrates with ``agent_core.scrubbing.ScrubberRegistry`` when available,
+adding LLM-specific patterns (prompt injection markers, system prompts).
+Falls back to standalone scrubbing if agent_core is not installed.
 """
 
 from __future__ import annotations
@@ -38,9 +42,6 @@ class ScrubResult:
 # ---------------------------------------------------------------------------
 
 # Each entry: (pattern_name, compiled_regex)
-# The regex MUST contain exactly one capturing group (or use group 0) that
-# covers the sensitive portion to be replaced.
-
 _PATTERNS: list[tuple[str, re.Pattern[str]]] = [
     # AWS access key IDs (always start with AKIA and are 20 chars)
     ("AWS_KEY", re.compile(r"(?<![A-Za-z0-9])(AKIA[0-9A-Z]{16})(?![A-Za-z0-9])")),
@@ -77,18 +78,83 @@ _PATTERNS: list[tuple[str, re.Pattern[str]]] = [
     )),
 ]
 
+# LLM-specific patterns — prompt injection and system prompt markers
+_LLM_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
+    ("PROMPT_INJECTION", re.compile(
+        r"(?i)((?:ignore|forget|disregard)\s+(?:all\s+)?(?:previous|above|prior)\s+"
+        r"(?:instructions?|prompts?|rules?))"
+    )),
+    ("SYSTEM_PROMPT", re.compile(
+        r"(<<\s*(?:SYS|SYSTEM)\s*>>[\s\S]*?<<\s*/(?:SYS|SYSTEM)\s*>>)"
+    )),
+    ("ROLE_OVERRIDE", re.compile(
+        r"(?i)(you\s+are\s+(?:now|no\s+longer)\s+(?:a|an|the)\s+\w+)"
+    )),
+]
+
 
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
 
-def scrub(code: str) -> ScrubResult:
+def _try_scrubber_registry(code: str) -> ScrubResult | None:
+    """Try to use agent_core.scrubbing.ScrubberRegistry if available.
+
+    Returns None if agent_core is not installed or registry fails.
+    """
+    try:
+        from agent_core.scrubbing.registry import ScrubberRegistry
+
+        registry = ScrubberRegistry()
+        # Register LLM-specific patterns
+        registry.register("llm-review", {
+            "PROMPT_INJECTION": (
+                r"(?i)(?:ignore|forget|disregard)\s+(?:all\s+)?(?:previous|above|prior)\s+"
+                r"(?:instructions?|prompts?|rules?)"
+            ),
+            "SYSTEM_PROMPT": r"<<\s*(?:SYS|SYSTEM)\s*>>[\s\S]*?<<\s*/(?:SYS|SYSTEM)\s*>>",
+            "ROLE_OVERRIDE": r"(?i)you\s+are\s+(?:now|no\s+longer)\s+(?:a|an|the)\s+\w+",
+        })
+
+        result = registry.scrub("llm-review", code)
+        # Convert to our ScrubResult format
+        redactions = [
+            Redaction(
+                type=r.pattern_name,
+                line_number=code[:r.start].count("\n") + 1,
+                original_length=len(r.original),
+                replacement=r.replacement,
+            )
+            for r in result.redactions
+        ]
+        return ScrubResult(
+            sanitized_code=result.sanitized,
+            redactions=redactions,
+            redaction_count=len(redactions),
+        )
+    except (ImportError, Exception):
+        return None
+
+
+def scrub(
+    code: str,
+    *,
+    include_llm_patterns: bool = True,
+    use_registry: bool = False,
+) -> ScrubResult:
     """Mandatory PII/secret scrubber.  Cannot be disabled.
 
     Parameters
     ----------
     code:
         Source code (or any text) that will be sent to an LLM.
+    include_llm_patterns:
+        If True (default), also scrub LLM-specific patterns like prompt
+        injection markers.
+    use_registry:
+        If True, delegate to ``agent_core.scrubbing.ScrubberRegistry``
+        (layered: base patterns + LLM-specific). Falls back to standalone
+        scrubbing if agent_core is not installed.
 
     Returns
     -------
@@ -96,32 +162,34 @@ def scrub(code: str) -> ScrubResult:
         Contains the sanitised text, a list of ``Redaction`` records, and a
         count of how many redactions were applied.
     """
+    # Use agent_core registry when explicitly requested
+    if use_registry and include_llm_patterns:
+        registry_result = _try_scrubber_registry(code)
+        if registry_result is not None:
+            return registry_result
+
+    # Default: standalone scrubbing
     redactions: list[Redaction] = []
     sanitized = code
 
-    for pattern_name, regex in _PATTERNS:
+    patterns = list(_PATTERNS)
+    if include_llm_patterns:
+        patterns.extend(_LLM_PATTERNS)
+
+    for pattern_name, regex in patterns:
         replacement_tag = f"[REDACTED:{pattern_name}]"
 
-        # We need to track line numbers, so we iterate over matches manually.
-        # After each replacement the string changes length, so we restart the
-        # search from the beginning each time (simple and correct for the
-        # expected input sizes).
         while True:
             match = regex.search(sanitized)
             if match is None:
                 break
 
-            # Determine which group holds the sensitive value.
-            # For patterns with a capturing group, use group(1); otherwise group(0).
             if match.lastindex and match.lastindex >= 1:
                 start, end = match.start(1), match.end(1)
                 matched_text = match.group(1)
             else:
                 start, end = match.start(0), match.end(0)
                 matched_text = match.group(0)
-
-            # For the API_KEY pattern we only redact the value inside quotes,
-            # not the key name.  The captured group already isolates the value.
 
             line_number = sanitized[:start].count("\n") + 1
 

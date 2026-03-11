@@ -1,4 +1,4 @@
-"""Rule evaluation engine for deny-import, deny-pattern, and require-pattern rules."""
+"""Rule evaluation engine for all policy rule types."""
 
 from __future__ import annotations
 
@@ -119,12 +119,18 @@ def evaluate_rule(rule: PolicyRule, file_path: str, content: str) -> list[RuleVi
     if not file_matches_glob(file_path, rule.files):
         return []
 
-    if rule.type == "deny-import":
-        return _evaluate_deny_import(rule, file_path, content)
-    elif rule.type == "deny-pattern":
-        return _evaluate_deny_pattern(rule, file_path, content)
-    elif rule.type == "require-pattern":
-        return _evaluate_require_pattern(rule, file_path, content)
+    evaluators = {
+        "deny-import": _evaluate_deny_import,
+        "deny-pattern": _evaluate_deny_pattern,
+        "require-pattern": _evaluate_require_pattern,
+        "require-review": _evaluate_require_review,
+        "enforce-format": _evaluate_enforce_format,
+        "dependency-allow": _evaluate_dependency_allow,
+        "secret-scan": _evaluate_secret_scan,
+    }
+    evaluator = evaluators.get(rule.type)
+    if evaluator:
+        return evaluator(rule, file_path, content)
     return []
 
 
@@ -211,3 +217,145 @@ def _evaluate_require_pattern(
             )
         ]
     return []
+
+
+def _evaluate_require_review(
+    rule: PolicyRule, file_path: str, content: str
+) -> list[RuleViolation]:
+    """Check for approval/review markers in the content.
+
+    Looks for patterns like 'Approved-by:', 'Reviewed-by:', 'LGTM' in comments.
+    """
+    approval_patterns = [
+        re.compile(r"(?i)Approved-by:\s*\S+"),
+        re.compile(r"(?i)Reviewed-by:\s*\S+"),
+        re.compile(r"(?i)\bLGTM\b"),
+        re.compile(r"(?i)Signed-off-by:\s*\S+"),
+    ]
+
+    found_approvals = 0
+    for pattern in approval_patterns:
+        if pattern.search(content):
+            found_approvals += 1
+
+    if found_approvals < rule.min_approvals:
+        return [
+            RuleViolation(
+                rule_name=rule.name,
+                file=file_path,
+                line_start=1,
+                line_end=1,
+                message=(
+                    f"Insufficient review markers: found {found_approvals}, "
+                    f"need {rule.min_approvals}. {rule.description}"
+                ),
+                severity=rule.severity,
+            )
+        ]
+    return []
+
+
+def _evaluate_enforce_format(
+    rule: PolicyRule, file_path: str, content: str
+) -> list[RuleViolation]:
+    """Enforce naming conventions for identifiers in the file."""
+    violations: list[RuleViolation] = []
+    style = rule.format_style
+
+    # If a pattern is specified, use it as a regex for identifier naming
+    if rule.pattern:
+        try:
+            regex = re.compile(rule.pattern)
+        except re.error:
+            return []
+
+        # Extract identifiers from def/function/const/let/var declarations
+        ident_re = re.compile(
+            r"(?:def|function|const|let|var|class)\s+([a-zA-Z_]\w*)"
+        )
+        lines = content.split("\n")
+        for line_num, line in enumerate(lines, start=1):
+            for m in ident_re.finditer(line):
+                name = m.group(1)
+                if not regex.fullmatch(name):
+                    violations.append(
+                        RuleViolation(
+                            rule_name=rule.name,
+                            file=file_path,
+                            line_start=line_num,
+                            line_end=line_num,
+                            message=(
+                                f"Identifier '{name}' doesn't match format "
+                                f"'{rule.format_style or rule.pattern}': {rule.description}"
+                            ),
+                            severity=rule.severity,
+                        )
+                    )
+    return violations
+
+
+def _evaluate_dependency_allow(
+    rule: PolicyRule, file_path: str, content: str
+) -> list[RuleViolation]:
+    """Check that imports/requires are from the allowlist only."""
+    violations: list[RuleViolation] = []
+    allowset = set(rule.allowlist)
+
+    # Detect import/require patterns
+    import_patterns = [
+        re.compile(r"^\s*import\s+(\S+)", re.MULTILINE),
+        re.compile(r"^\s*from\s+(\S+)\s+import", re.MULTILINE),
+        re.compile(r"""require\(\s*['"]([^'"]+)['"]\s*\)"""),
+        re.compile(r"""import\s+.*\s+from\s+['"]([^'"]+)['"]"""),
+    ]
+
+    lines = content.split("\n")
+    for line_num, line in enumerate(lines, start=1):
+        for pattern in import_patterns:
+            m = pattern.search(line)
+            if m:
+                dep = m.group(1).split(".")[0]  # Top-level package
+                if dep and dep not in allowset:
+                    violations.append(
+                        RuleViolation(
+                            rule_name=rule.name,
+                            file=file_path,
+                            line_start=line_num,
+                            line_end=line_num,
+                            message=(
+                                f"Dependency '{dep}' not in allowlist: {rule.description}"
+                            ),
+                            severity=rule.severity,
+                        )
+                    )
+                    break  # One violation per line
+    return violations
+
+
+def _evaluate_secret_scan(
+    rule: PolicyRule, file_path: str, content: str
+) -> list[RuleViolation]:
+    """Scan for secrets matching the specified pattern."""
+    violations: list[RuleViolation] = []
+
+    try:
+        regex = re.compile(rule.pattern)
+    except re.error:
+        return []
+
+    lines = content.split("\n")
+    for line_num, line in enumerate(lines, start=1):
+        if regex.search(line):
+            # Mask the matched content in the message
+            violations.append(
+                RuleViolation(
+                    rule_name=rule.name,
+                    file=file_path,
+                    line_start=line_num,
+                    line_end=line_num,
+                    message=f"Potential secret detected: {rule.description}",
+                    severity=rule.severity,
+                )
+            )
+
+    return violations

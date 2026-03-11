@@ -253,6 +253,9 @@ importers:
       '@prisma/client':
         specifier: ^6.4
         version: 6.19.2(prisma@6.19.2(typescript@5.9.3))(typescript@5.9.3)
+      '@sentinel/security':
+        specifier: workspace:*
+        version: link:../security
     devDependencies:
       prisma:
         specifier: ^6.4

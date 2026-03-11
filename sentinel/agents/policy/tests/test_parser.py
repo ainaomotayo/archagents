@@ -105,7 +105,7 @@ rules:
 """
         config = parse_policy_yaml(yaml_str)
         assert len(config.errors) > 0
-        assert "invalid type" in config.errors[0]
+        assert "unknown-type" in config.errors[0]
         assert len(config.rules) == 0
 
     def test_deny_import_missing_targets(self):

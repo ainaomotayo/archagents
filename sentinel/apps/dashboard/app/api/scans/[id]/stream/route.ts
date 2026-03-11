@@ -1,83 +1,131 @@
 /**
- * SSE endpoint for real-time scan status updates.
+ * SSE endpoint for real-time scan events.
  *
  * GET /api/scans/:id/stream
  *
- * Returns a Server-Sent Events stream that pushes ScanStatusEvent payloads.
- * In production this would subscribe to a Redis pub/sub channel (or similar)
- * keyed by scan ID.  For the MVP we emit mock progress events so the
- * front-end integration can be tested end-to-end.
+ * Proxies to the SENTINEL API's `/v1/scans/:id/stream` endpoint.
+ * When the API is unreachable, falls back to a mock progress stream
+ * so the front-end integration can be tested standalone.
+ *
+ * Supports `lastEventId` query parameter for SSE reconnection.
  */
 
 import { NextRequest } from "next/server";
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-export const runtime = "edge"; // keep the connection open without serverless timeout
+export const runtime = "edge";
+
+const API_URL = process.env.SENTINEL_API_URL ?? "http://localhost:8080";
+
+// ---------------------------------------------------------------------------
+// Mock fallback (development / standalone)
+// ---------------------------------------------------------------------------
 
 interface MockStep {
-  status: "pending" | "scanning" | "completed" | "failed";
-  progress: number;
-  agentsCompleted: number;
-  agentsTotal: number;
+  event: string;
+  data: Record<string, unknown>;
 }
 
-function buildMockSteps(): MockStep[] {
-  const total = 5;
-  const steps: MockStep[] = [
-    { status: "pending", progress: 0, agentsCompleted: 0, agentsTotal: total },
-  ];
+function buildMockSteps(scanId: string): MockStep[] {
+  const agents = ["security", "dependency", "quality", "policy", "llm-review"];
+  const steps: MockStep[] = [];
 
-  for (let i = 1; i <= total; i++) {
+  for (const agent of agents) {
     steps.push({
-      status: "scanning",
-      progress: Math.round((i / total) * 100),
-      agentsCompleted: i,
-      agentsTotal: total,
+      event: "agent.started",
+      data: { agent, scanId },
+    });
+  }
+
+  for (let i = 0; i < agents.length; i++) {
+    steps.push({
+      event: "agent.completed",
+      data: { agent: agents[i], scanId },
+    });
+    steps.push({
+      event: "scan.progress",
+      data: {
+        scanId,
+        progress: Math.round(((i + 1) / agents.length) * 100),
+        agentsCompleted: i + 1,
+        agentsTotal: agents.length,
+      },
     });
   }
 
   steps.push({
-    status: "completed",
-    progress: 100,
-    agentsCompleted: total,
-    agentsTotal: total,
+    event: "finding.new",
+    data: { title: "SQL Injection", severity: "high", file: "auth.py", scanner: "security" },
+  });
+
+  steps.push({
+    event: "scan.completed",
+    data: { scanId, totalFindings: 1, updatedAt: new Date().toISOString() },
   });
 
   return steps;
 }
+
+// ---------------------------------------------------------------------------
+// Route handler
+// ---------------------------------------------------------------------------
 
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id: scanId } = await params;
+  const lastEventId = request.nextUrl.searchParams.get("lastEventId") ?? "";
 
-  const steps = buildMockSteps();
+  // Try to proxy from the real API
+  const apiStreamUrl = `${API_URL}/v1/scans/${encodeURIComponent(scanId)}/stream`;
+  const headers: Record<string, string> = {
+    Accept: "text/event-stream",
+  };
+  if (lastEventId) {
+    headers["Last-Event-ID"] = lastEventId;
+  }
+
+  try {
+    const apiRes = await fetch(apiStreamUrl, {
+      headers,
+      signal: request.signal,
+    });
+
+    if (apiRes.ok && apiRes.body) {
+      // Pipe through the SSE stream from the API
+      return new Response(apiRes.body, {
+        headers: {
+          "Content-Type": "text/event-stream",
+          "Cache-Control": "no-cache, no-transform",
+          Connection: "keep-alive",
+        },
+      });
+    }
+  } catch {
+    // API unreachable — fall through to mock
+  }
+
+  // Fallback: mock SSE stream for development
+  const steps = buildMockSteps(scanId);
+  let eventCounter = 0;
 
   const stream = new ReadableStream({
     async start(controller) {
       const encoder = new TextEncoder();
 
       for (const step of steps) {
-        // Respect client disconnect
         if (request.signal.aborted) {
           controller.close();
           return;
         }
 
-        const payload = JSON.stringify({
-          scanId,
-          status: step.status,
-          progress: step.progress,
-          agentsCompleted: step.agentsCompleted,
-          agentsTotal: step.agentsTotal,
-          updatedAt: new Date().toISOString(),
-        });
+        eventCounter++;
+        const id = `mock-${eventCounter}`;
+        const payload = JSON.stringify(step.data);
+        const sseFrame = `event: ${step.event}\nid: ${id}\ndata: ${payload}\n\n`;
+        controller.enqueue(encoder.encode(sseFrame));
 
-        controller.enqueue(encoder.encode(`data: ${payload}\n\n`));
-
-        // Simulate work between updates (500ms per step)
-        await new Promise((resolve) => setTimeout(resolve, 500));
+        await new Promise((resolve) => setTimeout(resolve, 300));
       }
 
       controller.close();

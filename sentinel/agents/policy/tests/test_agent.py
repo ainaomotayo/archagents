@@ -67,7 +67,7 @@ class TestPolicyAgent:
     def test_agent_metadata(self):
         agent = PolicyAgent()
         assert agent.name == "policy"
-        assert agent.version == "0.1.0"
+        assert agent.version == "0.2.0"
 
     def test_process_empty_event(self):
         agent = PolicyAgent()

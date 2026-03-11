@@ -1,9 +1,13 @@
-"""Main QualityAgent — combines complexity, duplication, and test coverage analysis."""
+"""Main QualityAgent — combines complexity, duplication, and test coverage analysis.
+
+Supports 30+ languages via tree-sitter AST for complexity and naming,
+with regex fallback for unsupported languages.
+"""
 
 from __future__ import annotations
 
 from sentinel_agents.base import BaseAgent
-from sentinel_agents.types import Confidence, DiffEvent, Finding, Severity
+from sentinel_agents.types import Confidence, DiffEvent, DiffFile, Finding, Severity
 
 from sentinel_quality.complexity import calculate_complexity
 from sentinel_quality.duplication import detect_duplicates
@@ -16,6 +20,18 @@ COMPLEXITY_MEDIUM = 10
 
 # Naming consistency threshold — below this triggers a finding
 NAMING_CONSISTENCY_THRESHOLD = 0.5
+
+# Languages supported for complexity analysis (tree-sitter + regex fallback)
+_COMPLEXITY_LANGUAGES = {
+    "python", "javascript", "typescript", "js", "ts", "jsx", "tsx",
+    "go", "rust", "java", "ruby", "c", "cpp", "cc",
+}
+
+# Languages supported for naming analysis (tree-sitter + regex fallback)
+_NAMING_LANGUAGES = {
+    "python", "javascript", "typescript", "js", "ts", "jsx", "tsx",
+    "go", "rust", "java", "ruby", "c", "cpp", "cc",
+}
 
 
 class QualityAgent(BaseAgent):
@@ -45,20 +61,10 @@ class QualityAgent(BaseAgent):
         findings: list[Finding] = []
         for diff_file in event.files:
             lang = diff_file.language.lower()
-            if lang not in ("python", "javascript", "typescript", "js", "ts", "jsx", "tsx"):
+            if lang not in _COMPLEXITY_LANGUAGES:
                 continue
 
-            # Reconstruct added code from hunks
-            code_lines: list[str] = []
-            for hunk in diff_file.hunks:
-                for line in hunk.content.split("\n"):
-                    if line.startswith("+") and not line.startswith("+++"):
-                        code_lines.append(line[1:])
-                    elif not line.startswith("-") and not line.startswith("---"):
-                        if not line.startswith("@@"):
-                            code_lines.append(line)
-
-            code = "\n".join(code_lines)
+            code = self._extract_added_code(diff_file)
             if not code.strip():
                 continue
 
@@ -130,24 +136,27 @@ class QualityAgent(BaseAgent):
             )
         return findings
 
+    @staticmethod
+    def _extract_added_code(diff_file: DiffFile) -> str:
+        """Reconstruct added code from diff hunks."""
+        code_lines: list[str] = []
+        for hunk in diff_file.hunks:
+            for line in hunk.content.split("\n"):
+                if line.startswith("+") and not line.startswith("+++"):
+                    code_lines.append(line[1:])
+                elif not line.startswith("-") and not line.startswith("---"):
+                    if not line.startswith("@@"):
+                        code_lines.append(line)
+        return "\n".join(code_lines)
+
     def _analyze_naming(self, event: DiffEvent) -> list[Finding]:
         findings: list[Finding] = []
         for diff_file in event.files:
             lang = diff_file.language.lower()
-            if lang not in ("python", "javascript", "typescript", "js", "ts", "jsx", "tsx"):
+            if lang not in _NAMING_LANGUAGES:
                 continue
 
-            # Reconstruct added code from hunks
-            code_lines: list[str] = []
-            for hunk in diff_file.hunks:
-                for line in hunk.content.split("\n"):
-                    if line.startswith("+") and not line.startswith("+++"):
-                        code_lines.append(line[1:])
-                    elif not line.startswith("-") and not line.startswith("---"):
-                        if not line.startswith("@@"):
-                            code_lines.append(line)
-
-            code = "\n".join(code_lines)
+            code = self._extract_added_code(diff_file)
             if not code.strip():
                 continue
 

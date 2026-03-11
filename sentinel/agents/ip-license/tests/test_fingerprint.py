@@ -87,13 +87,16 @@ def test_fingerprint_matches_known_hash():
     lines = [f"+def func_{i}(): return {i}" for i in range(12)]
     code = "\n".join(lines) + "\n"
 
-    # Pre-compute what the fingerprinter will see
-    from sentinel_license.fingerprint import normalize_code, hash_fragment
-
+    # Pre-compute what the fingerprinter will see (AST fingerprint for Python)
     raw_lines = [line[1:] for line in lines]
     window = "\n".join(raw_lines[:10])
-    normalized = normalize_code(window)
-    fprint = hash_fragment(normalized)
+    try:
+        from agent_core.analysis.fingerprint import fingerprint_code as ast_fp
+        fprint = ast_fp(window, "python")[:16]
+    except Exception:
+        # Fall back to text-based hash
+        normalized = normalize_code(window)
+        fprint = hash_fragment(normalized)
 
     # Register in the known hashes
     KNOWN_OSS_HASHES[fprint] = ("https://github.com/example/repo", "GPL")
