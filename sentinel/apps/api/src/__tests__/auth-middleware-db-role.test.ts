@@ -15,9 +15,13 @@ vi.mock("@sentinel/auth", () => ({
   signRequest: vi.fn(),
 }));
 
-vi.mock("@sentinel/security", () => ({
-  isAuthorized: vi.fn(() => true),
-}));
+vi.mock("@sentinel/security", async (importOriginal) => {
+  const actual = await importOriginal() as any;
+  return {
+    ...actual,
+    isAuthorized: vi.fn(() => true),
+  };
+});
 
 import { createAuthHook } from "../middleware/auth.js";
 import { setCurrentOrgId } from "@sentinel/db";
