@@ -151,6 +151,27 @@ async function finalizeScan(scanId: string, hasTimeouts: boolean) {
       });
     }
 
+    const allFindings = pending.findings.flatMap((f) => Array.isArray(f.findings) ? f.findings : []);
+
+    await eventBus.publish("sentinel.notifications", {
+      id: `evt-${scanId}-completed`,
+      orgId: scan.orgId,
+      topic: "scan.completed",
+      payload: { scanId, riskScore: assessment.riskScore, verdict: assessment.status, findingCount: allFindings.length },
+      timestamp: new Date().toISOString(),
+    });
+
+    // After processing findings, notify for critical ones
+    for (const finding of allFindings.filter((f: any) => f.severity === "critical")) {
+      await eventBus.publish("sentinel.notifications", {
+        id: `evt-${finding.id}-critical`,
+        orgId: scan.orgId,
+        topic: "finding.critical",
+        payload: { findingId: finding.id, severity: "critical", category: finding.category, agentName: finding.agentName, file: finding.file },
+        timestamp: new Date().toISOString(),
+      });
+    }
+
     const durationSec = (performance.now() - pending.startedAt) / 1000;
     scanDuration.observe({ status: assessment.status }, durationSec);
 

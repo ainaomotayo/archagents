@@ -57,6 +57,14 @@ async function handleReportRequest(_id: string, data: Record<string, unknown>) {
       reportId, type, fileHash,
     });
 
+    await eventBus.publish("sentinel.notifications", {
+      id: `evt-${reportId}-ready`,
+      orgId,
+      topic: "compliance.report_ready",
+      payload: { reportId, type, fileUrl: fileUrl ?? null },
+      timestamp: new Date().toISOString(),
+    });
+
     logger.info({ reportId, fileHash }, "Report completed");
   } catch (err) {
     logger.error({ reportId, err }, "Failed to generate report");
