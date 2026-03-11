@@ -1,7 +1,9 @@
 import { verifyRequest, verifyApiKey, extractPrefix } from "@sentinel/auth";
-import { isAuthorized, type ApiRole } from "@sentinel/security";
+import { isAuthorized, type ApiRole, AuthRateLimiter } from "@sentinel/security";
 import { setCurrentOrgId } from "@sentinel/db";
 import type { FastifyRequest, FastifyReply } from "fastify";
+
+const apiKeyRateLimiter = new AuthRateLimiter({ maxAttempts: 20, windowMs: 60_000, lockoutMs: 300_000 });
 
 export async function resolveApiKeyAuth(
   authHeader: string | undefined,
@@ -35,6 +37,13 @@ export function createAuthHook(options: AuthHookOptions) {
     // Try API key auth first (Bearer sk_...)
     const authHeader = request.headers.authorization as string | undefined;
     if (authHeader?.startsWith("Bearer sk_")) {
+      const clientIp = (request.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() || request.ip || "unknown";
+      const rateCheck = apiKeyRateLimiter.check(clientIp);
+      if (!rateCheck.allowed) {
+        reply.code(429).send({ error: "Too many authentication attempts", retryAfterMs: rateCheck.retryAfterMs });
+        return;
+      }
+
       const apiKeyResult = await resolveApiKeyAuth(authHeader, async (prefix) => {
         const { getDb } = await import("@sentinel/db");
         const db = getDb();
@@ -50,6 +59,7 @@ export function createAuthHook(options: AuthHookOptions) {
         };
       });
       if (apiKeyResult) {
+        apiKeyRateLimiter.reset(clientIp);
         (request as any).orgId = apiKeyResult.orgId;
         setCurrentOrgId(apiKeyResult.orgId);
         (request as any).role = apiKeyResult.role as ApiRole;
@@ -61,6 +71,8 @@ export function createAuthHook(options: AuthHookOptions) {
           return;
         }
         return; // Authenticated via API key
+      } else {
+        apiKeyRateLimiter.record(clientIp);
       }
     }
 
