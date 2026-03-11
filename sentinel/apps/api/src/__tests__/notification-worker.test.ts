@@ -22,6 +22,8 @@ function makeDeps() {
       create: vi.fn().mockResolvedValue({ id: "del-1" }),
       update: vi.fn().mockResolvedValue({ id: "del-1" }),
       findMany: vi.fn().mockResolvedValue([]),
+      findUnique: vi.fn().mockResolvedValue(null),
+      count: vi.fn().mockResolvedValue(0),
     },
   };
 
@@ -68,6 +70,16 @@ describe("processNotificationEvent", () => {
     expect(db.webhookDelivery.create).toHaveBeenCalledWith({
       data: expect.objectContaining({ status: "pending", lastError: "Server Error", nextRetryAt: expect.any(Date) }),
     });
+  });
+
+  it("skips delivery if idempotency key already exists (deduplication)", async () => {
+    const { db, registry, redisPub } = makeDeps();
+    db.webhookDelivery.findUnique.mockResolvedValue({ id: "existing-del" });
+    await processNotificationEvent(
+      { id: "evt-dup", orgId: "org-1", topic: "scan.completed", payload: {}, timestamp: "2026-03-10T12:00:00Z" },
+      { db: db as any, registry: registry as any, redisPub: redisPub as any },
+    );
+    expect(db.webhookDelivery.create).not.toHaveBeenCalled();
   });
 
   it("skips disabled endpoints", async () => {

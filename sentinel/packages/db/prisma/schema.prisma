@@ -364,7 +364,8 @@ model WebhookDelivery {
   nextRetryAt DateTime? @map("next_retry_at")
   lastError   String?   @map("last_error")
   deliveredAt DateTime? @map("delivered_at")
-  createdAt   DateTime  @default(now()) @map("created_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  idempotencyKey String?   @unique @map("idempotency_key")
 
   endpoint WebhookEndpoint @relation(fields: [endpointId], references: [id], onDelete: Cascade)
 
