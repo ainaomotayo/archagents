@@ -40,6 +40,10 @@ export function buildAttestationRoutes(deps: AttestationRouteDeps) {
       return service.revoke(orgId, id, reason, actorId);
     },
 
+    async renewAttestation(orgId: string, id: string, actorId: string) {
+      return service.renew(orgId, id, actorId);
+    },
+
     async getExpiringAttestations(orgId: string, days: number = 14) {
       return service.getExpiring(orgId, days);
     },

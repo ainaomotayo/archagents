@@ -1072,6 +1072,18 @@ app.delete("/v1/compliance/attestations/:id", { preHandler: authHook }, async (r
   }
 });
 
+app.post("/v1/compliance/attestations/:id/renew", { preHandler: authHook }, async (request, reply) => {
+  const orgId = (request as any).orgId ?? "default";
+  const { id } = request.params as { id: string };
+  const userId = (request as any).userId ?? "unknown";
+  try {
+    const result = await withTenant(db, orgId, () => attestationRoutes.renewAttestation(orgId, id, userId));
+    return result;
+  } catch (err: any) {
+    reply.code(400).send({ error: err.message });
+  }
+});
+
 // --- Evidence ---
 app.get("/v1/evidence", { preHandler: authHook }, async (request) => {
   const orgId = (request as any).orgId ?? "default";

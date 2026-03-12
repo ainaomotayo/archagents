@@ -98,6 +98,26 @@ describe("buildAttestationRoutes", () => {
     expect(result).toHaveProperty("revokedAt");
   });
 
+  it("renews an attestation", async () => {
+    mockDb.controlAttestation.findUnique.mockResolvedValue({
+      id: "att-1",
+      orgId: "org-1",
+      revokedAt: null,
+      attestationType: "compliant",
+      validFrom: new Date(),
+      expiresAt: new Date(),
+    });
+    mockDb.controlAttestation.update.mockResolvedValue({
+      id: "att-1",
+      expiresAt: new Date(Date.now() + 90 * 86_400_000),
+    });
+    mockDb.attestationHistory.create.mockResolvedValue({});
+
+    const result = await routes.renewAttestation("org-1", "att-1", "admin-1");
+    expect(result).toHaveProperty("id", "att-1");
+    expect(mockDb.controlAttestation.update).toHaveBeenCalled();
+  });
+
   it("gets expiring attestations", async () => {
     mockDb.controlAttestation.findMany.mockResolvedValue([
       { id: "att-1", expiresAt: new Date() },

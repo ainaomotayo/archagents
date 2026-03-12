@@ -567,6 +567,32 @@ describe("Compliance API integration", () => {
     expect(body).toHaveProperty("frameworkId");
   });
 
+  it("POST /v1/reports accepts nist_profile type (202)", async () => {
+    const bodyObj = { type: "nist_profile", frameworkId: "nist-ai-rmf", parameters: {} };
+    const payload = JSON.stringify(bodyObj);
+    const res = await app.inject({
+      method: "POST",
+      url: "/v1/reports",
+      headers: { ...signedHeaders(payload, "admin"), "content-type": "application/json" },
+      payload,
+    });
+    expect(res.statusCode).toBe(202);
+    expect(JSON.parse(res.payload)).toHaveProperty("type", "nist_profile");
+  });
+
+  it("POST /v1/reports accepts hipaa_assessment type (202)", async () => {
+    const bodyObj = { type: "hipaa_assessment", frameworkId: "hipaa", parameters: {} };
+    const payload = JSON.stringify(bodyObj);
+    const res = await app.inject({
+      method: "POST",
+      url: "/v1/reports",
+      headers: { ...signedHeaders(payload, "admin"), "content-type": "application/json" },
+      payload,
+    });
+    expect(res.statusCode).toBe(202);
+    expect(JSON.parse(res.payload)).toHaveProperty("type", "hipaa_assessment");
+  });
+
   // ── 15. GET /v1/reports — returns paginated reports (200) ─────────────
   it("GET /v1/reports returns paginated reports (200)", async () => {
     const res = await app.inject({

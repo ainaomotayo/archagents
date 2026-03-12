@@ -5,7 +5,11 @@ import { EventBus, withRetry } from "@sentinel/events";
 import { getDb, disconnectDb } from "@sentinel/db";
 import { createLogger, initTracing, shutdownTracing } from "@sentinel/telemetry";
 import { isArchiveEnabled, archiveToS3, getArchiveConfig } from "@sentinel/security";
-import { computeEvidenceHash } from "@sentinel/compliance";
+import {
+  computeEvidenceHash,
+  generateNistProfilePdf,
+  generateHipaaAssessmentPdf,
+} from "@sentinel/compliance";
 
 if (process.env.OTEL_EXPORTER_OTLP_ENDPOINT) {
   initTracing({ serviceName: "report-worker" });
@@ -35,16 +39,24 @@ async function handleReportRequest(_id: string, data: Record<string, unknown>) {
   try {
     await db.report.update({ where: { id: reportId }, data: { status: "generating" } });
 
-    // For now, generate a JSON report (React-PDF templates added in a later task)
-    const reportData = { type, frameworkId, parameters, generatedAt: new Date().toISOString() };
-    const reportJson = JSON.stringify(reportData);
-    const fileHash = createHash("sha256").update(reportJson).digest("hex");
+    let reportBuffer: Buffer | undefined;
+    const reportMeta = { type, frameworkId, parameters, generatedAt: new Date().toISOString() };
+
+    if (type === "nist_profile") {
+      reportBuffer = await generateNistProfilePdf(parameters ?? {});
+    } else if (type === "hipaa_assessment") {
+      reportBuffer = await generateHipaaAssessmentPdf(parameters ?? {});
+    }
+
+    const reportString = reportBuffer ? reportBuffer.toString("base64") : JSON.stringify(reportMeta);
+    const fileHash = createHash("sha256").update(reportString).digest("hex");
+    const fileExt = reportBuffer ? "pdf" : "json";
 
     let fileUrl: string | undefined;
     if (isArchiveEnabled()) {
       const config = getArchiveConfig();
-      const key = `${orgId}/reports/${reportId}.json`;
-      await archiveToS3(config, orgId, key, reportJson);
+      const key = `${orgId}/reports/${reportId}.${fileExt}`;
+      await archiveToS3(config, orgId, key, reportString);
       fileUrl = `s3://${config.bucket}/${config.prefix}/${key}`;
     }
 
