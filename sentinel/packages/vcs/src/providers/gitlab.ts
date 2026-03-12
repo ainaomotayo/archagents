@@ -130,14 +130,13 @@ export class GitLabProvider extends VcsProviderBase {
 
     const state = this.mapStatus(report.status);
 
-    await this.client.Commits.editStatus(projectId, report.commitHash, {
-      state,
+    await this.client.Commits.editStatus(projectId, report.commitHash, state, {
       name: "Sentinel Security",
-      description: report.summary.slice(0, 140),
+      description: report.summary.slice(0, 255),
       targetUrl: report.detailsUrl,
-    } as any);
+    });
 
-    if (trigger.prNumber) {
+    if (trigger.prNumber && report.annotations.length > 0) {
       const body = this.formatMrNote(report);
       await this.client.MergeRequestNotes.create(projectId, trigger.prNumber, body);
     }

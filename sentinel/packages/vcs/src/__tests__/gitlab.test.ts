@@ -224,4 +224,82 @@ describe("GitLabProvider", () => {
   it("getInstallationToken returns configured-at-init", async () => {
     expect(await provider.getInstallationToken("any")).toBe("configured-at-init");
   });
+
+  // --- reportStatus ---
+
+  describe("reportStatus", () => {
+    const baseReport = {
+      scanId: "scan-1",
+      commitHash: "abc123",
+      status: "full_pass" as const,
+      summary: "All checks passed",
+      riskScore: 0,
+      detailsUrl: "https://sentinel.example.com/reports/1",
+      annotations: [
+        {
+          file: "src/app.ts",
+          lineStart: 10,
+          lineEnd: 10,
+          level: "warning" as const,
+          title: "Hardcoded secret",
+          message: "Possible API key detected",
+        },
+      ],
+    };
+
+    const mrTrigger: VcsScanTrigger = {
+      provider: "gitlab",
+      type: "merge_request",
+      installationId: "42",
+      repo: "acme/backend",
+      owner: "acme",
+      commitHash: "abc123",
+      branch: "feature/auth",
+      author: "Jane",
+      prNumber: 7,
+      projectId: 42,
+    };
+
+    const pushTrigger: VcsScanTrigger = {
+      provider: "gitlab",
+      type: "push",
+      installationId: "42",
+      repo: "acme/backend",
+      owner: "acme",
+      commitHash: "abc123",
+      branch: "main",
+      author: "Jane",
+      projectId: 42,
+    };
+
+    it("calls Commits.editStatus with correct positional args", async () => {
+      mockEditStatus.mockResolvedValue({});
+      mockCreateNote.mockResolvedValue({});
+
+      await provider.reportStatus(mrTrigger, baseReport);
+
+      expect(mockEditStatus).toHaveBeenCalledWith(42, "abc123", "success", {
+        name: "Sentinel Security",
+        description: "All checks passed",
+        targetUrl: "https://sentinel.example.com/reports/1",
+      });
+    });
+
+    it("creates MR note when prNumber is set and annotations exist", async () => {
+      mockEditStatus.mockResolvedValue({});
+      mockCreateNote.mockResolvedValue({});
+
+      await provider.reportStatus(mrTrigger, baseReport);
+
+      expect(mockCreateNote).toHaveBeenCalledWith(42, 7, expect.stringContaining("Sentinel Scan Results"));
+    });
+
+    it("does NOT create MR note for push triggers", async () => {
+      mockEditStatus.mockResolvedValue({});
+
+      await provider.reportStatus(pushTrigger, baseReport);
+
+      expect(mockCreateNote).not.toHaveBeenCalled();
+    });
+  });
 });
