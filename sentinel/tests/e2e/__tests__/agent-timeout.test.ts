@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll } from "vitest";
+import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { createE2EContext, type E2EContext } from "../fixtures/factory.js";
 import { combinedVulnDiff, cleanDiff } from "../fixtures/diffs.js";
 import { submitAndComplete } from "../scenarios/pipeline.js";
@@ -11,6 +11,10 @@ describe("E2E: Agent Timeout & Recovery", () => {
   beforeAll(() => {
     ctx = createE2EContext();
     redis = new RedisInspector();
+  });
+
+  afterAll(async () => {
+    await redis.disconnect();
   });
 
   it("scan completes within configured timeout period", async () => {
@@ -50,12 +54,10 @@ describe("E2E: Agent Timeout & Recovery", () => {
     console.log(`[VERIFY] Redis streams: diffs=${diffsLen}, findings=${findingsLen}`);
 
     try {
-      const groups = await redis.getConsumerGroupInfo("sentinel.diffs");
-      console.log(`[VERIFY] sentinel.diffs consumer groups: ${groups.length}`);
+      const info = await redis.getConsumerGroupInfo("sentinel.diffs", "security-agent");
+      console.log(`[VERIFY] sentinel.diffs consumer group info: ${JSON.stringify(info)}`);
     } catch {
       console.log("[VERIFY] Consumer group info not available");
     }
-
-    await redis.disconnect();
   });
 });

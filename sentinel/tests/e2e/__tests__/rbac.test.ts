@@ -7,9 +7,14 @@ import { E2EApiClient } from "../services/api-client.js";
 
 describe("E2E: RBAC Enforcement", () => {
   let ctx: E2EContext;
+  let viewerClient: E2EApiClient;
 
   beforeAll(() => {
     ctx = createE2EContext();
+    const apiUrl = process.env.E2E_API_URL ?? "http://localhost:8081";
+    const secret = process.env.E2E_SECRET ?? "e2e-test-secret";
+    const orgId = process.env.E2E_ORG_ID ?? "org-e2e-test";
+    viewerClient = new E2EApiClient(apiUrl, secret, orgId);
   });
 
   it("admin role can submit scans, read findings, and read certificates", async () => {
@@ -29,12 +34,6 @@ describe("E2E: RBAC Enforcement", () => {
   });
 
   it("viewer role can read scans but cannot submit new scans", async () => {
-    const apiUrl = process.env.E2E_API_URL ?? "http://localhost:8081";
-    const secret = process.env.E2E_SECRET ?? "e2e-test-secret";
-    const orgId = process.env.E2E_ORG_ID ?? "org-e2e-test";
-
-    const viewerClient = new E2EApiClient(apiUrl, secret, orgId);
-
     // Viewer CAN read scans
     const scans = await viewerClient.request<{ scans: unknown[]; total: number }>(
       "GET", "/v1/scans", undefined, "viewer",
@@ -57,12 +56,6 @@ describe("E2E: RBAC Enforcement", () => {
 
     if (findings.length === 0) return;
 
-    const apiUrl = process.env.E2E_API_URL ?? "http://localhost:8081";
-    const secret = process.env.E2E_SECRET ?? "e2e-test-secret";
-    const orgId = process.env.E2E_ORG_ID ?? "org-e2e-test";
-
-    const viewerClient = new E2EApiClient(apiUrl, secret, orgId);
-
     await expectRBACDenied(() =>
       viewerClient.request(
         "PATCH",
@@ -74,12 +67,6 @@ describe("E2E: RBAC Enforcement", () => {
   });
 
   it("viewer role cannot generate reports", async () => {
-    const apiUrl = process.env.E2E_API_URL ?? "http://localhost:8081";
-    const secret = process.env.E2E_SECRET ?? "e2e-test-secret";
-    const orgId = process.env.E2E_ORG_ID ?? "org-e2e-test";
-
-    const viewerClient = new E2EApiClient(apiUrl, secret, orgId);
-
     await expectRBACDenied(() =>
       viewerClient.request("POST", "/v1/reports", { type: "compliance" }, "viewer"),
     );
