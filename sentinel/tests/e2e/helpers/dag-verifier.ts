@@ -40,6 +40,36 @@ export const TIMEOUT_DAG: DagDefinition = {
   ],
 };
 
+/** DAG for security-only scans (no dependency agent). */
+export const SECURITY_ONLY_DAG: DagDefinition = {
+  nodes: [
+    "scan.created",
+    "agent.security.completed",
+    "assessment.completed",
+    "certificate.issued",
+  ],
+  edges: [
+    ["scan.created", "agent.security.completed"],
+    ["agent.security.completed", "assessment.completed"],
+    ["assessment.completed", "certificate.issued"],
+  ],
+};
+
+/** DAG for dependency-only scans (no security agent). */
+export const DEPENDENCY_ONLY_DAG: DagDefinition = {
+  nodes: [
+    "scan.created",
+    "agent.dependency.completed",
+    "assessment.completed",
+    "certificate.issued",
+  ],
+  edges: [
+    ["scan.created", "agent.dependency.completed"],
+    ["agent.dependency.completed", "assessment.completed"],
+    ["assessment.completed", "certificate.issued"],
+  ],
+};
+
 export function verifyDag(dag: DagDefinition, events: string[]): DagResult {
   const seen = new Set<string>();
   const matched: string[] = [];
