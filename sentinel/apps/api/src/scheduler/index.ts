@@ -296,6 +296,34 @@ export async function startScheduler(): Promise<void> {
   const acquired = await lease.acquire();
   logger.info({ instanceId, isLeader: acquired }, "Initial leader lease attempt");
 
+  // Per-org scan executor: triggers a self-scan scoped to the org
+  orgManager.setJobExecutor(async (orgId: string) => {
+    if (!lease.isLeader()) return;
+    const scanId = `org-scan-${orgId}-${Date.now()}`;
+    await eventBus.publish("sentinel.diffs", {
+      scanId,
+      payload: {
+        projectId: `org-${orgId}`,
+        commitHash: `scheduled-${Date.now()}`,
+        branch: "main",
+        author: "sentinel-scheduler",
+        timestamp: new Date().toISOString(),
+        files: [],
+        toolHints: { tool: "sentinel-org-scan", markers: [] },
+        scanConfig: { securityLevel: "strict", licensePolicy: "default", qualityThreshold: 80 },
+        selfScan: true,
+        targets: SELF_SCAN_CONFIG.targets,
+        policyPath: SELF_SCAN_CONFIG.policyPath,
+      },
+      submittedAt: new Date().toISOString(),
+      triggeredBy: "scheduler",
+      orgId,
+    });
+    await lifecycleTracker.recordTrigger(scanId, `self-scan:${orgId}`);
+    metrics.lifecycleCounts.pending++;
+    logger.info({ scanId, orgId }, "Per-org scan triggered");
+  });
+
   // Org schedule override poll every 5 minutes
   await orgManager.loadOverrides();
   metrics.orgOverridesActive = Object.keys(orgManager.getActiveOverrides()).length;
@@ -308,13 +336,37 @@ export async function startScheduler(): Promise<void> {
     }
   }, 300_000);
 
+  // Subscribe to sentinel.findings for scan lifecycle completion tracking
+  const findingsBus = new EventBus(redis.duplicate() as Redis);
+  findingsBus.subscribe(
+    "sentinel.findings",
+    "scheduler-lifecycle",
+    instanceId,
+    async (_id, data) => {
+      const scanId = data.scanId as string | undefined;
+      if (!scanId) return;
+      const status = data.status as string | undefined;
+      if (status === "started" || status === "running") {
+        await lifecycleTracker.recordRunning(scanId);
+        metrics.lifecycleCounts.running++;
+      } else if (status === "completed" || data.certificate) {
+        await lifecycleTracker.recordCompletion(scanId);
+        metrics.lifecycleCounts.completed++;
+      }
+    },
+  ).catch((err) => {
+    logger.error({ err }, "Findings subscription failed");
+  });
+
   // Graceful shutdown
   const shutdown = async () => {
     logger.info("Scheduler shutting down...");
     clearInterval(heartbeatTimer);
     clearInterval(overrideTimer);
+    orgManager.stopAll();
     healthServer.close();
     await lease.release();
+    await findingsBus.disconnect();
     await eventBus.disconnect();
     process.exit(0);
   };

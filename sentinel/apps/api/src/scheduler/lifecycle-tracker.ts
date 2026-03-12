@@ -17,6 +17,11 @@ export class ScanLifecycleTracker {
     await this.redis.sadd(ACTIVE_SET_KEY, scanId);
   }
 
+  async recordRunning(scanId: string): Promise<void> {
+    const key = `${KEY_PREFIX}:${scanId}`;
+    await this.redis.hset(key, "status", "running", "startedAt", new Date().toISOString());
+  }
+
   async recordCompletion(scanId: string): Promise<void> {
     const key = `${KEY_PREFIX}:${scanId}`;
     await this.redis.hset(key, "status", "completed", "completedAt", new Date().toISOString());

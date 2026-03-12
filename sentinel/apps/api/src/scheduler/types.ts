@@ -1,6 +1,6 @@
 import type { Redis } from "ioredis";
 import type { EventBus } from "@sentinel/events";
-import type { Logger } from "pino";
+import type { Logger } from "@sentinel/telemetry";
 
 export type JobTier = "critical" | "non-critical";
 export type Dependency = "redis" | "postgres";
@@ -17,6 +17,7 @@ export interface JobContext {
 
 export interface ScanLifecycleTracker {
   recordTrigger(scanId: string, jobName: string): Promise<void>;
+  recordRunning(scanId: string): Promise<void>;
   recordCompletion(scanId: string): Promise<void>;
   checkTimeouts(timeoutMs?: number): Promise<string[]>;
   getLifecycle(scanId: string): Promise<Record<string, string> | null>;
@@ -26,7 +27,7 @@ export interface SchedulerJob {
   name: string;
   schedule: string;
   tier: JobTier;
-  dependencies: Dependency[];
+  dependencies: readonly Dependency[];
   execute(ctx: JobContext): Promise<void>;
 }
 
