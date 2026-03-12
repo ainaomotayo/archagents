@@ -147,7 +147,7 @@ class TestSeedDB:
         if not os.path.exists(db_path):
             pytest.skip("Seed DB not yet built")
         db = FingerprintDB(db_path)
-        assert db.count() >= 50  # At minimum 50 real fingerprints
+        assert db.count() >= 5000  # Corpus target: 5K+ unique fingerprints (10K+ pre-dedup)
         # Verify no fake sequential hashes exist
         for i in range(1, 59):
             fake_hash = f"a1b2c3d4e5f6{i:04x}"
