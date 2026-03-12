@@ -13,6 +13,12 @@ from typing import Any
 from sentinel_agents.base import BaseAgent
 from sentinel_agents.types import Confidence, DiffEvent, DiffFile, Finding, Severity
 
+from sentinel_quality.compliance_checks import (
+    check_access_documentation,
+    check_ai_documentation,
+    check_ai_test_coverage,
+    check_data_governance,
+)
 from sentinel_quality.complexity import calculate_complexity
 from sentinel_quality.duplication import detect_duplicates
 from sentinel_quality.naming import analyze_naming_consistency
@@ -95,6 +101,12 @@ class QualityAgent(BaseAgent):
 
         # 4. Naming consistency analysis — per file
         findings.extend(self._analyze_naming(event))
+
+        # 5. NIST/HIPAA compliance checks
+        findings.extend(check_ai_documentation(event.files))
+        findings.extend(check_data_governance(event.files))
+        findings.extend(check_ai_test_coverage(event.files))
+        findings.extend(check_access_documentation(event.files))
 
         return findings
 
