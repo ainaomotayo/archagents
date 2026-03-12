@@ -175,6 +175,21 @@ class TestSeedDB:
             assert count > 0, f"No fingerprints for ecosystem: {eco}"
         db.close()
 
+    def test_seed_db_has_minhash_signatures(self):
+        """Seed DB should have minhash signatures for fuzzy matching."""
+        db_path = os.path.join(
+            os.path.dirname(__file__), "..", "data", "oss_fingerprints.db"
+        )
+        if not os.path.exists(db_path):
+            pytest.skip("Seed DB not yet built")
+        db = FingerprintDB(db_path)
+        # Check minhash_signatures table has entries
+        row = db._conn.execute(
+            "SELECT COUNT(*) as c FROM minhash_signatures"
+        ).fetchone()
+        assert row["c"] > 0, "No minhash signatures in seed DB"
+        db.close()
+
     def test_seed_db_has_valid_records(self):
         """Each record in the seed DB should have required fields populated."""
         db_path = os.path.join(

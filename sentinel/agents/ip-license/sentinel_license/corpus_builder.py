@@ -11,10 +11,12 @@ from dataclasses import dataclass
 from sentinel_license.fingerprint import (
     _AST_LANGUAGES,
     _ast_fingerprint,
+    _tokenize_window,
     hash_fragment,
     normalize_code,
 )
 from sentinel_license.fingerprint_db import FingerprintDB, FingerprintRecord
+from sentinel_license.minhash import compute_minhash
 
 # Extension to language mapping
 _EXT_TO_LANG: dict[str, str] = {
@@ -148,5 +150,45 @@ def build_corpus_for_package(
 
     if records:
         db.bulk_insert(records)
+
+    # Store minhash signatures for fuzzy matching
+    for filepath, code in source_files.items():
+        ext = ""
+        dot_idx = filepath.rfind(".")
+        if dot_idx >= 0:
+            ext = filepath[dot_idx:]
+        language = _EXT_TO_LANG.get(ext, "")
+        if not language:
+            continue
+
+        lines = code.splitlines()
+        window_size = 10
+        stride = 5
+        if len(lines) < window_size:
+            continue
+
+        for idx in range(0, len(lines) - window_size + 1, stride):
+            window = "\n".join(lines[idx : idx + window_size])
+            tokens = _tokenize_window(window, language)
+            if not tokens:
+                continue
+            sig = compute_minhash(tokens)
+            # Compute the fingerprint hash for this window (same logic as fingerprint_source_file)
+            use_ast = language.lower() in _AST_LANGUAGES
+            fp = None
+            if use_ast:
+                try:
+                    fp = _ast_fingerprint(window, language.lower())
+                except Exception:
+                    pass
+            if fp is None:
+                normalized = normalize_code(window)
+                if not normalized:
+                    continue
+                fp = hash_fragment(normalized)
+            # Only store minhash if we have a matching fingerprint record
+            rec = db.lookup(fp)
+            if rec is not None:
+                db.store_minhash(fp, sig, rec)
 
     return len(records)
