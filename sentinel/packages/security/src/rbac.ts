@@ -79,6 +79,16 @@ export const API_PERMISSIONS: EndpointPermission[] = [
   // P10: Encryption Admin
   { method: "POST", path: "/v1/admin/rotate-keys", roles: ["admin"] },
   { method: "POST", path: "/v1/admin/crypto-shred", roles: ["admin"] },
+  // Approval Workflows
+  { method: "POST", path: "/v1/approval-policies", roles: ["admin"] },
+  { method: "GET", path: "/v1/approval-policies", roles: ["admin", "manager"] },
+  { method: "PATCH", path: "/v1/approval-policies/:id", roles: ["admin"] },
+  { method: "DELETE", path: "/v1/approval-policies/:id", roles: ["admin"] },
+  { method: "GET", path: "/v1/approvals", roles: ["admin", "manager"] },
+  { method: "GET", path: "/v1/approvals/stats", roles: ["admin", "manager"] },
+  { method: "GET", path: "/v1/approvals/:id", roles: ["admin", "manager", "developer"] },
+  { method: "POST", path: "/v1/approvals/:id/decide", roles: ["admin", "manager"] },
+  { method: "POST", path: "/v1/approvals/:id/reassign", roles: ["admin"] },
   // Domains
   { method: "GET", path: "/v1/domains", roles: ["admin", "manager"] },
   { method: "POST", path: "/v1/domains", roles: ["admin"] },
