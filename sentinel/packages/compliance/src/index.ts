@@ -28,3 +28,8 @@ export {
   type EvidenceItem,
   type ExecutiveReportData,
 } from "./reports/generator.js";
+
+export { computeGapAnalysis, type GapAnalysis, type GapItem } from "./gap-analysis/service.js";
+export { RemediationService, type CreateRemediationInput, type UpdateRemediationInput } from "./remediation/service.js";
+export { BAARegistryService, type RegisterBAAInput, type UpdateBAAInput } from "./baa/service.js";
+export { AttestationService, type CreateAttestationInput } from "./attestation/service.js";
