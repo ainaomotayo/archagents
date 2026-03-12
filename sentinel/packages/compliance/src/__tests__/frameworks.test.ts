@@ -3,8 +3,8 @@ import { BUILT_IN_FRAMEWORKS } from "../frameworks/index.js";
 import type { ControlDefinition } from "../types.js";
 
 describe("built-in frameworks", () => {
-  it("ships 8 frameworks", () => {
-    expect(BUILT_IN_FRAMEWORKS.length).toBe(8);
+  it("ships 9 frameworks", () => {
+    expect(BUILT_IN_FRAMEWORKS.length).toBe(9);
   });
 
   it("all frameworks have unique slugs", () => {
@@ -57,6 +57,7 @@ describe("built-in frameworks", () => {
     expect(slugs).toContain("cis-ssc");
     expect(slugs).toContain("gdpr");
     expect(slugs).toContain("nist-ai-rmf");
+    expect(slugs).toContain("hipaa");
   });
 });
 

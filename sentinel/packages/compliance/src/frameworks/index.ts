@@ -7,6 +7,7 @@ import { OPENSSF } from "./openssf.js";
 import { CIS_SSC } from "./cis.js";
 import { GDPR } from "./gdpr.js";
 import { NIST_AI_RMF } from "./nist-ai-rmf.js";
+import { HIPAA } from "./hipaa.js";
 
 export const BUILT_IN_FRAMEWORKS: FrameworkDefinition[] = [
   SOC2,
@@ -17,6 +18,7 @@ export const BUILT_IN_FRAMEWORKS: FrameworkDefinition[] = [
   CIS_SSC,
   GDPR,
   NIST_AI_RMF,
+  HIPAA,
 ];
 
 export const FRAMEWORK_MAP = new Map<string, FrameworkDefinition>(
