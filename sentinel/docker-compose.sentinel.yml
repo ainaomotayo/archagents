@@ -248,7 +248,7 @@ services:
       DATABASE_URL: ${DATABASE_URL}
       SENTINEL_SECRET: ${SENTINEL_SECRET}
       APPROVAL_WORKER_PORT: "9095"
-    command: ["node", "dist/approval-worker.js"]
+    command: ["node", "apps/api/dist/approval-worker.js"]
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:9095/health || exit 1"]
       interval: 30s

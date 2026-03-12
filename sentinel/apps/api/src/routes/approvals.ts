@@ -1,5 +1,8 @@
 import { ApprovalFSM } from "@sentinel/assessor";
 
+const VALID_STRATEGIES = ["risk_threshold", "category_block", "license_review", "always_review"];
+const VALID_DECISIONS = ["approve", "reject"];
+
 interface ApprovalRouteDeps {
   db: any;
 }
@@ -10,6 +13,12 @@ export function buildApprovalRoutes(deps: ApprovalRouteDeps) {
   // --- Policies ---
 
   async function createPolicy(orgId: string, body: any) {
+    if (!body.name || typeof body.name !== "string") {
+      throw new Error("Policy name is required");
+    }
+    if (!VALID_STRATEGIES.includes(body.strategyType)) {
+      throw new Error(`Invalid strategy type: ${body.strategyType}. Must be one of: ${VALID_STRATEGIES.join(", ")}`);
+    }
     return db.approvalPolicy.create({
       data: {
         orgId,
@@ -41,9 +50,15 @@ export function buildApprovalRoutes(deps: ApprovalRouteDeps) {
     if (!existing || existing.orgId !== orgId) {
       throw new Error("Policy not found");
     }
+    const { name, enabled, priority, strategyType, config, assigneeRole,
+            slaHours, escalateAfterHours, expiryAction } = body;
+    if (strategyType && !VALID_STRATEGIES.includes(strategyType)) {
+      throw new Error(`Invalid strategy type: ${strategyType}. Must be one of: ${VALID_STRATEGIES.join(", ")}`);
+    }
     return db.approvalPolicy.update({
       where: { id: policyId },
-      data: body,
+      data: { name, enabled, priority, strategyType, config, assigneeRole,
+              slaHours, escalateAfterHours, expiryAction },
     });
   }
 
@@ -99,11 +114,15 @@ export function buildApprovalRoutes(deps: ApprovalRouteDeps) {
       throw new Error(`Cannot decide on gate in state "${gate.status}"`);
     }
 
+    if (!VALID_DECISIONS.includes(input.decision)) {
+      throw new Error(`Invalid decision: ${input.decision}. Must be one of: ${VALID_DECISIONS.join(", ")}`);
+    }
+
     if (!input.justification || input.justification.length < 10) {
       throw new Error("Justification must be at least 10 characters");
     }
 
-    const action = input.decision === "approve" ? "approve" : "reject";
+    const action = input.decision as "approve" | "reject";
     const newStatus = ApprovalFSM.transition(gate.status as any, action);
 
     await db.approvalDecision.create({

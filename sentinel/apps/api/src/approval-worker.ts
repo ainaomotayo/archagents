@@ -12,6 +12,8 @@
 // ---------------------------------------------------------------------------
 
 export async function processEscalations(dbClient: any, bus: any): Promise<number> {
+  const { ApprovalFSM } = await import("@sentinel/assessor");
+
   const gates = await dbClient.approvalGate.findMany({
     where: {
       status: { in: ["pending"] },
@@ -20,10 +22,11 @@ export async function processEscalations(dbClient: any, bus: any): Promise<numbe
   });
 
   for (const gate of gates) {
+    const newStatus = ApprovalFSM.transition(gate.status, "escalate");
     await dbClient.approvalGate.update({
       where: { id: gate.id },
       data: {
-        status: "escalated",
+        status: newStatus,
         assignedRole: "admin",
         priority: 90,
       },
@@ -200,6 +203,9 @@ if (isMainModule) {
     }
 
     async function handleApprovalEvent(fields: string[], db: any, bus: any) {
+      const { Assessor } = await import("@sentinel/assessor");
+      const { createAssessmentStore } = await import("./stores.js");
+
       // Parse the event payload from Redis stream fields
       const data: Record<string, string> = {};
       for (let i = 0; i < fields.length; i += 2) {
@@ -209,20 +215,105 @@ if (isMainModule) {
       const payload = data.payload ? JSON.parse(data.payload) : data;
 
       if (payload.type === "gate.decided" && payload.decision === "approve") {
-        logger.info(
-          { gateId: payload.gateId, scanId: payload.scanId },
-          "Issuing certificate for approved scan",
-        );
+        const { scanId, gateId, orgId } = payload;
+        logger.info({ gateId, scanId }, "Issuing certificate for approved scan");
 
-        // Publish certificate issuance request
-        await bus.publish("sentinel.certificates", {
-          type: "certificate.issue",
-          scanId: payload.scanId,
-          orgId: payload.orgId,
-          gateId: payload.gateId,
-          autoExpired: payload.autoExpired ?? false,
-          timestamp: new Date().toISOString(),
+        const scan = await db.scan.findUnique({
+          where: { id: scanId },
+          include: { findings: true, agentResults: true },
         });
+        if (!scan) {
+          logger.error({ scanId }, "Scan not found for approved gate");
+          return;
+        }
+
+        try {
+          const assessor = new Assessor();
+          const store = createAssessmentStore(db);
+
+          const assessment = assessor.assess({
+            scanId,
+            projectId: scan.projectId,
+            commitHash: scan.commitHash,
+            findingEvents: scan.agentResults.map((ar: any) => ({
+              scanId,
+              agentName: ar.agentName,
+              findings: scan.findings
+                .filter((f: any) => f.agentName === ar.agentName)
+                .map((f: any) => ({
+                  type: f.type,
+                  severity: f.severity,
+                  category: f.category,
+                  file: f.file,
+                  lineStart: f.lineStart,
+                  lineEnd: f.lineEnd,
+                  title: f.title,
+                  description: f.description,
+                })),
+              agentResult: {
+                agentName: ar.agentName,
+                agentVersion: ar.agentVersion,
+                rulesetVersion: ar.rulesetVersion,
+                rulesetHash: ar.rulesetHash,
+                status: ar.status,
+                findingCount: ar.findingCount,
+                durationMs: ar.durationMs,
+              },
+            })),
+            hasTimeouts: false,
+            orgSecret: process.env.SENTINEL_SECRET!,
+          });
+
+          // Save certificate
+          if (assessment.certificate) {
+            await store.saveCertificate({
+              scanId,
+              orgId: scan.orgId,
+              certificateJson: JSON.stringify(assessment.certificate),
+              signature: assessment.certificate.signature ?? "",
+              expiresAt: assessment.certificate.expiresAt ?? "",
+            });
+          }
+
+          // Update certificate with approver info
+          const gate = await db.approvalGate.findUnique({
+            where: { id: gateId },
+            include: { decisions: { orderBy: { decidedAt: "desc" }, take: 1 } },
+          });
+          if (gate?.decisions?.[0] && assessment.certificate) {
+            await db.certificate.updateMany({
+              where: { scanId },
+              data: {
+                approvedBy: gate.decisions[0].decidedBy,
+                approvedAt: gate.decisions[0].decidedAt,
+              },
+            });
+          }
+
+          await bus.publish("sentinel.results", {
+            scanId,
+            status: assessment.status,
+            riskScore: assessment.riskScore,
+            certificateId: assessment.certificate?.id,
+            approvedBy: gate?.decisions?.[0]?.decidedBy,
+          });
+
+          await bus.publish("sentinel.evidence", {
+            orgId: scan.orgId,
+            type: "approval_decision",
+            scanId,
+            eventData: {
+              gateId,
+              decision: "approve",
+              decidedBy: gate?.decisions?.[0]?.decidedBy,
+              justification: gate?.decisions?.[0]?.justification,
+            },
+          });
+
+          logger.info({ scanId, gateId }, "Certificate issued after approval");
+        } catch (err) {
+          logger.error({ scanId, gateId, err }, "Failed to issue certificate after approval");
+        }
       }
     }
 
