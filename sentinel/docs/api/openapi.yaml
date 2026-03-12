@@ -302,6 +302,55 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+    patch:
+      operationId: updateFinding
+      summary: Update a finding
+      description: |
+        Update finding status or suppress a finding. Suppressed findings are
+        excluded from future risk score calculations.
+      tags: [Findings]
+      security:
+        - hmacAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Finding ID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                status:
+                  type: string
+                suppressed:
+                  type: boolean
+                suppressedBy:
+                  type: string
+      responses:
+        "200":
+          description: Updated finding
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Finding"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Finding not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 
   /v1/certificates:
     get:
@@ -803,6 +852,47 @@ paths:
       responses:
         "204":
           description: Policy deleted
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Policy not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /v1/policies/{id}/versions:
+    get:
+      operationId: listPolicyVersions
+      summary: List policy versions
+      description: Retrieve the version history of a policy.
+      tags: [Policies]
+      security:
+        - hmacAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Policy ID
+      responses:
+        "200":
+          description: Policy version history
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  versions:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/PolicyVersion"
         "401":
           description: Unauthorized
           content:
@@ -1465,6 +1555,26 @@ components:
           description: Machine-readable error code
         details:
           description: Additional error context
+
+    PolicyVersion:
+      type: object
+      required: [id, policyId, version, rules, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        policyId:
+          type: string
+          format: uuid
+        version:
+          type: integer
+        rules:
+          type: array
+          items:
+            type: object
+        createdAt:
+          type: string
+          format: date-time
 
   securitySchemes:
     hmacAuth:
