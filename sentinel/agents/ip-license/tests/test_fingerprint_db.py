@@ -134,3 +134,63 @@ class TestFingerprintDB:
             assert rec.spdx_license == "MIT"
         finally:
             os.unlink(json_path)
+
+
+class TestSeedDB:
+    """Tests for the shipped seed fingerprint database."""
+
+    def test_seed_db_has_real_fingerprints(self):
+        """The shipped seed DB should contain real fingerprints, not fake sequential hashes."""
+        db_path = os.path.join(
+            os.path.dirname(__file__), "..", "data", "oss_fingerprints.db"
+        )
+        if not os.path.exists(db_path):
+            pytest.skip("Seed DB not yet built")
+        db = FingerprintDB(db_path)
+        assert db.count() >= 50  # At minimum 50 real fingerprints
+        # Verify no fake sequential hashes exist
+        for i in range(1, 59):
+            fake_hash = f"a1b2c3d4e5f6{i:04x}"
+            assert db.lookup(fake_hash) is None, f"Found fake hash: {fake_hash}"
+        db.close()
+
+    def test_seed_db_covers_all_ecosystems(self):
+        """The seed DB should have fingerprints from all 6 target ecosystems."""
+        db_path = os.path.join(
+            os.path.dirname(__file__), "..", "data", "oss_fingerprints.db"
+        )
+        if not os.path.exists(db_path):
+            pytest.skip("Seed DB not yet built")
+        db = FingerprintDB(db_path)
+        expected_ecosystems = {"npm", "PyPI", "crates.io", "Maven", "RubyGems", "Go"}
+        for eco in expected_ecosystems:
+            import sqlite3
+
+            conn = sqlite3.connect(db_path)
+            cur = conn.execute(
+                "SELECT COUNT(*) FROM fingerprints WHERE ecosystem = ?", (eco,)
+            )
+            count = cur.fetchone()[0]
+            conn.close()
+            assert count > 0, f"No fingerprints for ecosystem: {eco}"
+        db.close()
+
+    def test_seed_db_has_valid_records(self):
+        """Each record in the seed DB should have required fields populated."""
+        db_path = os.path.join(
+            os.path.dirname(__file__), "..", "data", "oss_fingerprints.db"
+        )
+        if not os.path.exists(db_path):
+            pytest.skip("Seed DB not yet built")
+        import sqlite3
+
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        rows = conn.execute("SELECT * FROM fingerprints").fetchall()
+        for row in rows:
+            assert row["hash"], "hash must not be empty"
+            assert len(row["hash"]) == 16, f"hash should be 16 chars: {row['hash']}"
+            assert row["source_url"], "source_url must not be empty"
+            assert row["package_name"], "package_name must not be empty"
+            assert row["ecosystem"], "ecosystem must not be empty"
+        conn.close()
