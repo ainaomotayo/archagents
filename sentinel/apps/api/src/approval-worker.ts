@@ -154,72 +154,18 @@ if (isMainModule) {
     await sweep();
 
     // --- Approval event consumer ---
-    const GROUP = "approval-worker";
-    const CONSUMER = `approval-${process.pid}`;
-    const STREAM = "sentinel.approvals";
+    const { withRetry } = await import("@sentinel/events");
 
-    try {
-      await redis.xgroup("CREATE", STREAM, GROUP, "0", "MKSTREAM");
-    } catch {
-      // Group may already exist
-    }
-
-    async function consumeLoop() {
-      while (!shuttingDown) {
-        try {
-          const results = await redis.xreadgroup(
-            "GROUP",
-            GROUP,
-            CONSUMER,
-            "COUNT",
-            10,
-            "BLOCK",
-            5000,
-            "STREAMS",
-            STREAM,
-            ">",
-          );
-
-          if (!results) continue;
-
-          for (const entry of results as [string, [string, string[]][]][]) {
-            const [, messages] = entry;
-            for (const [msgId, fields] of messages) {
-              try {
-                await handleApprovalEvent(fields, db, bus);
-                await redis.xack(STREAM, GROUP, msgId);
-              } catch (err) {
-                logger.error({ err, msgId }, "Failed to process approval event");
-              }
-            }
-          }
-        } catch (err) {
-          if (!shuttingDown) {
-            logger.error({ err }, "Consumer loop error");
-            await new Promise((r) => setTimeout(r, 1000));
-          }
-        }
-      }
-    }
-
-    async function handleApprovalEvent(fields: string[], db: any, bus: any) {
+    async function handleApprovalEvent(_id: string, payload: Record<string, unknown>) {
       const { Assessor } = await import("@sentinel/assessor");
       const { createAssessmentStore } = await import("./stores.js");
 
-      // Parse the event payload from Redis stream fields
-      const data: Record<string, string> = {};
-      for (let i = 0; i < fields.length; i += 2) {
-        data[fields[i]] = fields[i + 1];
-      }
-
-      const payload = data.payload ? JSON.parse(data.payload) : data;
-
       if (payload.type === "gate.decided" && payload.decision === "approve") {
-        const { scanId, gateId, orgId } = payload;
+        const { scanId, gateId } = payload as { scanId: string; gateId: string };
         logger.info({ gateId, scanId }, "Issuing certificate for approved scan");
 
         const scan = await db.scan.findUnique({
-          where: { id: scanId },
+          where: { id: scanId as string },
           include: { findings: true, agentResults: true },
         });
         if (!scan) {
@@ -232,7 +178,7 @@ if (isMainModule) {
           const store = createAssessmentStore(db);
 
           const assessment = assessor.assess({
-            scanId,
+            scanId: scanId as string,
             projectId: scan.projectId,
             commitHash: scan.commitHash,
             findingEvents: scan.agentResults.map((ar: any) => ({
@@ -240,16 +186,7 @@ if (isMainModule) {
               agentName: ar.agentName,
               findings: scan.findings
                 .filter((f: any) => f.agentName === ar.agentName)
-                .map((f: any) => ({
-                  type: f.type,
-                  severity: f.severity,
-                  category: f.category,
-                  file: f.file,
-                  lineStart: f.lineStart,
-                  lineEnd: f.lineEnd,
-                  title: f.title,
-                  description: f.description,
-                })),
+                .map((f: any) => f as any),
               agentResult: {
                 agentName: ar.agentName,
                 agentVersion: ar.agentVersion,
@@ -267,7 +204,7 @@ if (isMainModule) {
           // Save certificate
           if (assessment.certificate) {
             await store.saveCertificate({
-              scanId,
+              scanId: scanId as string,
               orgId: scan.orgId,
               certificateJson: JSON.stringify(assessment.certificate),
               signature: assessment.certificate.signature ?? "",
@@ -277,12 +214,12 @@ if (isMainModule) {
 
           // Update certificate with approver info
           const gate = await db.approvalGate.findUnique({
-            where: { id: gateId },
+            where: { id: gateId as string },
             include: { decisions: { orderBy: { decidedAt: "desc" }, take: 1 } },
           });
           if (gate?.decisions?.[0] && assessment.certificate) {
             await db.certificate.updateMany({
-              where: { scanId },
+              where: { scanId: scanId as string },
               data: {
                 approvedBy: gate.decisions[0].decidedBy,
                 approvedAt: gate.decisions[0].decidedAt,
@@ -317,11 +254,18 @@ if (isMainModule) {
       }
     }
 
-    // Start consumer
-    consumeLoop().catch((err) => {
-      logger.error({ err }, "Consumer loop crashed");
-      process.exit(1);
+    // Use EventBus.subscribe with withRetry (same pattern as main worker)
+    const wrappedHandler = withRetry(redis, "sentinel.approvals", handleApprovalEvent, {
+      maxRetries: 3,
+      baseDelayMs: 1000,
     });
+
+    bus.subscribe(
+      "sentinel.approvals",
+      "approval-workers",
+      `approval-${process.pid}`,
+      wrappedHandler,
+    );
 
     // --- Graceful shutdown ---
     async function shutdown(signal: string) {
