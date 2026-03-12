@@ -2615,6 +2615,258 @@ paths:
               schema:
                 $ref: "#/components/schemas/ScimError"
 
+  /v1/domains:
+    get:
+      operationId: listDomains
+      summary: List verified and pending domains
+      tags: [Domains]
+      security:
+        - hmacAuth: []
+      responses:
+        "200":
+          description: Domain lists
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  verifiedDomains:
+                    type: array
+                    items:
+                      type: string
+                  pendingDomains:
+                    type: array
+                    items:
+                      type: string
+    post:
+      operationId: addDomain
+      summary: Add a domain for verification
+      tags: [Domains]
+      security:
+        - hmacAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [domain]
+              properties:
+                domain:
+                  type: string
+      responses:
+        "201":
+          description: Domain added with verification instructions
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  domain:
+                    type: string
+                  verificationToken:
+                    type: string
+                    description: "DNS TXT record value (sentinel-verify=...)"
+                  instructions:
+                    type: string
+        "400":
+          description: Invalid domain format
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /v1/domains/{domain}/verify:
+    parameters:
+      - name: domain
+        in: path
+        required: true
+        schema:
+          type: string
+    post:
+      operationId: verifyDomain
+      summary: Verify domain ownership via DNS
+      tags: [Domains]
+      security:
+        - hmacAuth: []
+      responses:
+        "200":
+          description: Domain verified
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  domain:
+                    type: string
+                  verified:
+                    type: boolean
+        "404":
+          description: Domain not in pending list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: DNS verification failed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /v1/domains/{domain}:
+    parameters:
+      - name: domain
+        in: path
+        required: true
+        schema:
+          type: string
+    delete:
+      operationId: removeDomain
+      summary: Remove a domain
+      tags: [Domains]
+      security:
+        - hmacAuth: []
+      responses:
+        "204":
+          description: Domain removed
+        "404":
+          description: Domain not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /v1/admin/rotate-keys:
+    post:
+      operationId: rotateEncryptionKeys
+      summary: Rotate encryption keys
+      description: |
+        Triggers rotation of all organisation encryption keys. Requires admin role.
+      tags: [Admin]
+      security:
+        - hmacAuth: []
+      responses:
+        "200":
+          description: Keys rotated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                  keyCount:
+                    type: integer
+
+  /v1/admin/crypto-shred:
+    post:
+      operationId: cryptoShred
+      summary: Crypto-shred organisation data
+      description: |
+        Permanently destroys all encryption keys for the organisation, rendering
+        all encrypted data irrecoverable. Requires confirmation of the org ID.
+      tags: [Admin]
+      security:
+        - hmacAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [confirmOrgId]
+              properties:
+                confirmOrgId:
+                  type: string
+                  format: uuid
+                  description: Must match the authenticated organisation ID
+      responses:
+        "200":
+          description: Crypto-shred completed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                  orgId:
+                    type: string
+                  keysDestroyed:
+                    type: integer
+        "400":
+          description: Org ID mismatch
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /v1/auth/discovery:
+    get:
+      operationId: discoverAuthProviders
+      summary: Discover authentication providers for an email
+      description: |
+        Returns the available authentication providers for a given email address,
+        based on domain verification and SSO configuration. Public endpoint.
+      tags: [Auth]
+      parameters:
+        - name: email
+          in: query
+          required: true
+          schema:
+            type: string
+            format: email
+            maxLength: 254
+          description: User email address to look up providers for
+      responses:
+        "200":
+          description: Auth providers for the email domain
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  orgId:
+                    type: string
+                  orgName:
+                    type: string
+                  enforced:
+                    type: boolean
+                  providers:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id:
+                          type: string
+                        name:
+                          type: string
+                        enforced:
+                          type: boolean
+        "400":
+          description: Invalid email
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /v1/saml/metadata:
+    get:
+      operationId: getSamlMetadata
+      summary: Get SAML service provider metadata
+      description: |
+        Returns the SAML SP metadata XML document. Public endpoint used by
+        identity providers during SAML configuration.
+      tags: [Auth]
+      responses:
+        "200":
+          description: SAML metadata XML
+          content:
+            application/xml:
+              schema:
+                type: string
+
   /health:
     get:
       operationId: healthCheck
