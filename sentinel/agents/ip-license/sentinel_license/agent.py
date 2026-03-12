@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from typing import Any
 
 from sentinel_agents.base import BaseAgent
 from sentinel_agents.types import Confidence, DiffEvent, Finding, Severity
@@ -75,6 +76,21 @@ class LicenseAgent(BaseAgent):
 
         self.last_evidence_chain = chain
         return findings
+
+    def build_evidence_payload(
+        self, chain: EvidenceChain, org_id: str
+    ) -> dict[str, Any]:
+        """Build a Redis Stream payload for the sentinel.evidence stream."""
+        return {
+            "orgId": org_id,
+            "scanId": chain.scan_id,
+            "type": "provenance_chain",
+            "eventData": {
+                "agentName": self.name,
+                "agentVersion": self.version,
+                "records": chain.to_dicts(),
+            },
+        }
 
     @staticmethod
     def _enrich_with_registry_metadata(findings: list[Finding]) -> None:
