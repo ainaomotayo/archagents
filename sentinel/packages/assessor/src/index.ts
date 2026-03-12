@@ -3,3 +3,5 @@ export type { AssessInput, AssessorConfig, PersistenceStore } from "./assessor.j
 export { calculateRiskScore, determineStatus } from "./risk-scorer.js";
 export type { RiskInput, RiskOutput } from "./risk-scorer.js";
 export { generateCertificate, verifyCertificate } from "./certificate.js";
+export { correlateFindings, extractPackageName } from "./correlator.js";
+export type { CorrelationRule } from "./correlator.js";
