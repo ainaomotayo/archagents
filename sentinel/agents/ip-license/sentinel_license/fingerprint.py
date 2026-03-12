@@ -7,7 +7,6 @@ with text-based normalization fallback. Includes binary format detection.
 from __future__ import annotations
 
 import hashlib
-import json
 import os
 import re
 from dataclasses import dataclass
@@ -23,21 +22,9 @@ _AST_LANGUAGES = {
 }
 
 
-def _load_oss_fingerprints() -> dict[str, tuple[str, str]]:
-    """Load OSS fingerprint database from seed JSON file."""
-    data_path = os.path.join(
-        os.path.dirname(__file__), "..", "data", "oss_fingerprints.json"
-    )
-    try:
-        with open(data_path) as f:
-            raw = json.load(f)
-        return {k: tuple(v) for k, v in raw.get("fingerprints", {}).items()}
-    except (FileNotFoundError, json.JSONDecodeError):
-        return {}
-
-
-# Maps normalized code hash -> (source_url, license)
-KNOWN_OSS_HASHES: dict[str, tuple[str, str]] = _load_oss_fingerprints()
+# Legacy dict kept for backward compatibility with tests that inject hashes.
+# Primary lookup is via _fingerprint_db (SQLite).
+KNOWN_OSS_HASHES: dict[str, tuple[str, str]] = {}
 
 
 def _init_fingerprint_db() -> FingerprintDB:
