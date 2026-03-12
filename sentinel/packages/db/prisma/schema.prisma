@@ -30,6 +30,7 @@ model Organization {
   controlAttestations        ControlAttestation[]
   remediationItems           RemediationItem[]
   businessAssociateAgreements BusinessAssociateAgreement[]
+  vcsInstallations            VcsInstallation[]
 
   @@map("organizations")
 }
@@ -647,4 +648,69 @@ model BusinessAssociateAgreement {
 
   @@index([orgId, status])
   @@map("business_associate_agreements")
+}
+
+// --- VCS Installation (Multi-Provider) ---
+
+model VcsInstallation {
+  id             String   @id @default(uuid()) @db.Uuid
+  orgId          String   @map("org_id") @db.Uuid
+  provider       String                            // "github" | "gitlab" | "bitbucket" | "azure_devops"
+  installationId String   @map("installation_id")  // provider-specific ID (string for all)
+  owner          String                            // org/group/workspace
+  repo           String?                           // null = org-level installation
+  displayName    String?  @map("display_name")
+  webhookSecret  String?  @map("webhook_secret")
+  active         Boolean  @default(true)
+  permissions    Json     @default("{}")
+  metadata       Json     @default("{}")           // provider-specific config
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  organization Organization @relation(fields: [orgId], references: [id])
+
+  @@unique([provider, installationId])
+  @@index([orgId, provider])
+  @@index([provider, owner])
+  @@map("vcs_installations")
+}
+
+model VcsInstallationGitHub {
+  id                String @id @default(uuid()) @db.Uuid
+  vcsInstallationId String @unique @map("vcs_installation_id") @db.Uuid
+  appId             String @map("app_id")
+  numericInstallId  Int    @map("numeric_install_id")
+  privateKey        String @map("private_key")
+
+  @@map("vcs_installation_github")
+}
+
+model VcsInstallationGitLab {
+  id                String @id @default(uuid()) @db.Uuid
+  vcsInstallationId String @unique @map("vcs_installation_id") @db.Uuid
+  gitlabUrl         String @map("gitlab_url")
+  accessToken       String @map("access_token")
+  tokenType         String @map("token_type")
+
+  @@map("vcs_installation_gitlab")
+}
+
+model VcsInstallationBitbucket {
+  id                String @id @default(uuid()) @db.Uuid
+  vcsInstallationId String @unique @map("vcs_installation_id") @db.Uuid
+  workspace         String
+  clientKey         String @map("client_key")
+  sharedSecret      String @map("shared_secret")
+
+  @@map("vcs_installation_bitbucket")
+}
+
+model VcsInstallationAzureDevOps {
+  id                String @id @default(uuid()) @db.Uuid
+  vcsInstallationId String @unique @map("vcs_installation_id") @db.Uuid
+  organizationUrl   String @map("organization_url")
+  projectName       String @map("project_name")
+  pat               String
+
+  @@map("vcs_installation_azure_devops")
 }
