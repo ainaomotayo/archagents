@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@gitbeaker/rest": "^40.5.0",
+    "@sentinel/github": "workspace:*",
     "@sentinel/shared": "workspace:*"
   },
   "devDependencies": {
