@@ -224,6 +224,82 @@ app.get("/v1/scans/:id/poll", { preHandler: authHook }, async (request, reply) =
   });
 });
 
+// --- SBOM Export ---
+app.get("/v1/scans/:id/sbom", { preHandler: authHook }, async (request, reply) => {
+  const orgId = (request as any).orgId ?? "default";
+  const { id } = request.params as { id: string };
+  return withTenant(db, orgId, async (tx) => {
+    const scan = await tx.scan.findUnique({
+      where: { id },
+      include: { findings: true, project: true },
+    });
+    if (!scan) {
+      reply.code(404).send({ error: "Scan not found" });
+      return;
+    }
+    if (scan.status !== "completed") {
+      reply.code(409).send({ error: "Scan not yet completed" });
+      return;
+    }
+
+    // Build CycloneDX 1.5 SBOM from persisted findings
+    const components = (scan.findings as any[])
+      .filter((f: any) => f.category === "copyleft-risk" || f.type === "license")
+      .map((f: any) => {
+        const extra = (f.metadata ?? f) as Record<string, unknown>;
+        return {
+          type: "library",
+          name: extra.sourceMatch ? String(extra.sourceMatch).split("/").pop() : f.title,
+          version: extra.packageVersion ?? extra.registryVersion ?? "unknown",
+          licenses: extra.licenseDetected
+            ? [{ license: { id: String(extra.licenseDetected) } }]
+            : [],
+          purl: extra.ecosystem && extra.sourceMatch
+            ? `pkg:${String(extra.ecosystem).toLowerCase()}/${String(extra.sourceMatch).split("/").pop()}`
+            : undefined,
+        };
+      });
+
+    // Deduplicate by name+version
+    const seen = new Set<string>();
+    const deduped = components.filter((c: any) => {
+      const key = `${c.name}@${c.version}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+
+    // Fetch evidence chain for this scan
+    const evidenceRecords = await tx.evidenceRecord.findMany({
+      where: { scanId: id },
+      orderBy: { createdAt: "asc" },
+    });
+
+    const sbom = {
+      bomFormat: "CycloneDX",
+      specVersion: "1.5",
+      version: 1,
+      metadata: {
+        timestamp: new Date().toISOString(),
+        component: {
+          type: "application",
+          name: (scan.project as any)?.name ?? "unknown",
+          version: scan.commitHash ?? "unknown",
+        },
+        properties: [
+          { name: "sentinel:scanId", value: id },
+          { name: "sentinel:commitHash", value: scan.commitHash ?? "" },
+          { name: "sentinel:evidenceChainLength", value: String(evidenceRecords.length) },
+        ],
+      },
+      components: deduped,
+    };
+
+    reply.header("Content-Type", "application/vnd.cyclonedx+json");
+    return sbom;
+  });
+});
+
 // --- Findings ---
 app.get("/v1/findings", { preHandler: authHook }, async (request) => {
   const orgId = (request as any).orgId ?? "default";

@@ -6,7 +6,7 @@ import logging
 from typing import Any
 
 from sentinel_agents.base import BaseAgent
-from sentinel_agents.types import Confidence, DiffEvent, Finding, Severity
+from sentinel_agents.types import Confidence, DiffEvent, Finding, FindingEvent, Severity
 
 from sentinel_license.evidence import EvidenceChain, ProvenanceEvent
 from sentinel_license.fingerprint import fingerprint_code
@@ -80,6 +80,30 @@ class LicenseAgent(BaseAgent):
         self._last_findings = findings
         self.last_evidence_chain = chain
         return findings
+
+    def run_scan(self, event: DiffEvent) -> FindingEvent:
+        """Override to attach evidence chain and SBOM to the FindingEvent.
+
+        The base runner publishes FindingEvent to sentinel.findings.  By
+        attaching provenance data here, it flows through the existing pipeline
+        to the worker, which can extract and forward it to sentinel.evidence.
+        """
+        result = super().run_scan(event)
+
+        if self.last_evidence_chain and self.last_evidence_chain.records:
+            result.extra["evidenceChain"] = {
+                "agentName": self.name,
+                "agentVersion": self.version,
+                "records": self.last_evidence_chain.to_dicts(),
+            }
+
+        if result.status == "completed" and self._last_findings:
+            try:
+                result.extra["sbom"] = self.generate_sbom()
+            except Exception:
+                logger.debug("SBOM generation failed", exc_info=True)
+
+        return result
 
     def build_evidence_payload(
         self, chain: EvidenceChain, org_id: str

@@ -221,3 +221,28 @@ def test_agent_generates_sbom():
     assert sbom["specVersion"] == "1.5"
     assert sbom["metadata"]["component"]["name"] == "test-project"
     assert sbom["metadata"]["component"]["version"] == "abc"  # commit_hash from _make_event
+
+
+def test_run_scan_attaches_evidence_chain_to_extra():
+    """run_scan() should attach evidence chain to FindingEvent.extra for pipeline transport."""
+    agent = LicenseAgent()
+    event = _make_event("+# Licensed under GNU General Public License\n")
+    result = agent.run_scan(event)
+    assert result.status == "completed"
+    assert "evidenceChain" in result.extra
+    chain_data = result.extra["evidenceChain"]
+    assert chain_data["agentName"] == "ip-license"
+    assert chain_data["agentVersion"] == "0.3.0"
+    assert len(chain_data["records"]) > 0
+
+
+def test_run_scan_attaches_sbom_to_extra():
+    """run_scan() should attach CycloneDX SBOM to FindingEvent.extra."""
+    agent = LicenseAgent()
+    event = _make_event("+# Licensed under GNU General Public License\n")
+    result = agent.run_scan(event)
+    assert result.status == "completed"
+    assert "sbom" in result.extra
+    sbom = result.extra["sbom"]
+    assert sbom["bomFormat"] == "CycloneDX"
+    assert sbom["specVersion"] == "1.5"
