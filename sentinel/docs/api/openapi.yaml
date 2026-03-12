@@ -1578,6 +1578,351 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /v1/webhooks:
+    post:
+      operationId: createWebhook
+      summary: Create a webhook endpoint
+      description: |
+        Register a new webhook endpoint to receive event notifications.
+      tags: [Webhooks]
+      security:
+        - hmacAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WebhookInput"
+      responses:
+        "201":
+          description: Webhook created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WebhookEndpoint"
+        "400":
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    get:
+      operationId: listWebhooks
+      summary: List webhook endpoints
+      description: |
+        List all registered webhook endpoints for the organisation.
+      tags: [Webhooks]
+      security:
+        - hmacAuth: []
+      responses:
+        "200":
+          description: List of webhook endpoints
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  endpoints:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/WebhookEndpoint"
+                  total:
+                    type: integer
+
+  /v1/webhooks/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      operationId: getWebhook
+      summary: Get a webhook endpoint
+      tags: [Webhooks]
+      security:
+        - hmacAuth: []
+      responses:
+        "200":
+          description: Webhook endpoint details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WebhookEndpoint"
+        "404":
+          description: Webhook not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    put:
+      operationId: updateWebhook
+      summary: Update a webhook endpoint
+      tags: [Webhooks]
+      security:
+        - hmacAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WebhookInput"
+      responses:
+        "200":
+          description: Webhook updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WebhookEndpoint"
+        "404":
+          description: Webhook not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      operationId: deleteWebhook
+      summary: Delete a webhook endpoint
+      tags: [Webhooks]
+      security:
+        - hmacAuth: []
+      responses:
+        "204":
+          description: Webhook deleted
+        "404":
+          description: Webhook not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /v1/webhooks/{id}/deliveries:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      operationId: listWebhookDeliveries
+      summary: List webhook deliveries
+      description: |
+        List delivery attempts for a specific webhook endpoint.
+      tags: [Webhooks]
+      security:
+        - hmacAuth: []
+      responses:
+        "200":
+          description: List of deliveries
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  deliveries:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/WebhookDelivery"
+                  total:
+                    type: integer
+        "404":
+          description: Webhook not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /v1/webhooks/{id}/test:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      operationId: testWebhook
+      summary: Send a test event to a webhook
+      description: |
+        Sends a test event to the specified webhook endpoint and returns the result.
+      tags: [Webhooks]
+      security:
+        - hmacAuth: []
+      responses:
+        "200":
+          description: Test delivery result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  statusCode:
+                    type: integer
+                  message:
+                    type: string
+                  event:
+                    type: object
+        "404":
+          description: Webhook not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /v1/notifications/rules:
+    post:
+      operationId: createNotificationRule
+      summary: Create a notification rule
+      description: |
+        Create a rule that triggers notifications when matching events occur.
+      tags: [Notifications]
+      security:
+        - hmacAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NotificationRuleInput"
+      responses:
+        "201":
+          description: Notification rule created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NotificationRule"
+        "400":
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    get:
+      operationId: listNotificationRules
+      summary: List notification rules
+      tags: [Notifications]
+      security:
+        - hmacAuth: []
+      responses:
+        "200":
+          description: List of notification rules
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  rules:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/NotificationRule"
+                  total:
+                    type: integer
+
+  /v1/notifications/rules/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    delete:
+      operationId: deleteNotificationRule
+      summary: Delete a notification rule
+      tags: [Notifications]
+      security:
+        - hmacAuth: []
+      responses:
+        "204":
+          description: Notification rule deleted
+        "404":
+          description: Notification rule not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /v1/events/stream:
+    get:
+      operationId: subscribeEvents
+      summary: Subscribe to server-sent events
+      description: |
+        Opens a server-sent events (SSE) stream for real-time event notifications.
+      tags: [Events]
+      security:
+        - hmacAuth: []
+      parameters:
+        - name: topics
+          in: query
+          schema:
+            type: string
+            default: "scan.*,finding.*"
+          description: Comma-separated list of topic patterns to subscribe to
+      responses:
+        "200":
+          description: SSE event stream
+          content:
+            text/event-stream:
+              schema:
+                type: string
+
+  /webhooks/github:
+    post:
+      operationId: handleGithubWebhook
+      summary: Handle inbound GitHub webhook
+      description: |
+        Receives webhook events from GitHub. Authenticates using GitHub's
+        HMAC-SHA256 signature verification (x-hub-signature-256 header).
+        This endpoint does not use SENTINEL's standard HMAC auth.
+      tags: [GitHub]
+      parameters:
+        - name: x-hub-signature-256
+          in: header
+          required: true
+          schema:
+            type: string
+          description: HMAC-SHA256 signature of the payload
+        - name: x-github-event
+          in: header
+          required: true
+          schema:
+            type: string
+          description: The GitHub event type (e.g. push, pull_request)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        "202":
+          description: Webhook accepted for processing
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+        "200":
+          description: Event ignored (not actionable)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+        "401":
+          description: Invalid signature
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /health:
     get:
       operationId: healthCheck
@@ -2278,6 +2623,116 @@ components:
           type: array
           items:
             type: object
+        createdAt:
+          type: string
+          format: date-time
+
+    WebhookInput:
+      type: object
+      required: [name, url, channelType, topics]
+      properties:
+        name:
+          type: string
+        url:
+          type: string
+          format: uri
+        channelType:
+          type: string
+        topics:
+          type: array
+          items:
+            type: string
+        headers:
+          type: object
+          additionalProperties:
+            type: string
+
+    WebhookEndpoint:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        url:
+          type: string
+          format: uri
+        channelType:
+          type: string
+        topics:
+          type: array
+          items:
+            type: string
+        secret:
+          type: string
+          description: Shared secret for HMAC verification; shown only on creation
+        headers:
+          type: object
+          additionalProperties:
+            type: string
+        createdAt:
+          type: string
+          format: date-time
+
+    WebhookDelivery:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        endpointId:
+          type: string
+          format: uuid
+        topic:
+          type: string
+        statusCode:
+          type: integer
+        success:
+          type: boolean
+        attemptCount:
+          type: integer
+        deliveredAt:
+          type: string
+          format: date-time
+
+    NotificationRuleInput:
+      type: object
+      required: [name, topics, channelType, channelConfig]
+      properties:
+        name:
+          type: string
+        topics:
+          type: array
+          items:
+            type: string
+        condition:
+          type: object
+        channelType:
+          type: string
+          enum: [email, slack, http]
+        channelConfig:
+          type: object
+
+    NotificationRule:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        topics:
+          type: array
+          items:
+            type: string
+        condition:
+          type: object
+        channelType:
+          type: string
+          enum: [email, slack, http]
+        channelConfig:
+          type: object
         createdAt:
           type: string
           format: date-time
