@@ -3,6 +3,7 @@ import { ScanLifecycleTracker } from "../lifecycle-tracker.js";
 
 function createMockRedis() {
   const hashes = new Map<string, Map<string, string>>();
+  const sets = new Map<string, Set<string>>();
   return {
     hset: vi.fn(async (key: string, ...args: string[]) => {
       if (!hashes.has(key)) hashes.set(key, new Map());
@@ -19,8 +20,21 @@ function createMockRedis() {
     }),
     expire: vi.fn(async () => 1),
     del: vi.fn(async (key: string) => { hashes.delete(key); return 1; }),
-    keys: vi.fn(async () => {
-      return Array.from(hashes.keys()).filter(k => k.startsWith("sentinel.scan.lifecycle:"));
+    sadd: vi.fn(async (key: string, ...members: string[]) => {
+      if (!sets.has(key)) sets.set(key, new Set());
+      const s = sets.get(key)!;
+      for (const m of members) s.add(m);
+      return members.length;
+    }),
+    srem: vi.fn(async (key: string, ...members: string[]) => {
+      const s = sets.get(key);
+      if (!s) return 0;
+      for (const m of members) s.delete(m);
+      return members.length;
+    }),
+    smembers: vi.fn(async (key: string) => {
+      const s = sets.get(key);
+      return s ? Array.from(s) : [];
     }),
   };
 }
@@ -52,7 +66,7 @@ describe("ScanLifecycleTracker", () => {
 
   test("checkTimeouts returns scans pending longer than threshold", async () => {
     const oldTime = new Date(Date.now() - 600_000).toISOString();
-    redis.keys.mockResolvedValueOnce(["sentinel.scan.lifecycle:scan-old"]);
+    redis.smembers.mockResolvedValueOnce(["scan-old"]);
     redis.hgetall.mockResolvedValueOnce({
       status: "pending",
       triggeredAt: oldTime,
@@ -63,7 +77,7 @@ describe("ScanLifecycleTracker", () => {
   });
 
   test("checkTimeouts ignores completed scans", async () => {
-    redis.keys.mockResolvedValueOnce(["sentinel.scan.lifecycle:scan-done"]);
+    redis.smembers.mockResolvedValueOnce(["scan-done"]);
     redis.hgetall.mockResolvedValueOnce({
       status: "completed",
       triggeredAt: new Date(Date.now() - 600_000).toISOString(),

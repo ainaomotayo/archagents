@@ -5,7 +5,7 @@ import { createLogger } from "@sentinel/telemetry";
 
 const logger = createLogger({ name: "scheduler-audit" });
 const STREAM_KEY = "sentinel.scheduler.audit";
-const STREAM_TTL = 86400;
+const STREAM_MAXLEN = 10000;
 
 export class DualAuditLayer implements AuditLayer {
   constructor(
@@ -15,8 +15,7 @@ export class DualAuditLayer implements AuditLayer {
 
   async log(entry: SchedulerAuditEntry): Promise<void> {
     try {
-      await this.redis.xadd(STREAM_KEY, "*", "data", JSON.stringify(entry));
-      await this.redis.expire(STREAM_KEY, STREAM_TTL);
+      await this.redis.xadd(STREAM_KEY, "MAXLEN", "~", String(STREAM_MAXLEN), "*", "data", JSON.stringify(entry));
     } catch (err) {
       logger.warn({ err, entry }, "Failed to write scheduler audit to Redis");
     }

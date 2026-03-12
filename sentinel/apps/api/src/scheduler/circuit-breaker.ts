@@ -26,6 +26,8 @@ export class CircuitBreakerManager {
     }
 
     if (circuit.state === "open") {
+      // Tier-sensitive: critical tier (threshold=5) can still execute even
+      // when the circuit was opened by non-critical tier (threshold=3)
       if (circuit.failures < failureThreshold) {
         return true;
       }
@@ -37,6 +39,7 @@ export class CircuitBreakerManager {
       return false;
     }
 
+    // half-open: allow one probe
     return true;
   }
 

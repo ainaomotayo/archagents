@@ -14,6 +14,7 @@ function createMockContext(): JobContext {
       complianceAssessment: { create: vi.fn() },
       evidenceRecord: { findMany: vi.fn(async () => []) },
       $executeRawUnsafe: vi.fn(async () => {}),
+      $executeRaw: vi.fn(async () => {}),
     } as any,
     redis: {} as any,
     metrics: { recordTrigger: vi.fn(), recordError: vi.fn() } as any,
@@ -51,9 +52,7 @@ describe("TrendsRefreshJob", () => {
     const job = new TrendsRefreshJob();
     const ctx = createMockContext();
     await job.execute(ctx);
-    expect(ctx.db.$executeRawUnsafe).toHaveBeenCalledWith(
-      "REFRESH MATERIALIZED VIEW CONCURRENTLY compliance_trends",
-    );
+    expect(ctx.db.$executeRaw).toHaveBeenCalled();
   });
 });
 

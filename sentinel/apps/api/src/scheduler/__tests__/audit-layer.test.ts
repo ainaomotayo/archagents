@@ -7,7 +7,10 @@ function createMockRedis() {
   return {
     xadd: vi.fn(async (..._args: unknown[]) => {
       const id = `${Date.now()}-0`;
-      streams.push({ id, data: String(_args[3]) });
+      // MAXLEN xadd: (key, "MAXLEN", "~", maxlen, "*", "data", json)
+      const dataIdx = _args.indexOf("data");
+      const data = dataIdx >= 0 && dataIdx + 1 < _args.length ? String(_args[dataIdx + 1]) : "";
+      streams.push({ id, data });
       return id;
     }),
     xrevrange: vi.fn(async () => {
@@ -16,7 +19,6 @@ function createMockRedis() {
         ["data", s.data],
       ]);
     }),
-    expire: vi.fn(async () => 1),
   };
 }
 

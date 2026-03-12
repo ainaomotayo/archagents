@@ -8,9 +8,7 @@ export class TrendsRefreshJob implements SchedulerJob {
 
   async execute(ctx: JobContext): Promise<void> {
     try {
-      await ctx.db.$executeRawUnsafe(
-        "REFRESH MATERIALIZED VIEW CONCURRENTLY compliance_trends",
-      );
+      await ctx.db.$executeRaw`REFRESH MATERIALIZED VIEW CONCURRENTLY compliance_trends`;
       ctx.logger.info("Compliance trends materialized view refreshed");
     } catch (err) {
       ctx.logger.warn(

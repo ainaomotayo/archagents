@@ -13,13 +13,14 @@ function createMockRedis() {
   return {
     xadd: vi.fn(async (..._args: unknown[]) => {
       const id = `${Date.now()}-0`;
-      streams.push({ id, data: String(_args[3]) });
+      const dataIdx = _args.indexOf("data");
+      const data = dataIdx >= 0 && dataIdx + 1 < _args.length ? String(_args[dataIdx + 1]) : "";
+      streams.push({ id, data });
       return id;
     }),
     xrevrange: vi.fn(async () => {
       return streams.map((s) => [s.id, ["data", s.data]]);
     }),
-    expire: vi.fn(async () => 1),
     _streams: streams,
   };
 }

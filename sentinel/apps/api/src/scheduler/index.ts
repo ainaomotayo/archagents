@@ -279,14 +279,18 @@ export async function startScheduler(): Promise<void> {
   // Leader heartbeat at ttl/3
   const heartbeatInterval = Math.floor(leaseTtl / 3);
   const heartbeatTimer = setInterval(async () => {
-    if (lease.isLeader()) {
-      const renewed = await lease.renew();
-      if (!renewed) logger.warn("Leader lease renewal failed, lost leadership");
-    } else {
-      const acquired = await lease.acquire();
-      if (acquired) logger.info({ instanceId }, "Acquired leader lease");
+    try {
+      if (lease.isLeader()) {
+        const renewed = await lease.renew();
+        if (!renewed) logger.warn("Leader lease renewal failed, lost leadership");
+      } else {
+        const acquired = await lease.acquire();
+        if (acquired) logger.info({ instanceId }, "Acquired leader lease");
+      }
+      metrics.isLeader = lease.isLeader() ? 1 : 0;
+    } catch (err) {
+      logger.error({ err }, "Leader heartbeat failed");
     }
-    metrics.isLeader = lease.isLeader() ? 1 : 0;
   }, heartbeatInterval);
 
   const acquired = await lease.acquire();
@@ -296,8 +300,12 @@ export async function startScheduler(): Promise<void> {
   await orgManager.loadOverrides();
   metrics.orgOverridesActive = Object.keys(orgManager.getActiveOverrides()).length;
   const overrideTimer = setInterval(async () => {
-    await orgManager.loadOverrides();
-    metrics.orgOverridesActive = Object.keys(orgManager.getActiveOverrides()).length;
+    try {
+      await orgManager.loadOverrides();
+      metrics.orgOverridesActive = Object.keys(orgManager.getActiveOverrides()).length;
+    } catch (err) {
+      logger.error({ err }, "Org schedule override poll failed");
+    }
   }, 300_000);
 
   // Graceful shutdown
