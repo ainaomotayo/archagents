@@ -22,9 +22,11 @@ model Organization {
   policies       Policy[]
   ssoConfigs     SsoConfig[]
   memberships    OrgMembership[]
-  encryptionKeys EncryptionKey[]
-  apiKeys        ApiKey[]
-  scimSyncState  ScimSyncState?
+  encryptionKeys   EncryptionKey[]
+  apiKeys          ApiKey[]
+  scimSyncState    ScimSyncState?
+  approvalPolicies ApprovalPolicy[]
+  approvalGates    ApprovalGate[]
 
   @@map("organizations")
 }
@@ -61,12 +63,14 @@ model Scan {
   triggerType String?   @map("trigger_type")
   triggerMeta Json      @default("{}") @map("trigger_meta")
   startedAt   DateTime  @default(now()) @map("started_at")
-  completedAt DateTime? @map("completed_at")
+  completedAt    DateTime? @map("completed_at")
+  approvalStatus String?       @map("approval_status")
 
-  project      Project       @relation(fields: [projectId], references: [id])
+  project        Project       @relation(fields: [projectId], references: [id])
   findings     Finding[]
-  agentResults AgentResult[]
-  certificate  Certificate?
+  agentResults  AgentResult[]
+  certificate   Certificate?
+  approvalGates ApprovalGate[]
 
   @@index([projectId, startedAt(sort: Desc)])
   @@index([commitHash])
@@ -117,6 +121,8 @@ model Certificate {
   expiresAt        DateTime  @map("expires_at")
   revokedAt        DateTime? @map("revoked_at")
   revocationReason String?   @map("revocation_reason")
+  approvedBy       String?   @map("approved_by")
+  approvedAt       DateTime? @map("approved_at")
 
   scan Scan @relation(fields: [scanId], references: [id])
 
@@ -421,6 +427,73 @@ model Report {
 
   @@index([orgId])
   @@map("reports")
+}
+
+// --- Human Escalation & Approval Workflows ---
+
+model ApprovalPolicy {
+  id                 String   @id @default(uuid()) @db.Uuid
+  orgId              String   @map("org_id") @db.Uuid
+  projectId          String?  @map("project_id") @db.Uuid
+  name               String
+  enabled            Boolean  @default(true)
+  priority           Int      @default(0)
+  strategyType       String   @map("strategy_type")
+  config             Json
+  assigneeRole       String   @default("manager") @map("assignee_role")
+  slaHours           Int      @default(24) @map("sla_hours")
+  escalateAfterHours Int      @default(48) @map("escalate_after_hours")
+  expiryAction       String   @default("reject") @map("expiry_action")
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
+
+  organization Organization @relation(fields: [orgId], references: [id])
+
+  @@index([orgId, enabled])
+  @@map("approval_policies")
+}
+
+model ApprovalGate {
+  id              String    @id @default(uuid()) @db.Uuid
+  orgId           String    @map("org_id") @db.Uuid
+  scanId          String    @map("scan_id") @db.Uuid
+  projectId       String    @map("project_id") @db.Uuid
+  policyId        String?   @map("policy_id") @db.Uuid
+  status          String    @default("pending")
+  gateType        String    @map("gate_type")
+  triggerCriteria Json      @map("trigger_criteria")
+  priority        Int       @default(50)
+  assignedRole    String?   @map("assigned_role")
+  assignedTo      String?   @map("assigned_to")
+  requestedAt     DateTime  @default(now()) @map("requested_at")
+  requestedBy     String    @map("requested_by")
+  expiresAt       DateTime  @map("expires_at")
+  escalatesAt     DateTime? @map("escalates_at")
+  expiryAction    String    @default("reject") @map("expiry_action")
+  decidedAt       DateTime? @map("decided_at")
+
+  scan         Scan               @relation(fields: [scanId], references: [id])
+  organization Organization       @relation(fields: [orgId], references: [id])
+  decisions    ApprovalDecision[]
+
+  @@index([orgId, status])
+  @@index([scanId], map: "idx_approval_gate_scan")
+  @@index([orgId, status, priority], map: "idx_approval_queue")
+  @@map("approval_gates")
+}
+
+model ApprovalDecision {
+  id            String   @id @default(uuid()) @db.Uuid
+  gateId        String   @map("gate_id") @db.Uuid
+  decidedBy     String   @map("decided_by")
+  decision      String
+  justification String
+  decidedAt     DateTime @default(now()) @map("decided_at")
+
+  gate ApprovalGate @relation(fields: [gateId], references: [id])
+
+  @@index([gateId])
+  @@map("approval_decisions")
 }
 
 // --- P7: Webhooks & Notifications ---
