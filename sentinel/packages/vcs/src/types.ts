@@ -13,19 +13,19 @@ export type VcsTriggerType =
   | "tag_push";
 
 export interface VcsCapabilities {
-  checkRuns: boolean;
-  commitStatus: boolean;
-  prComments: boolean;
-  prAnnotations: boolean;
+  checkRuns: boolean;              // GitHub only
+  commitStatus: boolean;           // All providers
+  prComments: boolean;             // All providers
+  prAnnotations: boolean;          // GitHub (via Check Run annotations)
   webhookSignatureVerification: boolean;
-  appInstallations: boolean;
+  appInstallations: boolean;       // GitHub Apps, GitLab Group Access Tokens
 }
 
 export interface VcsScanTrigger {
   provider: VcsProviderType;
   type: VcsTriggerType;
-  installationId: string;
-  repo: string;
+  installationId: string;          // string to support all providers
+  repo: string;                    // "owner/repo" or "group/subgroup/project"
   owner: string;
   commitHash: string;
   branch: string;
@@ -69,17 +69,28 @@ export interface VcsStatusReport {
   detailsUrl?: string;
 }
 
+/** Core provider interface — every VCS integration implements this. */
 export interface VcsProvider {
   readonly name: string;
   readonly type: VcsProviderType;
   readonly capabilities: VcsCapabilities;
+
+  /** Verify incoming webhook signature/token */
   verifyWebhook(event: VcsWebhookEvent, secret: string): Promise<boolean>;
+
+  /** Parse raw webhook into a VcsScanTrigger (or null if irrelevant) */
   parseWebhook(event: VcsWebhookEvent): Promise<VcsScanTrigger | null>;
+
+  /** Fetch unified diff for a trigger */
   fetchDiff(trigger: VcsScanTrigger): Promise<VcsDiffResult>;
+
+  /** Report scan results back to the VCS (status, comments, annotations) */
   reportStatus(
     trigger: VcsScanTrigger,
     report: VcsStatusReport,
   ): Promise<void>;
+
+  /** Get an authenticated token/client for API calls */
   getInstallationToken(installationId: string): Promise<string>;
 }
 
