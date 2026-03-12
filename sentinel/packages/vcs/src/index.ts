@@ -11,3 +11,5 @@ export type {
   VcsProviderFactory,
   VcsProviderConfig,
 } from "./types.js";
+
+export { VcsProviderBase } from "./base.js";
