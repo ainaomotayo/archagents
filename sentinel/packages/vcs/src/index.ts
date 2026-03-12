@@ -13,6 +13,7 @@ export type {
 } from "./types.js";
 
 export { VcsProviderBase } from "./base.js";
+export { VcsProviderRegistry } from "./registry.js";
 export { GitLabProvider } from "./providers/gitlab.js";
 export { BitbucketProvider } from "./providers/bitbucket.js";
 export { AzureDevOpsProvider } from "./providers/azure-devops.js";
