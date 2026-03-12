@@ -182,11 +182,16 @@ services:
     depends_on:
       redis:
         condition: service_healthy
+      postgres:
+        condition: service_healthy
     networks:
       - sentinel-internal
     environment:
+      DATABASE_URL: ${DATABASE_URL}
       REDIS_URL: ${REDIS_URL}
       SELF_SCAN_ENABLED: ${SELF_SCAN_ENABLED:-true}
+      SCHEDULER_LEASE_TTL: ${SCHEDULER_LEASE_TTL:-15000}
+      SCAN_TIMEOUT_MS: ${SCAN_TIMEOUT_MS:-300000}
       SCHEDULER_PORT: "9091"
       NODE_ENV: production
     command: ["node", "apps/api/dist/scheduler.js"]
