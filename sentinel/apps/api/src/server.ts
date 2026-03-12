@@ -684,9 +684,14 @@ app.get("/v1/audit", { preHandler: authHook }, async (request) => {
 });
 
 // --- Approval Policies ---
-app.post("/v1/approval-policies", { preHandler: authHook }, async (request) => {
+app.post("/v1/approval-policies", { preHandler: authHook }, async (request, reply) => {
   const orgId = (request as any).orgId ?? "default";
-  return withTenant(db, orgId, () => approvalRoutes.createPolicy(orgId, request.body));
+  try {
+    const result = await withTenant(db, orgId, () => approvalRoutes.createPolicy(orgId, request.body));
+    reply.code(201).send(result);
+  } catch (err: any) {
+    reply.code(400).send({ error: err.message });
+  }
 });
 
 app.get("/v1/approval-policies", { preHandler: authHook }, async (request) => {
@@ -694,16 +699,24 @@ app.get("/v1/approval-policies", { preHandler: authHook }, async (request) => {
   return withTenant(db, orgId, () => approvalRoutes.listPolicies(orgId));
 });
 
-app.patch("/v1/approval-policies/:id", { preHandler: authHook }, async (request) => {
+app.patch("/v1/approval-policies/:id", { preHandler: authHook }, async (request, reply) => {
   const orgId = (request as any).orgId ?? "default";
   const { id } = request.params as { id: string };
-  return withTenant(db, orgId, () => approvalRoutes.updatePolicy(orgId, id, request.body));
+  try {
+    return await withTenant(db, orgId, () => approvalRoutes.updatePolicy(orgId, id, request.body));
+  } catch (err: any) {
+    reply.code(400).send({ error: err.message });
+  }
 });
 
-app.delete("/v1/approval-policies/:id", { preHandler: authHook }, async (request) => {
+app.delete("/v1/approval-policies/:id", { preHandler: authHook }, async (request, reply) => {
   const orgId = (request as any).orgId ?? "default";
   const { id } = request.params as { id: string };
-  return withTenant(db, orgId, () => approvalRoutes.deletePolicy(orgId, id));
+  try {
+    return await withTenant(db, orgId, () => approvalRoutes.deletePolicy(orgId, id));
+  } catch (err: any) {
+    reply.code(400).send({ error: err.message });
+  }
 });
 
 // --- Approval Gates ---

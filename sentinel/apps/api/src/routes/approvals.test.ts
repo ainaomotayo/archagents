@@ -132,4 +132,105 @@ describe("buildApprovalRoutes", () => {
       expect(mockDb.approvalDecision.create).toHaveBeenCalled();
     });
   });
+
+  describe("updatePolicy", () => {
+    it("updates an existing policy", async () => {
+      const routes = buildApprovalRoutes({ db: mockDb as any });
+      mockDb.approvalPolicy.findUnique.mockResolvedValue({ id: "pol-1", orgId: "org-1" });
+      mockDb.approvalPolicy.update.mockResolvedValue({ id: "pol-1", name: "Updated" });
+
+      const result = await routes.updatePolicy("org-1", "pol-1", { name: "Updated" });
+      expect(result).toHaveProperty("name", "Updated");
+    });
+
+    it("rejects update for non-existent policy", async () => {
+      const routes = buildApprovalRoutes({ db: mockDb as any });
+      mockDb.approvalPolicy.findUnique.mockResolvedValue(null);
+
+      await expect(routes.updatePolicy("org-1", "pol-1", { name: "X" })).rejects.toThrow("not found");
+    });
+
+    it("rejects invalid strategy type on update", async () => {
+      const routes = buildApprovalRoutes({ db: mockDb as any });
+      mockDb.approvalPolicy.findUnique.mockResolvedValue({ id: "pol-1", orgId: "org-1" });
+
+      await expect(
+        routes.updatePolicy("org-1", "pol-1", { strategyType: "invalid_type" }),
+      ).rejects.toThrow("Invalid strategy type");
+    });
+  });
+
+  describe("deletePolicy", () => {
+    it("deletes an existing policy", async () => {
+      const routes = buildApprovalRoutes({ db: mockDb as any });
+      mockDb.approvalPolicy.findUnique.mockResolvedValue({ id: "pol-1", orgId: "org-1" });
+      mockDb.approvalPolicy.delete.mockResolvedValue({ id: "pol-1" });
+
+      const result = await routes.deletePolicy("org-1", "pol-1");
+      expect(result).toHaveProperty("id", "pol-1");
+    });
+
+    it("rejects delete for wrong org", async () => {
+      const routes = buildApprovalRoutes({ db: mockDb as any });
+      mockDb.approvalPolicy.findUnique.mockResolvedValue({ id: "pol-1", orgId: "org-other" });
+
+      await expect(routes.deletePolicy("org-1", "pol-1")).rejects.toThrow("not found");
+    });
+  });
+
+  describe("getGate", () => {
+    it("returns gate for matching org", async () => {
+      const routes = buildApprovalRoutes({ db: mockDb as any });
+      mockDb.approvalGate.findUnique.mockResolvedValue({ id: "g1", orgId: "org-1", status: "pending" });
+
+      const result = await routes.getGate("org-1", "g1");
+      expect(result).toHaveProperty("id", "g1");
+    });
+
+    it("returns null for wrong org", async () => {
+      const routes = buildApprovalRoutes({ db: mockDb as any });
+      mockDb.approvalGate.findUnique.mockResolvedValue({ id: "g1", orgId: "org-other" });
+
+      const result = await routes.getGate("org-1", "g1");
+      expect(result).toBeNull();
+    });
+  });
+
+  describe("reassignGate", () => {
+    it("reassigns a non-terminal gate", async () => {
+      const routes = buildApprovalRoutes({ db: mockDb as any });
+      mockDb.approvalGate.findUnique.mockResolvedValue({ id: "g1", orgId: "org-1", status: "pending" });
+      mockDb.approvalGate.update.mockResolvedValue({ id: "g1", assignedTo: "user-2" });
+
+      const result = await routes.reassignGate("org-1", "g1", { assignedTo: "user-2" });
+      expect(result).toHaveProperty("assignedTo", "user-2");
+    });
+
+    it("rejects reassignment of terminal gate", async () => {
+      const routes = buildApprovalRoutes({ db: mockDb as any });
+      mockDb.approvalGate.findUnique.mockResolvedValue({ id: "g1", orgId: "org-1", status: "approved" });
+
+      await expect(routes.reassignGate("org-1", "g1", { assignedTo: "user-2" })).rejects.toThrow("terminal");
+    });
+  });
+
+  describe("getStats", () => {
+    it("returns queue stats", async () => {
+      const routes = buildApprovalRoutes({ db: mockDb as any });
+      mockDb.approvalGate.count
+        .mockResolvedValueOnce(3)  // pending
+        .mockResolvedValueOnce(1)  // escalated
+        .mockResolvedValueOnce(5)  // approvedToday
+        .mockResolvedValueOnce(2); // rejectedToday
+
+      const result = await routes.getStats("org-1");
+      expect(result).toEqual({
+        pending: 3,
+        escalated: 1,
+        approvedToday: 5,
+        rejectedToday: 2,
+        queueDepth: 4,
+      });
+    });
+  });
 });
