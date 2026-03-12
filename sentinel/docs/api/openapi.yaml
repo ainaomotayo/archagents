@@ -2104,6 +2104,32 @@ paths:
         schema:
           type: string
           format: uuid
+    get:
+      operationId: getSsoConfig
+      summary: Get an SSO configuration
+      description: Retrieve a single SSO configuration by ID.
+      tags: [SSO]
+      security:
+        - hmacAuth: []
+      responses:
+        "200":
+          description: SSO configuration details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SsoConfig"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: SSO configuration not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
     put:
       operationId: updateSsoConfig
       summary: Update an SSO configuration
