@@ -16,7 +16,7 @@ from sentinel_license.spdx_detector import (
 
 class LicenseAgent(BaseAgent):
     name = "ip-license"
-    version = "0.2.0"
+    version = "0.3.0"
     ruleset_version = "rules-2026.03.11-a"
     ruleset_hash = "sha256:license-v2"
 
