@@ -1,0 +1,38 @@
+rules:
+  - id: hipaa-phi-exposure-logging
+    patterns:
+      - pattern-either:
+          - pattern: logger.$METHOD(..., $VAR, ...)
+          - pattern: console.$METHOD(..., $VAR, ...)
+          - pattern: print(..., $VAR, ...)
+          - pattern: logging.$METHOD(..., $VAR, ...)
+    message: >-
+      Potential PHI exposure in log output: $VAR may contain protected health
+      information
+    severity: ERROR
+    languages: [python, javascript, typescript]
+    metadata:
+      category: vulnerability/phi-exposure
+      hipaa: "§164.312(e)(1)"
+      cwe:
+        - "CWE-532: Insertion of Sensitive Information into Log File"
+
+  - id: hipaa-phi-exposure-response
+    patterns:
+      - pattern-either:
+          - pattern: |
+              response.json({..., $KEY: $VAR, ...})
+          - pattern: |
+              res.send({..., $KEY: $VAR, ...})
+          - pattern: |
+              res.json({..., $KEY: $VAR, ...})
+      - metavariable-regex:
+          metavariable: $KEY
+          regex: (ssn|social_security|date_of_birth|dob|mrn|medical_record|diagnosis|patient_id|health_plan|beneficiary)
+    message: >-
+      Potential PHI exposed in API response via key '$KEY'
+    severity: ERROR
+    languages: [javascript, typescript]
+    metadata:
+      category: vulnerability/phi-exposure
+      hipaa: "§164.502"
