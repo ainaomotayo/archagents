@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { BUILT_IN_FRAMEWORKS } from "../frameworks/index.js";
+import type { ControlDefinition } from "../types.js";
 
 describe("built-in frameworks", () => {
   it("ships 7 frameworks", () => {
@@ -49,5 +50,47 @@ describe("built-in frameworks", () => {
     expect(slugs).toContain("openssf");
     expect(slugs).toContain("cis-ssc");
     expect(slugs).toContain("gdpr");
+  });
+});
+
+describe("ControlDefinition extended fields", () => {
+  it("accepts requirementType field", () => {
+    const control: ControlDefinition = {
+      code: "TEST-1",
+      name: "Test",
+      weight: 1.0,
+      matchRules: [],
+      requirementType: "automated",
+    };
+    expect(control.requirementType).toBe("automated");
+  });
+
+  it("accepts all requirementType values", () => {
+    const types: ControlDefinition["requirementType"][] = ["automated", "attestation", "hybrid"];
+    expect(types).toHaveLength(3);
+  });
+
+  it("accepts parentCode field", () => {
+    const control: ControlDefinition = {
+      code: "GV-1.1",
+      name: "Test",
+      weight: 1.0,
+      matchRules: [],
+      requirementType: "attestation",
+      parentCode: "GV-1",
+    };
+    expect(control.parentCode).toBe("GV-1");
+  });
+
+  it("accepts regulatoryStatus field", () => {
+    const control: ControlDefinition = {
+      code: "AS-1.1",
+      name: "Test",
+      weight: 3.0,
+      matchRules: [],
+      requirementType: "hybrid",
+      regulatoryStatus: "required",
+    };
+    expect(control.regulatoryStatus).toBe("required");
   });
 });

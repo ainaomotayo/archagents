@@ -10,6 +10,11 @@ export interface ControlDefinition {
   name: string;
   weight: number;
   matchRules: MatchRule[];
+  parentCode?: string;
+  requirementType?: "automated" | "attestation" | "hybrid";
+  attestationCadence?: number;
+  regulatoryStatus?: "required" | "addressable";
+  description?: string;
 }
 
 export interface FrameworkDefinition {
