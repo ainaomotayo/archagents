@@ -21,6 +21,50 @@ servers:
   - url: https://api-staging.sentinel.example.com
     description: Staging
 
+tags:
+  - name: Scans
+    description: Submit code diffs for scanning and monitor scan progress
+  - name: Findings
+    description: View and manage security findings from scans
+  - name: Certificates
+    description: Compliance certificates issued for passing scans
+  - name: Projects
+    description: Project management and per-project findings
+  - name: Policies
+    description: Compliance policy configuration and versioning
+  - name: Audit
+    description: Immutable, hash-chained audit log queries
+  - name: Compliance
+    description: Compliance frameworks, assessments, and trend tracking
+  - name: Evidence
+    description: Chain of custody evidence records
+  - name: Reports
+    description: Compliance report generation
+  - name: Webhooks
+    description: Outbound webhook endpoint management and delivery history
+  - name: Notifications
+    description: Notification rule configuration for event-driven alerts
+  - name: Events
+    description: Real-time event streaming via Server-Sent Events
+  - name: GitHub
+    description: Inbound GitHub webhook handling
+  - name: API Keys
+    description: API key management for programmatic access
+  - name: SSO
+    description: Enterprise SSO identity provider configuration
+  - name: Memberships
+    description: Organization membership and role management
+  - name: SCIM
+    description: SCIM 2.0 user and group provisioning (RFC 7644)
+  - name: Domains
+    description: Domain ownership verification for SSO enforcement
+  - name: Auth
+    description: Login discovery and SAML service provider metadata
+  - name: Admin
+    description: Administrative operations including DLQ monitoring, key rotation, and crypto-shred
+  - name: System
+    description: Health checks and Prometheus metrics
+
 paths:
   /v1/scans:
     get:
