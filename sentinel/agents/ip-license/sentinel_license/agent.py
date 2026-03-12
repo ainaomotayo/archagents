@@ -2,16 +2,21 @@
 
 from __future__ import annotations
 
+import logging
+
 from sentinel_agents.base import BaseAgent
 from sentinel_agents.types import Confidence, DiffEvent, Finding, Severity
 
 from sentinel_license.evidence import EvidenceChain, ProvenanceEvent
 from sentinel_license.fingerprint import fingerprint_code
+from sentinel_license.registry_lookup import fetch_package_info
 from sentinel_license.spdx_detector import (
     check_compatibility,
     detect_licenses,
     parse_spdx_expression,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class LicenseAgent(BaseAgent):
@@ -65,8 +70,55 @@ class LicenseAgent(BaseAgent):
                 },
             ))
 
+        # 4. Best-effort registry enrichment for fingerprint matches
+        self._enrich_with_registry_metadata(findings)
+
         self.last_evidence_chain = chain
         return findings
+
+    @staticmethod
+    def _enrich_with_registry_metadata(findings: list[Finding]) -> None:
+        """Best-effort enrichment of fingerprint findings with registry metadata.
+
+        For each finding that has ``sourceMatch`` and ``ecosystem`` in its extra
+        dict, attempt to look up the package in the corresponding registry.  On
+        success the finding's *extra* is augmented with ``registryLicense``,
+        ``registryVersion``, and ``registryUrl``.  Registry failures are silently
+        ignored so that scan results are never lost.
+        """
+        for finding in findings:
+            extra = finding.extra
+            if not extra:
+                continue
+            ecosystem = extra.get("ecosystem")
+            source_match = extra.get("sourceMatch")
+            if not ecosystem or not source_match:
+                continue
+
+            # Derive a package name from the source URL.
+            # For GitHub-style URLs the last path segment is typically the
+            # package/repo name.  We fall back to the full URL.
+            name = source_match.rstrip("/").rsplit("/", 1)[-1]
+            version = extra.get("packageVersion", "latest")
+
+            try:
+                info = fetch_package_info(name, version, ecosystem)
+            except Exception:
+                logger.debug(
+                    "Registry lookup failed for %s/%s (%s)", name, version, ecosystem,
+                    exc_info=True,
+                )
+                continue
+
+            if info is None:
+                continue
+
+            if info.spdx_license:
+                extra["registryLicense"] = info.spdx_license
+            if info.version:
+                extra["registryVersion"] = info.version
+            if info.source_url:
+                extra["registryUrl"] = info.source_url
 
     def _check_license_conflicts(self, license_findings: list[Finding]) -> list[Finding]:
         """Check for license conflicts between detected licenses in the same scan."""

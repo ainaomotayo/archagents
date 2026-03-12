@@ -1,5 +1,8 @@
+from unittest.mock import patch
+
 from sentinel_agents.types import DiffEvent, DiffFile, DiffHunk, ScanConfig
 from sentinel_license.agent import LicenseAgent
+from sentinel_license.registry_lookup import PackageInfo
 
 
 def _make_event(code: str, path: str = "file.py", lang: str = "python") -> DiffEvent:
@@ -103,3 +106,105 @@ def test_evidence_chain_links_multiple_findings():
     if len(chain.records) >= 2:
         assert chain.records[1].prev_hash == chain.records[0].hash
     assert chain.verify() is True
+
+
+def test_agent_enriches_findings_with_registry():
+    """Registry lookup enriches fingerprint findings with authoritative metadata."""
+    from sentinel_agents.types import Confidence, Finding, Severity
+
+    mock_info = PackageInfo(
+        name="lodash",
+        version="4.17.21",
+        ecosystem="npm",
+        spdx_license="MIT",
+        source_url="https://github.com/lodash/lodash",
+        tarball_url="https://registry.npmjs.org/lodash/-/lodash-4.17.21.tgz",
+    )
+
+    # Build a finding that looks like a fingerprint match with ecosystem info
+    fp_finding = Finding(
+        type="license",
+        file="src/utils.js",
+        line_start=10,
+        line_end=20,
+        severity=Severity.MEDIUM,
+        confidence=Confidence.MEDIUM,
+        title="Code matches known OSS: https://github.com/lodash/lodash",
+        description="Code fragment matches lodash",
+        category="copyleft-risk",
+        scanner="fingerprint",
+        extra={
+            "similarityScore": 1.0,
+            "sourceMatch": "https://github.com/lodash/lodash",
+            "licenseDetected": "MIT",
+            "findingType": "copyleft-risk",
+            "policyAction": "review",
+            "packageVersion": "4.17.21",
+            "ecosystem": "npm",
+            "matchType": "exact",
+        },
+    )
+
+    with patch("sentinel_license.agent.fetch_package_info", return_value=mock_info):
+        LicenseAgent._enrich_with_registry_metadata([fp_finding])
+
+    assert fp_finding.extra["registryLicense"] == "MIT"
+    assert fp_finding.extra["registryVersion"] == "4.17.21"
+    assert fp_finding.extra["registryUrl"] == "https://github.com/lodash/lodash"
+
+
+def test_agent_enrichment_skips_on_registry_failure():
+    """Registry failures must not break the scan — findings are returned unchanged."""
+    from sentinel_agents.types import Confidence, Finding, Severity
+
+    fp_finding = Finding(
+        type="license",
+        file="src/utils.js",
+        line_start=10,
+        line_end=20,
+        severity=Severity.MEDIUM,
+        confidence=Confidence.MEDIUM,
+        title="Code matches known OSS: https://github.com/lodash/lodash",
+        description="Code fragment matches lodash",
+        category="copyleft-risk",
+        scanner="fingerprint",
+        extra={
+            "sourceMatch": "https://github.com/lodash/lodash",
+            "packageVersion": "4.17.21",
+            "ecosystem": "npm",
+        },
+    )
+
+    with patch(
+        "sentinel_license.agent.fetch_package_info",
+        side_effect=ConnectionError("network down"),
+    ):
+        LicenseAgent._enrich_with_registry_metadata([fp_finding])
+
+    # Finding should be unchanged — no registryLicense key added
+    assert "registryLicense" not in fp_finding.extra
+
+
+def test_agent_enrichment_skips_findings_without_ecosystem():
+    """Findings without ecosystem/sourceMatch should be silently skipped."""
+    from sentinel_agents.types import Confidence, Finding, Severity
+
+    finding = Finding(
+        type="license",
+        file="src/lib.py",
+        line_start=1,
+        line_end=1,
+        severity=Severity.MEDIUM,
+        confidence=Confidence.MEDIUM,
+        title="GPL detected",
+        description="GPL header found",
+        category="copyleft-risk",
+        scanner="spdx",
+        extra={"licenseDetected": "GPL-3.0"},
+    )
+
+    with patch("sentinel_license.agent.fetch_package_info") as mock_fetch:
+        LicenseAgent._enrich_with_registry_metadata([finding])
+        mock_fetch.assert_not_called()
+
+    assert "registryLicense" not in finding.extra
