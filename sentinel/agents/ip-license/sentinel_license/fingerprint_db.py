@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import logging
 import sqlite3
+import struct
 from dataclasses import dataclass
 from typing import Optional
 
@@ -45,6 +46,10 @@ CREATE TABLE IF NOT EXISTS fingerprints (
 );
 CREATE INDEX IF NOT EXISTS idx_fp_package ON fingerprints(package_name, ecosystem);
 CREATE INDEX IF NOT EXISTS idx_fp_license ON fingerprints(spdx_license);
+CREATE TABLE IF NOT EXISTS minhash_signatures (
+    hash TEXT PRIMARY KEY REFERENCES fingerprints(hash),
+    signature BLOB NOT NULL
+);
 """
 
 _INSERT_SQL = """\
@@ -135,6 +140,52 @@ class FingerprintDB:
         """Return the total number of fingerprint records."""
         cur = self._conn.execute("SELECT COUNT(*) FROM fingerprints")
         return cur.fetchone()[0]
+
+    def store_minhash(
+        self,
+        hash_val: str,
+        sig: "MinHashSignature",
+        record: FingerprintRecord,
+    ) -> None:
+        """Insert a fingerprint record AND its minhash signature."""
+        from sentinel_license.minhash import MinHashSignature  # noqa: F811
+
+        self._conn.execute(_INSERT_SQL, _record_to_tuple(record))
+        blob = struct.pack(f"<{len(sig.values)}I", *sig.values)
+        self._conn.execute(
+            "INSERT OR REPLACE INTO minhash_signatures (hash, signature) VALUES (?, ?)",
+            (hash_val, blob),
+        )
+        self._conn.commit()
+
+    def load_lsh_index(
+        self,
+    ) -> tuple["LSHIndex", dict[str, FingerprintRecord], dict[str, "MinHashSignature"]]:
+        """Load all minhash signatures, build an LSH index.
+
+        Returns (LSHIndex, hash->FingerprintRecord, hash->MinHashSignature).
+        """
+        from sentinel_license.minhash import LSHIndex, MinHashSignature
+
+        index = LSHIndex()
+        records: dict[str, FingerprintRecord] = {}
+        sigs: dict[str, MinHashSignature] = {}
+
+        cur = self._conn.execute(
+            "SELECT m.hash, m.signature, f.* "
+            "FROM minhash_signatures m JOIN fingerprints f ON m.hash = f.hash"
+        )
+        for row in cur.fetchall():
+            blob = row["signature"]
+            num_values = len(blob) // 4
+            values = list(struct.unpack(f"<{num_values}I", blob))
+            sig = MinHashSignature(values=values)
+            doc_id = row["hash"]
+            records[doc_id] = _row_to_record(row)
+            sigs[doc_id] = sig
+            index.insert(doc_id, sig)
+
+        return index, records, sigs
 
     def import_legacy_json(self, json_path: str) -> int:
         """Import fingerprints from legacy JSON format.

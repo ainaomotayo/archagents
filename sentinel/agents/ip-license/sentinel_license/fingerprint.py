@@ -14,6 +14,7 @@ from dataclasses import dataclass
 
 from sentinel_agents.types import Confidence, DiffEvent, Finding, Severity
 from sentinel_license.fingerprint_db import FingerprintDB
+from sentinel_license.minhash import LSHIndex, MinHashSignature, compute_minhash
 
 # Languages supported by agent_core tree-sitter fingerprinting
 _AST_LANGUAGES = {
@@ -60,6 +61,30 @@ def _init_fingerprint_db() -> FingerprintDB:
 
 
 _fingerprint_db: FingerprintDB = _init_fingerprint_db()
+
+
+def _tokenize_window(code: str, language: str) -> set[str]:
+    """Split code into tokens, return set of 3-grams."""
+    # Split on whitespace and punctuation boundaries
+    tokens = re.findall(r"[A-Za-z_]\w*|[^\s]", code)
+    if len(tokens) < 3:
+        return set()
+    ngrams: set[str] = set()
+    for i in range(len(tokens) - 2):
+        ngrams.add(f"{tokens[i]} {tokens[i+1]} {tokens[i+2]}")
+    return ngrams
+
+
+def _init_lsh_index() -> tuple[LSHIndex, dict, dict]:
+    """Lazily load the LSH index from the fingerprint DB."""
+    try:
+        return _fingerprint_db.load_lsh_index()
+    except Exception:
+        from sentinel_license.fingerprint_db import FingerprintRecord
+        return LSHIndex(), {}, {}
+
+
+_lsh_index, _lsh_records, _lsh_sigs = _init_lsh_index()
 
 
 # --- Binary Format Detection ---
@@ -193,7 +218,37 @@ def fingerprint_code(event: DiffEvent) -> list[Finding]:
                     "policyAction": "review",
                 }
             else:
-                continue
+                # Fuzzy matching fallback via MinHash/LSH
+                tokens = _tokenize_window(window, lang)
+                if not tokens:
+                    continue
+                sig = compute_minhash(tokens)
+                candidates = _lsh_index.query(sig)
+                best_sim = 0.0
+                best_id = None
+                for cand_id in candidates:
+                    cand_sig = _lsh_sigs.get(cand_id)
+                    if cand_sig is None:
+                        continue
+                    sim = sig.similarity(cand_sig)
+                    if sim > best_sim:
+                        best_sim = sim
+                        best_id = cand_id
+                if best_id is None or best_sim < 0.7:
+                    continue
+                rec = _lsh_records[best_id]
+                source = rec.source_url
+                license_name = rec.spdx_license or "unknown"
+                extra = {
+                    "similarityScore": best_sim,
+                    "sourceMatch": source,
+                    "licenseDetected": license_name,
+                    "findingType": "copyleft-risk",
+                    "policyAction": "review",
+                    "packageVersion": rec.package_version,
+                    "ecosystem": rec.ecosystem,
+                    "matchType": "fuzzy",
+                }
 
             findings.append(
                 Finding(
