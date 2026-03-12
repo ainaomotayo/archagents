@@ -51,7 +51,12 @@ export class AttestationService {
         revokedAt: null,
       },
     });
-    if (existing && existing.expiresAt < now) {
+    if (existing) {
+      if (existing.expiresAt >= now) {
+        throw new Error(
+          `Active attestation already exists for ${input.frameworkSlug}/${input.controlCode}. Revoke it first or wait until it expires.`,
+        );
+      }
       // Expire the old one by soft-revoking
       await this.db.controlAttestation.update({
         where: { id: existing.id },

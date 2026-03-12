@@ -112,6 +112,53 @@ describe("AttestationService", () => {
     );
   });
 
+  it("rejects create when active attestation exists", async () => {
+    mockDb.controlAttestation.findFirst.mockResolvedValue({
+      id: "att-existing",
+      expiresAt: new Date(Date.now() + 86_400_000), // expires tomorrow
+    });
+
+    await expect(
+      service.create("org-1", {
+        frameworkSlug: "hipaa",
+        controlCode: "AS-1.1",
+        attestedBy: "user-1",
+        attestationType: "compliant",
+        justification: "Risk analysis completed and documented",
+        evidenceUrls: [],
+      }),
+    ).rejects.toThrow("Active attestation already exists");
+  });
+
+  it("supersedes expired attestation on create", async () => {
+    mockDb.controlAttestation.findFirst.mockResolvedValue({
+      id: "att-expired",
+      expiresAt: new Date(Date.now() - 86_400_000), // expired yesterday
+    });
+    mockDb.controlAttestation.create.mockResolvedValue({
+      id: "att-new",
+      frameworkSlug: "hipaa",
+      controlCode: "AS-1.1",
+    });
+
+    const result = await service.create("org-1", {
+      frameworkSlug: "hipaa",
+      controlCode: "AS-1.1",
+      attestedBy: "user-1",
+      attestationType: "compliant",
+      justification: "Risk analysis completed and documented",
+      evidenceUrls: [],
+    });
+
+    expect(result).toHaveProperty("id", "att-new");
+    expect(mockDb.controlAttestation.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: "att-expired" },
+        data: expect.objectContaining({ revokedReason: "Superseded by new attestation" }),
+      }),
+    );
+  });
+
   it("getActive returns non-expired, non-revoked attestations", async () => {
     mockDb.controlAttestation.findMany.mockResolvedValue([
       { id: "att-1", controlCode: "AS-1.1" },

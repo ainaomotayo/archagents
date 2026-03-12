@@ -27,8 +27,17 @@ export class ComplianceSnapshotJob implements SchedulerJob {
         suppressed: f.suppressed,
       }));
 
+      // Fetch active attestations for attestation-aware scoring
+      const attestationsRaw = await ctx.db.controlAttestation.findMany({
+        where: { orgId: org.id, revokedAt: null, expiresAt: { gt: new Date() } },
+      });
+
       for (const fw of BUILT_IN_FRAMEWORKS) {
-        const result = scoreFramework(fw.controls, inputs);
+        const fwAttestations: Record<string, any> = {};
+        for (const a of attestationsRaw) {
+          if (a.frameworkSlug === fw.slug) fwAttestations[a.controlCode] = a;
+        }
+        const result = scoreFramework(fw.controls, inputs, fwAttestations);
         await ctx.db.complianceSnapshot.upsert({
           where: {
             orgId_frameworkId_date: {

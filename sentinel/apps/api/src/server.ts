@@ -911,7 +911,15 @@ app.get("/v1/compliance/assess/:frameworkId", { preHandler: authHook }, async (r
   const inputs: FindingInput[] = findings.map((f: any) => ({
     id: f.id, agentName: f.agentName, severity: f.severity, category: f.category, suppressed: f.suppressed,
   }));
-  const result = scoreFramework(fw.controls, inputs);
+  // Fetch attestations for attestation-aware scoring (NIST/HIPAA hybrid controls)
+  const attestationsRaw = await withTenant(db, orgId, async (tx) => {
+    return tx.controlAttestation.findMany({
+      where: { orgId, frameworkSlug: frameworkId, revokedAt: null, expiresAt: { gt: new Date() } },
+    });
+  });
+  const attestations: Record<string, any> = {};
+  for (const a of attestationsRaw) attestations[a.controlCode] = a;
+  const result = scoreFramework(fw.controls, inputs, attestations);
   return { frameworkSlug: frameworkId, ...result };
 });
 

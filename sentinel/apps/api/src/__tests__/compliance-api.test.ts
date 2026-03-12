@@ -205,6 +205,8 @@ vi.mock("@sentinel/db", () => {
   const complianceSnapshotModel = makeModel(complianceSnapshots);
   const evidenceRecordModel = makeModel(evidenceRecords);
   const reportModel = makeModel(reports);
+  const controlAttestationModel = makeModel([] as any[]);
+  const attestationHistoryModel = makeModel([] as any[]);
 
   const tenant = {
     scan: scanModel,
@@ -221,6 +223,8 @@ vi.mock("@sentinel/db", () => {
     complianceSnapshot: complianceSnapshotModel,
     evidenceRecord: evidenceRecordModel,
     report: reportModel,
+    controlAttestation: controlAttestationModel,
+    attestationHistory: attestationHistoryModel,
   };
 
   return {
