@@ -12,6 +12,14 @@ export interface JobContext {
   metrics: SchedulerMetrics;
   audit: AuditLayer;
   logger: Logger;
+  lifecycleTracker?: ScanLifecycleTracker;
+}
+
+export interface ScanLifecycleTracker {
+  recordTrigger(scanId: string, jobName: string): Promise<void>;
+  recordCompletion(scanId: string): Promise<void>;
+  checkTimeouts(timeoutMs?: number): Promise<string[]>;
+  getLifecycle(scanId: string): Promise<Record<string, string> | null>;
 }
 
 export interface SchedulerJob {

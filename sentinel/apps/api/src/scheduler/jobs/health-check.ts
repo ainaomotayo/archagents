@@ -13,6 +13,23 @@ export class HealthCheckJob implements SchedulerJob {
   dependencies = ["redis"] as const;
 
   async execute(ctx: JobContext): Promise<void> {
+    // Check for timed-out scans
+    if (ctx.lifecycleTracker) {
+      const timeoutMs = parseInt(process.env.SCAN_TIMEOUT_MS ?? "300000", 10);
+      const timedOut = await ctx.lifecycleTracker.checkTimeouts(timeoutMs);
+      for (const scanId of timedOut) {
+        await ctx.eventBus.publish("sentinel.notifications", {
+          id: `evt-timeout-${scanId}`,
+          orgId: "system",
+          topic: "system.scan_timeout",
+          payload: { scanId, timeoutMs },
+          timestamp: new Date().toISOString(),
+        });
+        ctx.logger.warn({ scanId, timeoutMs }, "Scan timed out");
+      }
+    }
+
+    // Check service health endpoints
     for (const svc of SERVICE_HEALTH_ENDPOINTS) {
       try {
         const controller = new AbortController();

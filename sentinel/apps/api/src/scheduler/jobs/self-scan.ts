@@ -31,6 +31,9 @@ export class SelfScanJob implements SchedulerJob {
       submittedAt: new Date().toISOString(),
       triggeredBy: "scheduler",
     });
+    if (ctx.lifecycleTracker) {
+      await ctx.lifecycleTracker.recordTrigger(scanId, this.name);
+    }
     ctx.logger.info(
       { scanId, targets: SELF_SCAN_CONFIG.targets },
       "Self-scan triggered",

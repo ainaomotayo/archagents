@@ -46,6 +46,14 @@ export class SchedulerMetrics implements ISchedulerMetrics {
   private lastTrigger = new Map<string, number>();
   private schedules = new Map<string, string>();
 
+  // Enterprise metrics state (set externally by startScheduler)
+  public isLeader = 0;
+  public instanceId = "";
+  public circuitBreaker: CircuitBreakerManager | null = null;
+  public lifecycleCounts = { pending: 0, running: 0, completed: 0, timeout: 0 };
+  public orgOverridesActive = 0;
+  public auditEntriesTotal = 0;
+
   registerSchedule(type: string, cronExpr: string) {
     this.schedules.set(type, cronExpr);
   }
@@ -98,6 +106,30 @@ export class SchedulerMetrics implements ISchedulerMetrics {
     for (const [type, ts] of this.lastTrigger) {
       lines.push(`sentinel_scheduler_last_trigger_timestamp{type="${type}"} ${ts / 1000}`);
     }
+    // Enterprise metrics per design spec
+    lines.push("# HELP sentinel_scheduler_leader Whether this instance is the leader");
+    lines.push("# TYPE sentinel_scheduler_leader gauge");
+    lines.push(`sentinel_scheduler_leader{instance="${this.instanceId}"} ${this.isLeader}`);
+    lines.push("# HELP sentinel_scheduler_circuit_state Circuit breaker state per dependency");
+    lines.push("# TYPE sentinel_scheduler_circuit_state gauge");
+    if (this.circuitBreaker) {
+      const states = this.circuitBreaker.getAllStates();
+      for (const [dep, st] of Object.entries(states)) {
+        const val = st.state === "closed" ? 0 : st.state === "open" ? 1 : 2;
+        lines.push(`sentinel_scheduler_circuit_state{dep="${dep}"} ${val}`);
+      }
+    }
+    lines.push("# HELP sentinel_scheduler_scan_lifecycle Scan lifecycle counts by status");
+    lines.push("# TYPE sentinel_scheduler_scan_lifecycle counter");
+    for (const [status, count] of Object.entries(this.lifecycleCounts)) {
+      lines.push(`sentinel_scheduler_scan_lifecycle{status="${status}"} ${count}`);
+    }
+    lines.push("# HELP sentinel_scheduler_org_overrides_active Active per-org schedule overrides");
+    lines.push("# TYPE sentinel_scheduler_org_overrides_active gauge");
+    lines.push(`sentinel_scheduler_org_overrides_active ${this.orgOverridesActive}`);
+    lines.push("# HELP sentinel_scheduler_audit_entries_total Total dual-write audit entries");
+    lines.push("# TYPE sentinel_scheduler_audit_entries_total counter");
+    lines.push(`sentinel_scheduler_audit_entries_total ${this.auditEntriesTotal}`);
     return lines.join("\n") + "\n";
   }
 }
@@ -205,7 +237,11 @@ export async function startScheduler(): Promise<void> {
     metrics.registerSchedule(job.name, job.schedule);
   }
 
-  const ctx: JobContext = { eventBus, db, redis, metrics, audit, logger };
+  // Wire enterprise metrics state
+  metrics.instanceId = instanceId;
+  metrics.circuitBreaker = circuitBreaker;
+
+  const ctx: JobContext = { eventBus, db, redis, metrics, audit, logger, lifecycleTracker };
 
   function wrapJobExecution(job: SchedulerJob) {
     return async () => {
@@ -218,14 +254,17 @@ export async function startScheduler(): Promise<void> {
             timestamp: new Date().toISOString(),
             detail: { reason: `circuit open for ${dep}` },
           });
+          metrics.auditEntriesTotal++;
           logger.warn({ job: job.name, dep }, "Job skipped: circuit breaker open");
           return;
         }
       }
       try {
         await registry.executeJob(job.name, ctx);
+        metrics.auditEntriesTotal += 2; // triggered + completed
         for (const dep of job.dependencies) circuitBreaker.recordSuccess(dep);
       } catch (err) {
+        metrics.auditEntriesTotal += 2; // triggered + failed
         for (const dep of job.dependencies) circuitBreaker.recordFailure(dep);
         logger.error({ err, job: job.name }, "Scheduled job failed");
       }
@@ -247,6 +286,7 @@ export async function startScheduler(): Promise<void> {
       const acquired = await lease.acquire();
       if (acquired) logger.info({ instanceId }, "Acquired leader lease");
     }
+    metrics.isLeader = lease.isLeader() ? 1 : 0;
   }, heartbeatInterval);
 
   const acquired = await lease.acquire();
@@ -254,8 +294,10 @@ export async function startScheduler(): Promise<void> {
 
   // Org schedule override poll every 5 minutes
   await orgManager.loadOverrides();
+  metrics.orgOverridesActive = Object.keys(orgManager.getActiveOverrides()).length;
   const overrideTimer = setInterval(async () => {
     await orgManager.loadOverrides();
+    metrics.orgOverridesActive = Object.keys(orgManager.getActiveOverrides()).length;
   }, 300_000);
 
   // Graceful shutdown
