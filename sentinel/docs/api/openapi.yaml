@@ -2257,6 +2257,364 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /v1/scim/v2/ServiceProviderConfig:
+    get:
+      operationId: getScimServiceProviderConfig
+      summary: SCIM Service Provider Configuration
+      description: |
+        Returns the SCIM service provider configuration, including supported
+        features and authentication schemes. Public endpoint.
+      tags: [SCIM]
+      responses:
+        "200":
+          description: SCIM service provider configuration
+          content:
+            application/scim+json:
+              schema:
+                $ref: "#/components/schemas/ScimServiceProviderConfig"
+
+  /v1/scim/v2/Schemas:
+    get:
+      operationId: getScimSchemas
+      summary: SCIM Schemas
+      description: |
+        Returns the supported SCIM schemas. Public endpoint.
+      tags: [SCIM]
+      responses:
+        "200":
+          description: SCIM schemas
+          content:
+            application/scim+json:
+              schema:
+                type: array
+                items:
+                  type: object
+
+  /v1/scim/v2/ResourceTypes:
+    get:
+      operationId: getScimResourceTypes
+      summary: SCIM Resource Types
+      description: |
+        Returns the supported SCIM resource types. Public endpoint.
+      tags: [SCIM]
+      responses:
+        "200":
+          description: SCIM resource types
+          content:
+            application/scim+json:
+              schema:
+                type: array
+                items:
+                  type: object
+
+  /v1/scim/v2/Users:
+    post:
+      operationId: createScimUser
+      summary: Create a SCIM user
+      tags: [SCIM]
+      security:
+        - scimBearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/scim+json:
+            schema:
+              $ref: "#/components/schemas/ScimUserInput"
+      responses:
+        "201":
+          description: SCIM user created
+          content:
+            application/scim+json:
+              schema:
+                $ref: "#/components/schemas/ScimUser"
+        "400":
+          description: Invalid input
+          content:
+            application/scim+json:
+              schema:
+                $ref: "#/components/schemas/ScimError"
+        "409":
+          description: User already exists
+          content:
+            application/scim+json:
+              schema:
+                $ref: "#/components/schemas/ScimError"
+    get:
+      operationId: listScimUsers
+      summary: List SCIM users
+      tags: [SCIM]
+      security:
+        - scimBearerAuth: []
+      parameters:
+        - name: startIndex
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: count
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 100
+        - name: filter
+          in: query
+          schema:
+            type: string
+          description: "SCIM filter expression (e.g. userName eq \"user@example.com\")"
+      responses:
+        "200":
+          description: SCIM user list
+          content:
+            application/scim+json:
+              schema:
+                $ref: "#/components/schemas/ScimListResponse"
+
+  /v1/scim/v2/Users/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      operationId: getScimUser
+      summary: Get a SCIM user
+      tags: [SCIM]
+      security:
+        - scimBearerAuth: []
+      responses:
+        "200":
+          description: SCIM user
+          content:
+            application/scim+json:
+              schema:
+                $ref: "#/components/schemas/ScimUser"
+        "404":
+          description: User not found
+          content:
+            application/scim+json:
+              schema:
+                $ref: "#/components/schemas/ScimError"
+    patch:
+      operationId: patchScimUser
+      summary: Patch a SCIM user
+      tags: [SCIM]
+      security:
+        - scimBearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/scim+json:
+            schema:
+              $ref: "#/components/schemas/ScimPatchOp"
+      responses:
+        "200":
+          description: SCIM user updated
+          content:
+            application/scim+json:
+              schema:
+                $ref: "#/components/schemas/ScimUser"
+        "404":
+          description: User not found
+          content:
+            application/scim+json:
+              schema:
+                $ref: "#/components/schemas/ScimError"
+    put:
+      operationId: replaceScimUser
+      summary: Replace a SCIM user
+      tags: [SCIM]
+      security:
+        - scimBearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/scim+json:
+            schema:
+              $ref: "#/components/schemas/ScimUserInput"
+      responses:
+        "200":
+          description: SCIM user replaced
+          content:
+            application/scim+json:
+              schema:
+                $ref: "#/components/schemas/ScimUser"
+        "404":
+          description: User not found
+          content:
+            application/scim+json:
+              schema:
+                $ref: "#/components/schemas/ScimError"
+    delete:
+      operationId: deleteScimUser
+      summary: Delete a SCIM user
+      tags: [SCIM]
+      security:
+        - scimBearerAuth: []
+      responses:
+        "204":
+          description: SCIM user deleted
+        "404":
+          description: User not found
+          content:
+            application/scim+json:
+              schema:
+                $ref: "#/components/schemas/ScimError"
+
+  /v1/scim/v2/Groups:
+    post:
+      operationId: createScimGroup
+      summary: Create a SCIM group
+      tags: [SCIM]
+      security:
+        - scimBearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/scim+json:
+            schema:
+              $ref: "#/components/schemas/ScimGroupInput"
+      responses:
+        "201":
+          description: SCIM group created
+          content:
+            application/scim+json:
+              schema:
+                $ref: "#/components/schemas/ScimGroup"
+        "400":
+          description: Invalid input
+          content:
+            application/scim+json:
+              schema:
+                $ref: "#/components/schemas/ScimError"
+    get:
+      operationId: listScimGroups
+      summary: List SCIM groups
+      tags: [SCIM]
+      security:
+        - scimBearerAuth: []
+      parameters:
+        - name: startIndex
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: count
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 100
+        - name: filter
+          in: query
+          schema:
+            type: string
+          description: SCIM filter expression
+      responses:
+        "200":
+          description: SCIM group list
+          content:
+            application/scim+json:
+              schema:
+                $ref: "#/components/schemas/ScimListResponse"
+
+  /v1/scim/v2/Groups/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      operationId: getScimGroup
+      summary: Get a SCIM group
+      tags: [SCIM]
+      security:
+        - scimBearerAuth: []
+      responses:
+        "200":
+          description: SCIM group
+          content:
+            application/scim+json:
+              schema:
+                $ref: "#/components/schemas/ScimGroup"
+        "404":
+          description: Group not found
+          content:
+            application/scim+json:
+              schema:
+                $ref: "#/components/schemas/ScimError"
+    patch:
+      operationId: patchScimGroup
+      summary: Patch a SCIM group
+      tags: [SCIM]
+      security:
+        - scimBearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/scim+json:
+            schema:
+              $ref: "#/components/schemas/ScimPatchOp"
+      responses:
+        "200":
+          description: SCIM group updated
+          content:
+            application/scim+json:
+              schema:
+                $ref: "#/components/schemas/ScimGroup"
+        "404":
+          description: Group not found
+          content:
+            application/scim+json:
+              schema:
+                $ref: "#/components/schemas/ScimError"
+    put:
+      operationId: replaceScimGroup
+      summary: Replace a SCIM group
+      tags: [SCIM]
+      security:
+        - scimBearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/scim+json:
+            schema:
+              $ref: "#/components/schemas/ScimGroupInput"
+      responses:
+        "200":
+          description: SCIM group replaced
+          content:
+            application/scim+json:
+              schema:
+                $ref: "#/components/schemas/ScimGroup"
+        "404":
+          description: Group not found
+          content:
+            application/scim+json:
+              schema:
+                $ref: "#/components/schemas/ScimError"
+    delete:
+      operationId: deleteScimGroup
+      summary: Delete a SCIM group
+      tags: [SCIM]
+      security:
+        - scimBearerAuth: []
+      responses:
+        "204":
+          description: SCIM group deleted
+        "404":
+          description: Group not found
+          content:
+            application/scim+json:
+              schema:
+                $ref: "#/components/schemas/ScimError"
+
   /health:
     get:
       operationId: healthCheck
@@ -3188,6 +3546,229 @@ components:
             name:
               type: string
 
+    ScimServiceProviderConfig:
+      type: object
+      properties:
+        schemas:
+          type: array
+          items:
+            type: string
+        patch:
+          type: object
+          properties:
+            supported:
+              type: boolean
+        bulk:
+          type: object
+          properties:
+            supported:
+              type: boolean
+        filter:
+          type: object
+          properties:
+            supported:
+              type: boolean
+            maxResults:
+              type: integer
+        changePassword:
+          type: object
+          properties:
+            supported:
+              type: boolean
+        sort:
+          type: object
+          properties:
+            supported:
+              type: boolean
+        etag:
+          type: object
+          properties:
+            supported:
+              type: boolean
+        authenticationSchemes:
+          type: array
+          items:
+            type: object
+
+    ScimUser:
+      type: object
+      properties:
+        schemas:
+          type: array
+          items:
+            type: string
+        id:
+          type: string
+          format: uuid
+        userName:
+          type: string
+        externalId:
+          type: string
+        name:
+          type: object
+          properties:
+            formatted:
+              type: string
+            givenName:
+              type: string
+            familyName:
+              type: string
+        emails:
+          type: array
+          items:
+            type: object
+            properties:
+              value:
+                type: string
+              primary:
+                type: boolean
+        active:
+          type: boolean
+        meta:
+          type: object
+          properties:
+            resourceType:
+              type: string
+            created:
+              type: string
+              format: date-time
+            lastModified:
+              type: string
+              format: date-time
+
+    ScimUserInput:
+      type: object
+      required: [schemas, userName]
+      properties:
+        schemas:
+          type: array
+          items:
+            type: string
+        userName:
+          type: string
+        externalId:
+          type: string
+        name:
+          type: object
+          properties:
+            givenName:
+              type: string
+            familyName:
+              type: string
+        emails:
+          type: array
+          items:
+            type: object
+            properties:
+              value:
+                type: string
+              primary:
+                type: boolean
+        groups:
+          type: array
+          items:
+            type: object
+            properties:
+              display:
+                type: string
+              value:
+                type: string
+
+    ScimGroup:
+      type: object
+      properties:
+        schemas:
+          type: array
+          items:
+            type: string
+        id:
+          type: string
+          format: uuid
+        displayName:
+          type: string
+        members:
+          type: array
+          items:
+            type: object
+            properties:
+              value:
+                type: string
+              display:
+                type: string
+        meta:
+          type: object
+          properties:
+            resourceType:
+              type: string
+
+    ScimGroupInput:
+      type: object
+      required: [schemas, displayName]
+      properties:
+        schemas:
+          type: array
+          items:
+            type: string
+        displayName:
+          type: string
+        members:
+          type: array
+          items:
+            type: object
+            properties:
+              value:
+                type: string
+
+    ScimPatchOp:
+      type: object
+      properties:
+        schemas:
+          type: array
+          items:
+            type: string
+        Operations:
+          type: array
+          items:
+            type: object
+            properties:
+              op:
+                type: string
+                enum: [add, remove, replace]
+              path:
+                type: string
+              value: {}
+
+    ScimError:
+      type: object
+      required: [schemas, detail, status]
+      properties:
+        schemas:
+          type: array
+          items:
+            type: string
+        detail:
+          type: string
+        status:
+          type: string
+
+    ScimListResponse:
+      type: object
+      properties:
+        schemas:
+          type: array
+          items:
+            type: string
+        totalResults:
+          type: integer
+        startIndex:
+          type: integer
+        itemsPerPage:
+          type: integer
+        Resources:
+          type: array
+          items:
+            type: object
+
   parameters:
     LimitParam:
       name: limit
@@ -3213,3 +3794,9 @@ components:
       description: |
         HMAC-SHA256 signature of the request body using the shared secret.
         Format: sha256=<hex-encoded-signature>
+    scimBearerAuth:
+      type: http
+      scheme: bearer
+      description: |
+        SCIM bearer token generated via POST /v1/sso-configs/{id}/scim-token.
+        Format: Authorization: Bearer scim_{token}
