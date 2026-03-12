@@ -1378,6 +1378,206 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /v1/evidence:
+    get:
+      operationId: listEvidence
+      summary: List evidence records
+      description: List evidence records with pagination support.
+      tags: [Evidence]
+      security:
+        - hmacAuth: []
+      parameters:
+        - $ref: "#/components/parameters/LimitParam"
+        - $ref: "#/components/parameters/OffsetParam"
+      responses:
+        "200":
+          description: Paginated list of evidence records
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/EvidenceRecord"
+                  total:
+                    type: integer
+                  limit:
+                    type: integer
+                  offset:
+                    type: integer
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /v1/evidence/{id}:
+    get:
+      operationId: getEvidence
+      summary: Get an evidence record
+      description: Retrieve a single evidence record by ID.
+      tags: [Evidence]
+      security:
+        - hmacAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Evidence record ID
+      responses:
+        "200":
+          description: Evidence record details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EvidenceRecord"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Evidence record not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /v1/evidence/verify:
+    get:
+      operationId: verifyEvidenceChain
+      summary: Verify evidence chain
+      description: Verify the integrity of the hash-chained evidence log.
+      tags: [Evidence]
+      security:
+        - hmacAuth: []
+      responses:
+        "200":
+          description: Evidence chain verification result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  valid:
+                    type: boolean
+                  totalRecords:
+                    type: integer
+                  details:
+                    type: object
+                    additionalProperties: true
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /v1/reports:
+    post:
+      operationId: generateReport
+      summary: Generate a report
+      description: Queue a new report for generation.
+      tags: [Reports]
+      security:
+        - hmacAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReportRequest"
+      responses:
+        "202":
+          description: Report generation accepted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Report"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    get:
+      operationId: listReports
+      summary: List reports
+      description: List generated reports with pagination.
+      tags: [Reports]
+      security:
+        - hmacAuth: []
+      parameters:
+        - $ref: "#/components/parameters/LimitParam"
+        - $ref: "#/components/parameters/OffsetParam"
+      responses:
+        "200":
+          description: Paginated list of reports
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Report"
+                  total:
+                    type: integer
+                  limit:
+                    type: integer
+                  offset:
+                    type: integer
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /v1/reports/{id}:
+    get:
+      operationId: getReport
+      summary: Get a report
+      description: Retrieve a single report by ID.
+      tags: [Reports]
+      security:
+        - hmacAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Report ID
+      responses:
+        "200":
+          description: Report details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Report"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Report not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /health:
     get:
       operationId: healthCheck
@@ -1921,6 +2121,61 @@ components:
         details:
           description: Additional error context
 
+    EvidenceRecord:
+      type: object
+      required: [id, orgId, type, data, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        orgId:
+          type: string
+        type:
+          type: string
+        data:
+          type: object
+          additionalProperties: true
+        hash:
+          type: string
+        previousHash:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+
+    ReportRequest:
+      type: object
+      required: [type]
+      properties:
+        type:
+          type: string
+        frameworkId:
+          type: string
+        parameters:
+          type: object
+          additionalProperties: true
+
+    Report:
+      type: object
+      required: [id, orgId, type, status]
+      properties:
+        id:
+          type: string
+          format: uuid
+        orgId:
+          type: string
+        type:
+          type: string
+        status:
+          type: string
+          enum: [pending, generating, completed, failed]
+        data:
+          type: object
+          additionalProperties: true
+        createdAt:
+          type: string
+          format: date-time
+
     ComplianceFramework:
       type: object
       required: [id, slug, name, version]
@@ -2026,6 +2281,23 @@ components:
         createdAt:
           type: string
           format: date-time
+
+  parameters:
+    LimitParam:
+      name: limit
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 50
+    OffsetParam:
+      name: offset
+      in: query
+      schema:
+        type: integer
+        minimum: 0
+        default: 0
 
   securitySchemes:
     hmacAuth:
