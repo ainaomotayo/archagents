@@ -755,6 +755,41 @@ app.get("/v1/audit", { preHandler: authHook }, async (request) => {
   });
 });
 
+// --- Fingerprint Corpus Admin ---
+app.get("/v1/admin/fingerprints/stats", { preHandler: authHook }, async () => {
+  const [total, byEcosystem] = await Promise.all([
+    db.ossFingerprint.count(),
+    db.ossFingerprint.groupBy({ by: ["ecosystem"], _count: true }),
+  ]);
+  return {
+    total,
+    byEcosystem: byEcosystem.map((e) => ({ ecosystem: e.ecosystem, count: e._count })),
+  };
+});
+
+app.post("/v1/admin/fingerprints/seed", { preHandler: authHook }, async (request, reply) => {
+  const body = request.body as { fingerprints: Array<Record<string, unknown>> };
+  if (!body?.fingerprints?.length) {
+    reply.code(400).send({ error: "Request body must include fingerprints array" });
+    return;
+  }
+  const created = await db.ossFingerprint.createMany({
+    data: body.fingerprints.map((fp) => ({
+      hash: String(fp.hash),
+      sourceUrl: String(fp.source_url ?? fp.sourceUrl ?? ""),
+      packageName: String(fp.package_name ?? fp.packageName ?? ""),
+      packageVersion: fp.package_version ?? fp.packageVersion ?? null,
+      ecosystem: String(fp.ecosystem ?? ""),
+      spdxLicense: fp.spdx_license ?? fp.spdxLicense ?? null,
+      filePath: fp.file_path ?? fp.filePath ?? null,
+      lineStart: fp.line_start ?? fp.lineStart ?? null,
+      lineEnd: fp.line_end ?? fp.lineEnd ?? null,
+    })) as any,
+    skipDuplicates: true,
+  });
+  return { inserted: created.count, total: await db.ossFingerprint.count() };
+});
+
 // --- DLQ monitoring ---
 app.get("/v1/admin/dlq", { preHandler: authHook }, async () => {
   const depth = await getDlqDepth(redis, "sentinel.findings.dlq");
