@@ -38,5 +38,43 @@ export function buildGapAnalysisRoutes(deps: GapAnalysisRouteDeps) {
     return computeGapAnalysis(framework, findings, attestations, remediations);
   }
 
-  return { computeGaps };
+  async function exportGaps(orgId: string, frameworkSlug: string, format: "json" | "csv" = "json") {
+    const analysis = await computeGaps(orgId, frameworkSlug);
+    if (format === "csv") {
+      const header = "controlCode,controlName,severity,gapType,currentScore,requirementType,regulatoryStatus\n";
+      const rows = analysis.gaps.map((g: any) =>
+        [g.controlCode, `"${g.controlName}"`, g.severity, g.gapType, g.currentScore, g.requirementType ?? "", g.regulatoryStatus ?? ""].join(","),
+      );
+      return { contentType: "text/csv", data: header + rows.join("\n") };
+    }
+    return { contentType: "application/json", data: analysis };
+  }
+
+  async function getDashboard(orgId: string) {
+    const results: Record<string, any> = {};
+    for (const [slug, framework] of FRAMEWORK_MAP) {
+      try {
+        results[slug] = await computeGaps(orgId, slug);
+      } catch {
+        // Framework may have no data yet — skip
+      }
+    }
+
+    const frameworks = Object.entries(results).map(([slug, analysis]: [string, any]) => ({
+      slug,
+      name: FRAMEWORK_MAP.get(slug)?.name ?? slug,
+      overallScore: analysis.overallScore,
+      gapCount: analysis.gaps.length,
+      summary: analysis.summary,
+    }));
+
+    const totalGaps = frameworks.reduce((sum, f) => sum + f.gapCount, 0);
+    const avgScore = frameworks.length > 0
+      ? frameworks.reduce((sum, f) => sum + f.overallScore, 0) / frameworks.length
+      : 0;
+
+    return { frameworks, totalGaps, averageScore: avgScore, frameworkCount: frameworks.length };
+  }
+
+  return { computeGaps, exportGaps, getDashboard };
 }

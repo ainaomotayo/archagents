@@ -49,6 +49,9 @@ export const API_PERMISSIONS: EndpointPermission[] = [
   { method: "DELETE", path: "/v1/compliance/attestations/:id", roles: ["admin"] },
   // Gap Analysis
   { method: "GET", path: "/v1/compliance/gaps/:frameworkSlug", roles: ["admin", "manager"] },
+  { method: "GET", path: "/v1/compliance/gaps/:frameworkSlug/export", roles: ["admin", "manager"] },
+  // Dashboard
+  { method: "GET", path: "/v1/compliance/dashboard", roles: ["admin", "manager", "developer"] },
   // Remediations
   { method: "POST", path: "/v1/compliance/remediations", roles: ["admin", "manager"] },
   { method: "GET", path: "/v1/compliance/remediations", roles: ["admin", "manager", "developer"] },

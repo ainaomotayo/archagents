@@ -56,4 +56,30 @@ describe("buildGapAnalysisRoutes", () => {
       expect.objectContaining({ where: expect.objectContaining({ orgId: "org-1", frameworkSlug: "hipaa" }) }),
     );
   });
+
+  describe("exportGaps", () => {
+    it("exports as JSON by default", async () => {
+      const result = await routes.exportGaps("org-1", "hipaa");
+      expect(result.contentType).toBe("application/json");
+      expect(result.data).toHaveProperty("frameworkSlug", "hipaa");
+    });
+
+    it("exports as CSV", async () => {
+      const result = await routes.exportGaps("org-1", "hipaa", "csv");
+      expect(result.contentType).toBe("text/csv");
+      expect(typeof result.data).toBe("string");
+      expect(result.data).toContain("controlCode,controlName,severity");
+    });
+  });
+
+  describe("getDashboard", () => {
+    it("returns dashboard with all frameworks", async () => {
+      const result = await routes.getDashboard("org-1");
+      expect(result).toHaveProperty("frameworks");
+      expect(result).toHaveProperty("totalGaps");
+      expect(result).toHaveProperty("averageScore");
+      expect(result).toHaveProperty("frameworkCount");
+      expect(result.frameworkCount).toBeGreaterThanOrEqual(9);
+    });
+  });
 });

@@ -937,10 +937,32 @@ app.get("/v1/compliance/trends/:frameworkId", { preHandler: authHook }, async (r
 });
 
 // --- Gap Analysis ---
+app.get("/v1/compliance/gaps/:frameworkSlug/export", { preHandler: authHook }, async (request, reply) => {
+  const orgId = (request as any).orgId ?? "default";
+  const { frameworkSlug } = request.params as { frameworkSlug: string };
+  const { format } = request.query as { format?: string };
+  try {
+    const result = await withTenant(db, orgId, () =>
+      gapRoutes.exportGaps(orgId, frameworkSlug, (format === "csv" ? "csv" : "json") as any),
+    );
+    if (result.contentType === "text/csv") {
+      reply.header("Content-Type", "text/csv");
+      reply.header("Content-Disposition", `attachment; filename="${frameworkSlug}-gaps.csv"`);
+      return result.data;
+    }
+    return result.data;
+  } catch (err: any) { reply.code(400).send({ error: err.message }); }
+});
+
 app.get("/v1/compliance/gaps/:frameworkSlug", { preHandler: authHook }, async (request) => {
   const orgId = (request as any).orgId ?? "default";
   const { frameworkSlug } = request.params as { frameworkSlug: string };
   return withTenant(db, orgId, () => gapRoutes.computeGaps(orgId, frameworkSlug));
+});
+
+app.get("/v1/compliance/dashboard", { preHandler: authHook }, async (request) => {
+  const orgId = (request as any).orgId ?? "default";
+  return withTenant(db, orgId, () => gapRoutes.getDashboard(orgId));
 });
 
 // --- Remediations ---
