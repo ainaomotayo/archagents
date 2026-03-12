@@ -27,6 +27,9 @@ model Organization {
   scimSyncState    ScimSyncState?
   approvalPolicies ApprovalPolicy[]
   approvalGates    ApprovalGate[]
+  controlAttestations        ControlAttestation[]
+  remediationItems           RemediationItem[]
+  businessAssociateAgreements BusinessAssociateAgreement[]
 
   @@map("organizations")
 }
@@ -556,4 +559,92 @@ model NotificationRule {
 
   @@index([orgId, enabled])
   @@map("notification_rules")
+}
+
+// --- Compliance Attestation & Remediation ---
+
+model ControlAttestation {
+  id              String    @id @default(uuid()) @db.Uuid
+  orgId           String    @map("org_id") @db.Uuid
+  frameworkSlug   String    @map("framework_slug")
+  controlCode     String    @map("control_code")
+  attestedBy      String    @map("attested_by")
+  attestationType String    @map("attestation_type")
+  justification   String
+  evidenceUrls    String[]  @map("evidence_urls")
+  validFrom       DateTime  @map("valid_from")
+  expiresAt       DateTime  @map("expires_at")
+  revokedAt       DateTime? @map("revoked_at")
+  revokedBy       String?   @map("revoked_by")
+  revokedReason   String?   @map("revoked_reason")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  history      AttestationHistory[]
+  organization Organization @relation(fields: [orgId], references: [id])
+
+  @@unique([orgId, frameworkSlug, controlCode])
+  @@index([orgId, expiresAt])
+  @@map("control_attestations")
+}
+
+model AttestationHistory {
+  id             String   @id @default(uuid()) @db.Uuid
+  attestationId  String   @map("attestation_id") @db.Uuid
+  action         String
+  actorId        String   @map("actor_id")
+  previousState  Json?    @map("previous_state")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  attestation ControlAttestation @relation(fields: [attestationId], references: [id])
+
+  @@index([attestationId])
+  @@map("attestation_history")
+}
+
+model RemediationItem {
+  id               String    @id @default(uuid()) @db.Uuid
+  orgId            String    @map("org_id") @db.Uuid
+  frameworkSlug    String    @map("framework_slug")
+  controlCode      String    @map("control_code")
+  title            String
+  description      String
+  status           String    @default("open")
+  priority         String    @default("medium")
+  assignedTo       String?   @map("assigned_to")
+  dueDate          DateTime? @map("due_date")
+  completedAt      DateTime? @map("completed_at")
+  completedBy      String?   @map("completed_by")
+  evidenceNotes    String?   @map("evidence_notes")
+  linkedFindingIds String[]  @map("linked_finding_ids")
+  createdBy        String    @map("created_by")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+
+  organization Organization @relation(fields: [orgId], references: [id])
+
+  @@index([orgId, frameworkSlug, status])
+  @@index([orgId, dueDate])
+  @@map("remediation_items")
+}
+
+model BusinessAssociateAgreement {
+  id              String    @id @default(uuid()) @db.Uuid
+  orgId           String    @map("org_id") @db.Uuid
+  vendorName      String    @map("vendor_name")
+  vendorContact   String    @map("vendor_contact")
+  agreementDate   DateTime  @map("agreement_date")
+  expiresAt       DateTime  @map("expires_at")
+  documentUrl     String?   @map("document_url")
+  status          String    @default("active")
+  coveredServices String[]  @map("covered_services")
+  reviewedBy      String    @map("reviewed_by")
+  reviewedAt      DateTime  @map("reviewed_at")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  organization Organization @relation(fields: [orgId], references: [id])
+
+  @@index([orgId, status])
+  @@map("business_associate_agreements")
 }
