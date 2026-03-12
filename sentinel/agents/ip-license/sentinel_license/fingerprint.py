@@ -27,14 +27,35 @@ _AST_LANGUAGES = {
 KNOWN_OSS_HASHES: dict[str, tuple[str, str]] = {}
 
 
+def _resolve_data_path(filename: str) -> str:
+    """Resolve path to a data file, supporting both dev and Docker layouts.
+
+    Checks (in order):
+    1. SENTINEL_DATA_DIR env var (explicit override for Docker/k8s)
+    2. Relative to source: ``sentinel_license/../data/``  (dev / editable install)
+    3. ``/app/data/`` (Docker fallback via shared agent.Dockerfile)
+    """
+    env_dir = os.environ.get("SENTINEL_DATA_DIR")
+    if env_dir:
+        return os.path.join(env_dir, filename)
+
+    dev_path = os.path.join(os.path.dirname(__file__), "..", "data", filename)
+    if os.path.exists(dev_path):
+        return dev_path
+
+    # Docker: shared agent.Dockerfile puts agent at /app/agent/
+    docker_path = os.path.join("/app", "agent", "data", filename)
+    if os.path.exists(docker_path):
+        return docker_path
+
+    # Default to dev path (will create new DB if needed)
+    return dev_path
+
+
 def _init_fingerprint_db() -> FingerprintDB:
     """Load the SQLite fingerprint DB, falling back to JSON import."""
-    db_path = os.path.join(
-        os.path.dirname(__file__), "..", "data", "oss_fingerprints.db"
-    )
-    json_path = os.path.join(
-        os.path.dirname(__file__), "..", "data", "oss_fingerprints.json"
-    )
+    db_path = _resolve_data_path("oss_fingerprints.db")
+    json_path = _resolve_data_path("oss_fingerprints.json")
     if os.path.exists(db_path):
         return FingerprintDB(db_path)
     # Create DB and import from legacy JSON if available

@@ -110,9 +110,8 @@ def cli_sync() -> None:
         print("ERROR: DATABASE_URL environment variable is required", file=sys.stderr)
         sys.exit(1)
 
-    output_path = os.path.join(
-        os.path.dirname(__file__), "..", "data", "oss_fingerprints.db"
-    )
+    from sentinel_license.fingerprint import _resolve_data_path
+    output_path = _resolve_data_path("oss_fingerprints.db")
 
     try:
         import psycopg2
