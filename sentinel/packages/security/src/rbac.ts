@@ -41,6 +41,24 @@ export const API_PERMISSIONS: EndpointPermission[] = [
   { method: "GET", path: "/v1/compliance/assess/:frameworkId", roles: ["admin", "manager", "developer"] },
   { method: "GET", path: "/v1/compliance/scores", roles: ["admin", "manager", "developer", "viewer"] },
   { method: "GET", path: "/v1/compliance/trends/:frameworkId", roles: ["admin", "manager", "developer", "viewer"] },
+  // Attestations
+  { method: "POST", path: "/v1/compliance/attestations", roles: ["admin", "manager"] },
+  { method: "GET", path: "/v1/compliance/attestations", roles: ["admin", "manager", "developer"] },
+  { method: "GET", path: "/v1/compliance/attestations/expiring", roles: ["admin", "manager"] },
+  { method: "GET", path: "/v1/compliance/attestations/:id", roles: ["admin", "manager", "developer"] },
+  { method: "DELETE", path: "/v1/compliance/attestations/:id", roles: ["admin"] },
+  // Gap Analysis
+  { method: "GET", path: "/v1/compliance/gaps/:frameworkSlug", roles: ["admin", "manager"] },
+  // Remediations
+  { method: "POST", path: "/v1/compliance/remediations", roles: ["admin", "manager"] },
+  { method: "GET", path: "/v1/compliance/remediations", roles: ["admin", "manager", "developer"] },
+  { method: "GET", path: "/v1/compliance/remediations/overdue", roles: ["admin", "manager"] },
+  { method: "PATCH", path: "/v1/compliance/remediations/:id", roles: ["admin", "manager"] },
+  // Business Associate Agreements
+  { method: "POST", path: "/v1/compliance/baa", roles: ["admin"] },
+  { method: "GET", path: "/v1/compliance/baa", roles: ["admin", "manager"] },
+  { method: "PATCH", path: "/v1/compliance/baa/:id", roles: ["admin"] },
+  { method: "DELETE", path: "/v1/compliance/baa/:id", roles: ["admin"] },
   { method: "GET", path: "/v1/evidence", roles: ["admin", "manager"] },
   { method: "GET", path: "/v1/evidence/:id", roles: ["admin", "manager"] },
   { method: "GET", path: "/v1/evidence/verify", roles: ["admin"] },
