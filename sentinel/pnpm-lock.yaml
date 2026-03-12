@@ -65,6 +65,9 @@ importers:
       '@sentinel/telemetry':
         specifier: workspace:*
         version: link:../../packages/telemetry
+      '@sentinel/vcs':
+        specifier: workspace:*
+        version: link:../../packages/vcs
       '@types/node-cron':
         specifier: ^3.0.11
         version: 3.0.11
@@ -446,10 +449,16 @@ importers:
       '@gitbeaker/rest':
         specifier: ^40.5.0
         version: 40.6.0
+      '@sentinel/github':
+        specifier: workspace:*
+        version: link:../github
       '@sentinel/shared':
         specifier: workspace:*
         version: link:../shared
     devDependencies:
+      ioredis:
+        specifier: ^5.6
+        version: 5.10.0
       typescript:
         specifier: ^5.7
         version: 5.9.3
@@ -6740,14 +6749,6 @@ snapshots:
       chai: 6.2.2
       tinyrainbow: 3.0.3
 
-  '@vitest/mocker@3.2.4(vite@7.3.1(@types/node@22.19.15)(jiti@2.6.1)(lightningcss@1.31.1)(tsx@4.21.0)(yaml@2.8.2))':
-    dependencies:
-      '@vitest/spy': 3.2.4
-      estree-walker: 3.0.3
-      magic-string: 0.30.21
-    optionalDependencies:
-      vite: 7.3.1(@types/node@22.19.15)(jiti@2.6.1)(lightningcss@1.31.1)(tsx@4.21.0)(yaml@2.8.2)
-
   '@vitest/mocker@3.2.4(vite@7.3.1(@types/node@25.3.5)(jiti@2.6.1)(lightningcss@1.31.1)(tsx@4.21.0)(yaml@2.8.2))':
     dependencies:
       '@vitest/spy': 3.2.4
@@ -8436,7 +8437,7 @@ snapshots:
     dependencies:
       '@types/chai': 5.2.3
       '@vitest/expect': 3.2.4
-      '@vitest/mocker': 3.2.4(vite@7.3.1(@types/node@22.19.15)(jiti@2.6.1)(lightningcss@1.31.1)(tsx@4.21.0)(yaml@2.8.2))
+      '@vitest/mocker': 3.2.4(vite@7.3.1(@types/node@25.3.5)(jiti@2.6.1)(lightningcss@1.31.1)(tsx@4.21.0)(yaml@2.8.2))
       '@vitest/pretty-format': 3.2.4
       '@vitest/runner': 3.2.4
       '@vitest/snapshot': 3.2.4
