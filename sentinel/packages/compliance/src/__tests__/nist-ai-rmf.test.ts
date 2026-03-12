@@ -16,8 +16,8 @@ describe("NIST AI RMF framework", () => {
     expect(topLevelCodes).toEqual(new Set(["GV", "MP", "MS", "MG"]));
   });
 
-  it("has at least 60 controls", () => {
-    expect(NIST_AI_RMF.controls.length).toBeGreaterThanOrEqual(60);
+  it("has exactly 83 controls", () => {
+    expect(NIST_AI_RMF.controls.length).toBe(83);
   });
 
   it("every control has a requirementType", () => {

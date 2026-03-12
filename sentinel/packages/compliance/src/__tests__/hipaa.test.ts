@@ -16,8 +16,8 @@ describe("HIPAA Security Rule framework", () => {
     expect(prefixes).toEqual(new Set(["AS", "PS", "TS"]));
   });
 
-  it("has at least 50 controls", () => {
-    expect(HIPAA.controls.length).toBeGreaterThanOrEqual(50);
+  it("has exactly 75 controls", () => {
+    expect(HIPAA.controls.length).toBe(75);
   });
 
   it("every control has a requirementType", () => {
