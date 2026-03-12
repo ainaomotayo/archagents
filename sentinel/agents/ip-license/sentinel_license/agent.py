@@ -5,6 +5,7 @@ from __future__ import annotations
 from sentinel_agents.base import BaseAgent
 from sentinel_agents.types import Confidence, DiffEvent, Finding, Severity
 
+from sentinel_license.evidence import EvidenceChain, ProvenanceEvent
 from sentinel_license.fingerprint import fingerprint_code
 from sentinel_license.spdx_detector import (
     check_compatibility,
@@ -19,20 +20,52 @@ class LicenseAgent(BaseAgent):
     ruleset_version = "rules-2026.03.11-a"
     ruleset_hash = "sha256:license-v2"
 
+    last_evidence_chain: EvidenceChain | None = None
+
     def process(self, event: DiffEvent) -> list[Finding]:
         findings: list[Finding] = []
+        chain = EvidenceChain(org_id=event.scan_id, scan_id=event.scan_id)
 
         # 1. SPDX license header detection
         policy = event.scan_config.license_policy
         license_findings = detect_licenses(event, allowed_policy=policy)
         findings.extend(license_findings)
+        for f in license_findings:
+            chain.append(ProvenanceEvent(
+                event_type="license_detection",
+                data={
+                    "licenseDetected": f.extra.get("licenseDetected", f.title),
+                    "file": f.file,
+                    "line": f.line_start,
+                },
+            ))
 
         # 2. Code fingerprinting against known OSS
-        findings.extend(fingerprint_code(event))
+        fp_findings = fingerprint_code(event)
+        findings.extend(fp_findings)
+        for f in fp_findings:
+            chain.append(ProvenanceEvent(
+                event_type="fingerprint_match",
+                data={
+                    "source": f.extra.get("source", ""),
+                    "similarity": f.extra.get("similarity", 0),
+                    "license": f.extra.get("license", ""),
+                },
+            ))
 
         # 3. License conflict detection across detected licenses
-        findings.extend(self._check_license_conflicts(license_findings))
+        conflict_findings = self._check_license_conflicts(license_findings)
+        findings.extend(conflict_findings)
+        for f in conflict_findings:
+            chain.append(ProvenanceEvent(
+                event_type="license_conflict",
+                data={
+                    "license_a": f.extra.get("license_a", ""),
+                    "license_b": f.extra.get("license_b", ""),
+                },
+            ))
 
+        self.last_evidence_chain = chain
         return findings
 
     def _check_license_conflicts(self, license_findings: list[Finding]) -> list[Finding]:

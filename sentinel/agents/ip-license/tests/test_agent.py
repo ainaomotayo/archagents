@@ -76,3 +76,30 @@ def test_run_scan_returns_finding_event():
     assert result.agent_name == "ip-license"
     assert result.status == "completed"
     assert result.duration_ms >= 0
+
+
+def test_agent_produces_evidence_chain():
+    event = _make_event("+# Licensed under GNU General Public License\n")
+    agent = LicenseAgent()
+    result = agent.run_scan(event)
+    assert result.status == "completed"
+    evidence = agent.last_evidence_chain
+    assert evidence is not None
+    assert len(evidence.records) > 0
+    assert evidence.verify() is True
+    assert evidence.records[0].prev_hash is None  # genesis
+
+
+def test_evidence_chain_links_multiple_findings():
+    # Code with both GPL license header AND enough lines for fingerprinting
+    lines = ["+# Licensed under GNU General Public License"]
+    lines.extend([f"+def func_{i}(): return {i}" for i in range(12)])
+    code = "\n".join(lines) + "\n"
+    agent = LicenseAgent()
+    result = agent.run_scan(_make_event(code))
+    assert result.status == "completed"
+    chain = agent.last_evidence_chain
+    assert chain is not None
+    if len(chain.records) >= 2:
+        assert chain.records[1].prev_hash == chain.records[0].hash
+    assert chain.verify() is True
