@@ -51,7 +51,7 @@ class TestModelProvenance:
         )
         findings = check_model_provenance(files)
         assert len(findings) == 1
-        assert findings[0].category == "provenance-gap"
+        assert findings[0].category == "ai-detection/provenance-gap"
         assert findings[0].type == "ai-detection"
         assert findings[0].severity == Severity.HIGH
 
@@ -121,7 +121,7 @@ class TestBiasIndicators:
         )
         findings = check_bias_indicators(files)
         assert len(findings) == 1
-        assert findings[0].category == "bias-indicator"
+        assert findings[0].category == "ai-detection/bias-indicator"
         assert findings[0].severity == Severity.HIGH
 
     def test_no_flag_when_fairness_present(self):
@@ -189,7 +189,7 @@ class TestOversightGaps:
         )
         findings = check_oversight_gaps(files)
         assert len(findings) == 1
-        assert findings[0].category == "oversight-gap"
+        assert findings[0].category == "ai-detection/oversight-gap"
         assert findings[0].severity == Severity.CRITICAL
 
     def test_no_flag_when_human_review_present(self):

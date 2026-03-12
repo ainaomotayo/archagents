@@ -73,7 +73,7 @@ class TestHipaaCves:
         findings = [_make_finding(cwe_id="CWE-311")]
         result = check_hipaa_cves(findings)
         assert len(result) == 1
-        assert result[0].category == "hipaa-cve"
+        assert result[0].category == "dependency/hipaa-cve"
         assert result[0].severity in (Severity.CRITICAL, Severity.HIGH)
 
     def test_flags_cwe_306_missing_auth(self):
@@ -128,7 +128,7 @@ class TestAISupplyChain:
         )
         findings = check_ai_supply_chain(files)
         assert len(findings) == 1
-        assert findings[0].category == "ai-supply-chain"
+        assert findings[0].category == "dependency/ai-supply-chain"
         assert "torch" in findings[0].title
 
     def test_no_flag_for_pinned_version(self):
@@ -187,7 +187,7 @@ class TestPHILicenseRisk:
         )
         findings = check_phi_license_risk(files)
         assert len(findings) == 1
-        assert findings[0].category == "phi-license-risk"
+        assert findings[0].category == "dependency/phi-license-risk"
         assert findings[0].severity == Severity.HIGH
 
     def test_flags_agpl_as_critical(self):

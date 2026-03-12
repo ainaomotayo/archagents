@@ -1008,6 +1008,12 @@ app.get("/v1/compliance/baa", { preHandler: authHook }, async (request) => {
   return withTenant(db, orgId, () => baaRoutes.list(orgId));
 });
 
+app.get("/v1/compliance/baa/expiring", { preHandler: authHook }, async (request) => {
+  const orgId = (request as any).orgId ?? "default";
+  const { days } = request.query as { days?: string };
+  return withTenant(db, orgId, () => baaRoutes.getExpiring(orgId, days ? parseInt(days) : 30));
+});
+
 app.patch("/v1/compliance/baa/:id", { preHandler: authHook }, async (request, reply) => {
   const orgId = (request as any).orgId ?? "default";
   const { id } = request.params as { id: string };

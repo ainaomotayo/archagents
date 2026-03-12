@@ -57,9 +57,9 @@ export function computeGapAnalysis(
     totalWeight += control.weight;
     weightedScore += scored.score * control.weight;
 
-    if (scored.score >= 0.8) {
+    if (scored.score >= 0.95) {
       summary.compliant++;
-    } else if (scored.score > 0 && scored.score < 0.8) {
+    } else if (scored.score > 0 && scored.score < 0.95) {
       summary.partiallyCompliant++;
       gaps.push(buildGapItem(control, scored, remediations[control.code] ?? null));
     } else {

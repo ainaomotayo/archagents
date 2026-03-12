@@ -42,6 +42,23 @@ export class AttestationService {
       DEFAULT_CADENCE_DAYS;
     const expiresAt = new Date(now.getTime() + cadence * 86_400_000);
 
+    // If an expired (but not revoked) attestation exists, replace it
+    const existing = await this.db.controlAttestation.findFirst({
+      where: {
+        orgId,
+        frameworkSlug: input.frameworkSlug,
+        controlCode: input.controlCode,
+        revokedAt: null,
+      },
+    });
+    if (existing && existing.expiresAt < now) {
+      // Expire the old one by soft-revoking
+      await this.db.controlAttestation.update({
+        where: { id: existing.id },
+        data: { revokedAt: now, revokedBy: input.attestedBy, revokedReason: "Superseded by new attestation" },
+      });
+    }
+
     const attestation = await this.db.controlAttestation.create({
       data: {
         orgId,

@@ -71,4 +71,15 @@ describe("buildBAARoutes", () => {
     mockDb.businessAssociateAgreement.findUnique.mockResolvedValue({ id: "baa-1", orgId: "org-other", status: "active" });
     await expect(routes.terminate("org-1", "baa-1")).rejects.toThrow("BAA not found");
   });
+
+  it("gets expiring BAAs", async () => {
+    mockDb.businessAssociateAgreement.findMany.mockResolvedValue([
+      { id: "baa-1", vendorName: "Expiring Vendor", expiresAt: new Date(Date.now() + 15 * 86400000) },
+    ]);
+    const result = await routes.getExpiring("org-1", 30);
+    expect(result).toHaveLength(1);
+    expect(mockDb.businessAssociateAgreement.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: expect.objectContaining({ orgId: "org-1", status: "active" }) }),
+    );
+  });
 });

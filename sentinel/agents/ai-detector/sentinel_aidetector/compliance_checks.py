@@ -3,7 +3,7 @@
 These functions analyze code for AI governance gaps including model provenance,
 bias indicators, and human oversight requirements.
 
-Finding categories:
+Finding categories (namespaced to match framework matchRules):
 - ai-detection/provenance-gap
 - ai-detection/bias-indicator
 - ai-detection/oversight-gap
@@ -13,24 +13,7 @@ from __future__ import annotations
 
 import re
 
-from sentinel_agents.types import Confidence, DiffFile, Finding, Severity
-
-
-# -------------------------------------------------------------------------
-# Shared helpers
-# -------------------------------------------------------------------------
-
-def _extract_added_code(diff_file: DiffFile) -> str:
-    """Reconstruct added code from diff hunks."""
-    lines: list[str] = []
-    for hunk in diff_file.hunks:
-        for line in hunk.content.split("\n"):
-            if line.startswith("+") and not line.startswith("+++"):
-                lines.append(line[1:])
-            elif not line.startswith("-") and not line.startswith("---"):
-                if not line.startswith("@@"):
-                    lines.append(line)
-    return "\n".join(lines)
+from sentinel_agents.types import Confidence, DiffFile, Finding, Severity, extract_added_code as _extract_added_code
 
 
 def _uses_ai_models(code: str) -> bool:
@@ -123,7 +106,7 @@ def check_model_provenance(files: list[DiffFile]) -> list[Finding]:
                     "Consider using a model registry (MLflow, W&B) or pinning "
                     "the revision parameter in from_pretrained() calls."
                 ),
-                category="provenance-gap",
+                category="ai-detection/provenance-gap",
                 scanner="ai-detector",
                 extra={
                     "nist_controls": ["GOVERN-1.5", "MAP-2.3", "MANAGE-1.3"],
@@ -224,7 +207,7 @@ def check_bias_indicators(files: list[DiffFile]) -> list[Finding]:
                     "to assess demographic parity, equalized odds, and disparate impact. "
                     "Document bias testing results and mitigation strategies."
                 ),
-                category="bias-indicator",
+                category="ai-detection/bias-indicator",
                 scanner="ai-detector",
                 extra={
                     "matched_attributes": matched_attributes,
@@ -327,7 +310,7 @@ def check_oversight_gaps(files: list[DiffFile]) -> list[Finding]:
                     "manual review, create escalation paths, and maintain audit "
                     "trails for all AI-assisted decisions."
                 ),
-                category="oversight-gap",
+                category="ai-detection/oversight-gap",
                 scanner="ai-detector",
                 extra={
                     "nist_controls": ["MANAGE-2.2", "MANAGE-2.4", "GOVERN-1.4"],

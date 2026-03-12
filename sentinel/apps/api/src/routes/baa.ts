@@ -24,5 +24,9 @@ export function buildBAARoutes(deps: BAARouteDeps) {
     return service.terminate(orgId, id);
   }
 
-  return { register, list, update, terminate };
+  async function getExpiring(orgId: string, days: number = 30) {
+    return service.getExpiring(orgId, days);
+  }
+
+  return { register, list, update, terminate, getExpiring };
 }

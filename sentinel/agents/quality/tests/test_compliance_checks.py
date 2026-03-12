@@ -52,7 +52,7 @@ class TestAIDocumentation:
         )
         findings = check_ai_documentation(files)
         assert len(findings) == 1
-        assert findings[0].category == "ai-documentation-gap"
+        assert findings[0].category == "quality/ai-documentation-gap"
         assert findings[0].type == "quality"
         assert findings[0].severity == Severity.MEDIUM
 
@@ -99,7 +99,7 @@ class TestDataGovernance:
         )
         findings = check_data_governance(files)
         assert len(findings) == 1
-        assert findings[0].category == "data-governance-gap"
+        assert findings[0].category == "quality/data-governance-gap"
         assert "164.312(c)(1)" in findings[0].extra["hipaa_controls"]
 
     def test_no_flag_when_classification_present(self):
@@ -142,7 +142,7 @@ class TestAITestCoverage:
         )
         findings = check_ai_test_coverage(files)
         assert len(findings) == 1
-        assert findings[0].category == "ai-test-coverage-gap"
+        assert findings[0].category == "quality/ai-test-coverage-gap"
         assert findings[0].severity == Severity.HIGH
 
     def test_no_flag_when_ml_tests_present(self):
@@ -188,7 +188,7 @@ class TestAccessDocumentation:
         )
         findings = check_access_documentation(files)
         assert len(findings) == 1
-        assert findings[0].category == "access-documentation-gap"
+        assert findings[0].category == "quality/access-documentation-gap"
 
     def test_no_flag_when_access_docs_present(self):
         files = _make_files(

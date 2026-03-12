@@ -61,6 +61,7 @@ export const API_PERMISSIONS: EndpointPermission[] = [
   // Business Associate Agreements
   { method: "POST", path: "/v1/compliance/baa", roles: ["admin"] },
   { method: "GET", path: "/v1/compliance/baa", roles: ["admin", "manager"] },
+  { method: "GET", path: "/v1/compliance/baa/expiring", roles: ["admin", "manager"] },
   { method: "PATCH", path: "/v1/compliance/baa/:id", roles: ["admin"] },
   { method: "DELETE", path: "/v1/compliance/baa/:id", roles: ["admin"] },
   { method: "GET", path: "/v1/evidence", roles: ["admin", "manager"] },

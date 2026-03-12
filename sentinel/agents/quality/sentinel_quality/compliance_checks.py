@@ -3,7 +3,7 @@
 These functions scan diff content for documentation and governance gaps
 relevant to NIST AI RMF (MAP, MEASURE, MANAGE) and HIPAA compliance.
 
-Finding categories:
+Finding categories (namespaced to match framework matchRules):
 - quality/ai-documentation-gap
 - quality/data-governance-gap
 - quality/ai-test-coverage-gap
@@ -15,24 +15,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 
-from sentinel_agents.types import Confidence, DiffFile, Finding, Severity
-
-
-# -------------------------------------------------------------------------
-# Shared helpers
-# -------------------------------------------------------------------------
-
-def _extract_added_code(diff_file: DiffFile) -> str:
-    """Reconstruct added code from diff hunks."""
-    lines: list[str] = []
-    for hunk in diff_file.hunks:
-        for line in hunk.content.split("\n"):
-            if line.startswith("+") and not line.startswith("+++"):
-                lines.append(line[1:])
-            elif not line.startswith("-") and not line.startswith("---"):
-                if not line.startswith("@@"):
-                    lines.append(line)
-    return "\n".join(lines)
+from sentinel_agents.types import Confidence, DiffFile, Finding, Severity, extract_added_code as _extract_added_code
 
 
 def _is_ai_ml_file(path: str) -> bool:
@@ -132,7 +115,7 @@ def check_ai_documentation(files: list[DiffFile]) -> list[Finding]:
                         "including: intended use, limitations, training data provenance, "
                         "performance metrics, and ethical considerations."
                     ),
-                    category="ai-documentation-gap",
+                    category="quality/ai-documentation-gap",
                     scanner="quality-agent",
                     extra={"nist_controls": ["MAP-1.1", "MAP-1.5", "GOVERN-1.1"]},
                 )
@@ -213,7 +196,7 @@ def check_data_governance(files: list[DiffFile]) -> list[Finding]:
                     "document retention policies, and include data lineage references. "
                     "For HIPAA, ensure ePHI access is logged and data flows are documented."
                 ),
-                category="data-governance-gap",
+                category="quality/data-governance-gap",
                 scanner="quality-agent",
                 extra={
                     "hipaa_controls": ["164.312(c)(1)", "164.530(j)"],
@@ -301,7 +284,7 @@ def check_ai_test_coverage(files: list[DiffFile]) -> list[Finding]:
                         "(e.g., demographic parity, equalized odds), robustness to "
                         "adversarial inputs, and performance benchmarks."
                     ),
-                    category="ai-test-coverage-gap",
+                    category="quality/ai-test-coverage-gap",
                     scanner="quality-agent",
                     extra={
                         "nist_controls": ["MEASURE-1.1", "MEASURE-2.6", "MEASURE-2.11"],
@@ -386,7 +369,7 @@ def check_access_documentation(files: list[DiffFile]) -> list[Finding]:
                         "equivalent, covering: role definitions, permission matrix, "
                         "least-privilege enforcement, and segregation of duties."
                     ),
-                    category="access-documentation-gap",
+                    category="quality/access-documentation-gap",
                     scanner="quality-agent",
                     extra={
                         "hipaa_controls": ["164.312(a)(1)", "164.312(d)"],

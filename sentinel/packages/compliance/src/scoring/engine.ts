@@ -54,7 +54,6 @@ export function resolveVerdict(score: number): ComplianceVerdict {
 
 const ATTESTATION_TYPE_SCORES: Record<string, number> = {
   compliant: 1.0,
-  not_applicable: 1.0,
   compensating_control: 0.8,
   planned_remediation: 0.3,
 };
@@ -119,6 +118,7 @@ export function scoreControlWithAttestation(
 export function scoreFramework(
   controls: ControlDefinition[],
   findings: FindingInput[],
+  attestations?: Record<string, AttestationInput>,
 ): Omit<AssessmentResult, "frameworkSlug"> {
   if (controls.length === 0) {
     return { score: 1.0, verdict: "compliant", controlScores: [] };
@@ -129,7 +129,17 @@ export function scoreFramework(
   let weightTotal = 0;
 
   for (const control of controls) {
-    const cs = scoreControl(control, findings);
+    const attestation = attestations?.[control.code] ?? null;
+    const cs = attestations !== undefined
+      ? scoreControlWithAttestation(control, findings, attestation)
+      : scoreControl(control, findings);
+
+    // Skip not_applicable controls from weighted average
+    if ("attestationStatus" in cs && (cs as AttestationControlScore).attestationStatus === "not_applicable") {
+      controlScores.push(cs);
+      continue;
+    }
+
     controlScores.push(cs);
 
     const matched = matchFindings(control.matchRules, findings);

@@ -6,6 +6,9 @@ rules:
           - pattern: console.$METHOD(..., $VAR, ...)
           - pattern: print(..., $VAR, ...)
           - pattern: logging.$METHOD(..., $VAR, ...)
+      - metavariable-regex:
+          metavariable: $VAR
+          regex: (?i)(patient|ssn|social_security|dob|date_of_birth|mrn|medical_record|diagnosis|health_plan|beneficiary|phi|ephi|health_record|insurance_id)
     message: >-
       Potential PHI exposure in log output: $VAR may contain protected health
       information

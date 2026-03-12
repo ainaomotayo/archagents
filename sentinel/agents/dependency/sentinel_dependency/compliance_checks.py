@@ -3,7 +3,7 @@
 These functions analyze dependency scan results for healthcare and
 AI-specific supply-chain risks.
 
-Finding categories:
+Finding categories (namespaced to match framework matchRules):
 - dependency/hipaa-cve
 - dependency/ai-supply-chain
 - dependency/phi-license-risk
@@ -14,24 +14,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from sentinel_agents.types import Confidence, DiffFile, Finding, Severity
-
-
-# -------------------------------------------------------------------------
-# Shared helpers
-# -------------------------------------------------------------------------
-
-def _extract_added_code(diff_file: DiffFile) -> str:
-    """Reconstruct added code from diff hunks."""
-    lines: list[str] = []
-    for hunk in diff_file.hunks:
-        for line in hunk.content.split("\n"):
-            if line.startswith("+") and not line.startswith("+++"):
-                lines.append(line[1:])
-            elif not line.startswith("-") and not line.startswith("---"):
-                if not line.startswith("@@"):
-                    lines.append(line)
-    return "\n".join(lines)
+from sentinel_agents.types import Confidence, DiffFile, Finding, Severity, extract_added_code as _extract_added_code
 
 
 # -------------------------------------------------------------------------
@@ -114,7 +97,7 @@ def check_hipaa_cves(findings: list[Finding]) -> list[Finding]:
                     "HIPAA 164.312 requires technical safeguards including encryption, "
                     "access controls, and audit logging for ePHI."
                 ),
-                category="hipaa-cve",
+                category="dependency/hipaa-cve",
                 scanner="dependency-agent",
                 cwe_id=cwe or f.cwe_id,
                 extra={
@@ -262,7 +245,7 @@ def check_ai_supply_chain(files: list[DiffFile]) -> list[Finding]:
                                         f"`{pkg_name}==x.y.z` or `\"{pkg_name}\": \"x.y.z\"`). "
                                         "Use a lockfile and verify package integrity with hashes."
                                     ),
-                                    category="ai-supply-chain",
+                                    category="dependency/ai-supply-chain",
                                     scanner="dependency-agent",
                                     extra={
                                         "package": pkg_name,
@@ -393,7 +376,7 @@ def check_phi_license_risk(files: list[DiffFile]) -> list[Finding]:
                             "Consider alternatives with permissive licenses (MIT, Apache-2.0, BSD). "
                             "Consult legal counsel for copyleft obligations in PHI-handling software."
                         ),
-                        category="phi-license-risk",
+                        category="dependency/phi-license-risk",
                         scanner="dependency-agent",
                         extra={
                             "license_id": license_id,

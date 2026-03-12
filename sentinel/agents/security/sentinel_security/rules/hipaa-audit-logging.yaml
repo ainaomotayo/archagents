@@ -13,9 +13,21 @@ rules:
             auditLog.append(...)
             ...
           })
+      - pattern-not: |
+          app.$METHOD($ROUTE, ..., async ($REQ, $RES) => {
+            ...
+            audit.log(...)
+            ...
+          })
+      - pattern-not: |
+          app.$METHOD($ROUTE, ..., async ($REQ, $RES) => {
+            ...
+            logger.audit(...)
+            ...
+          })
     message: >-
       Data mutation endpoint missing audit log entry — HIPAA requires
-      audit controls
+      audit controls (§164.312(b))
     severity: WARNING
     languages: [javascript, typescript]
     metadata:

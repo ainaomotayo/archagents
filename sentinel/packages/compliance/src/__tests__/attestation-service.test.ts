@@ -4,6 +4,7 @@ import { AttestationService } from "../attestation/service.js";
 const mockDb = {
   controlAttestation: {
     create: vi.fn(),
+    findFirst: vi.fn().mockResolvedValue(null),
     findUnique: vi.fn(),
     findMany: vi.fn(),
     update: vi.fn(),
