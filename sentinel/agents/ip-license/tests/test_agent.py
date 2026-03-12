@@ -208,3 +208,16 @@ def test_agent_enrichment_skips_findings_without_ecosystem():
         mock_fetch.assert_not_called()
 
     assert "registryLicense" not in finding.extra
+
+
+def test_agent_generates_sbom():
+    agent = LicenseAgent()
+    event = _make_event("+# Licensed under GNU General Public License\n")
+    result = agent.run_scan(event)
+    assert result.status == "completed"
+
+    sbom = agent.generate_sbom(project_name="test-project")
+    assert sbom["bomFormat"] == "CycloneDX"
+    assert sbom["specVersion"] == "1.5"
+    assert sbom["metadata"]["component"]["name"] == "test-project"
+    assert sbom["metadata"]["component"]["version"] == "abc"  # commit_hash from _make_event

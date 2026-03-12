@@ -27,8 +27,11 @@ class LicenseAgent(BaseAgent):
     ruleset_hash = "sha256:license-v2"
 
     last_evidence_chain: EvidenceChain | None = None
+    _last_event: DiffEvent | None = None
+    _last_findings: list[Finding] | None = None
 
     def process(self, event: DiffEvent) -> list[Finding]:
+        self._last_event = event
         findings: list[Finding] = []
         chain = EvidenceChain(org_id=event.scan_id, scan_id=event.scan_id)
 
@@ -74,6 +77,7 @@ class LicenseAgent(BaseAgent):
         # 4. Best-effort registry enrichment for fingerprint matches
         self._enrich_with_registry_metadata(findings)
 
+        self._last_findings = findings
         self.last_evidence_chain = chain
         return findings
 
@@ -91,6 +95,21 @@ class LicenseAgent(BaseAgent):
                 "records": chain.to_dicts(),
             },
         }
+
+    def generate_sbom(self, project_name: str = "unknown") -> dict[str, Any]:
+        """Generate CycloneDX 1.5 SBOM from the most recent scan results."""
+        from sentinel_license.sbom import generate_cyclonedx_sbom
+
+        event = self._last_event
+        findings = self._last_findings or []
+
+        return generate_cyclonedx_sbom(
+            scan_id=event.scan_id if event else "",
+            project_name=project_name,
+            commit_hash=event.commit_hash if event else "",
+            findings=findings,
+            evidence_chain=self.last_evidence_chain,
+        )
 
     @staticmethod
     def _enrich_with_registry_metadata(findings: list[Finding]) -> None:
