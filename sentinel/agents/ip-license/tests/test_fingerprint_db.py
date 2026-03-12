@@ -130,6 +130,7 @@ class TestFingerprintDB:
             rec = db.lookup("aabbccdd")
             assert rec is not None
             assert rec.source_url == "https://github.com/lodash/lodash"
+            assert rec.package_name == "lodash"
             assert rec.spdx_license == "MIT"
         finally:
             os.unlink(json_path)

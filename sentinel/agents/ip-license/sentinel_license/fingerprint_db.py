@@ -7,9 +7,12 @@ efficient lookups, bulk inserts, and package-based searching.
 from __future__ import annotations
 
 import json
+import logging
 import sqlite3
 from dataclasses import dataclass
 from typing import Optional
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -88,6 +91,12 @@ class FingerprintDB:
         self._conn.row_factory = sqlite3.Row
         self._conn.executescript(_SCHEMA)
 
+    def __enter__(self) -> FingerprintDB:
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb) -> None:  # noqa: ANN001
+        self.close()
+
     def close(self) -> None:
         """Close the database connection."""
         self._conn.close()
@@ -100,7 +109,7 @@ class FingerprintDB:
     def bulk_insert(self, records: list[FingerprintRecord]) -> None:
         """Insert multiple records in a single transaction."""
         self._conn.executemany(
-            _INSERT_SQL, [_record_to_tuple(r) for r in records]
+            _INSERT_SQL, (_record_to_tuple(r) for r in records)
         )
         self._conn.commit()
 
@@ -134,12 +143,17 @@ class FingerprintDB:
 
         Returns the number of records imported.
         """
-        with open(json_path) as f:
+        with open(json_path, encoding="utf-8") as f:
             raw = json.load(f)
 
         entries = raw.get("fingerprints", {})
         records = []
-        for hash_val, (source_url, license_id) in entries.items():
+        for hash_val, value in entries.items():
+            try:
+                source_url, license_id = value
+            except (ValueError, TypeError):
+                logger.warning("Skipping malformed entry %s: %r", hash_val, value)
+                continue
             # Extract package name from source URL (last path segment)
             package_name = source_url.rstrip("/").rsplit("/", 1)[-1]
             # Guess ecosystem from URL
