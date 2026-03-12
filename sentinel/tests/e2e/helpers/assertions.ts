@@ -38,7 +38,9 @@ export async function expectRBACDenied(fn: () => Promise<unknown>): Promise<void
     await fn();
     expect.fail("Expected RBAC denial (403) but request succeeded");
   } catch (err) {
-    expect((err as Error).message).toMatch(/40[13]/);
+    // Must be 401 (auth failure) or 403 (forbidden) — not 500 or other errors
+    const msg = (err as Error).message;
+    expect(msg).toMatch(/\b(401|403)\b/);
   }
 }
 

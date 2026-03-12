@@ -1,3 +1,4 @@
+// tests/e2e/__tests__/reports.test.ts
 import { describe, it, expect, beforeAll } from "vitest";
 import { createE2EContext, type E2EContext } from "../fixtures/factory.js";
 import { securityVulnDiff, cleanDiff } from "../fixtures/diffs.js";
@@ -12,41 +13,29 @@ describe("E2E: Report Generation", () => {
   });
 
   it("compliance report can be generated for org with findings", async () => {
-    try {
-      const report = await ctx.reportService.generateReport("compliance");
-      expect(report).toBeDefined();
-      expect(report.id).toBeTruthy();
-      expect(report.type).toBe("compliance");
-      console.log(`[VERIFY] Report generated: id=${report.id}, type=${report.type}`);
-    } catch (err) {
-      console.log(`[VERIFY] Report generation: ${(err as Error).message}`);
-      expect((err as Error).message).not.toMatch(/404/);
-    }
+    const report = await ctx.reportService.generateReport("compliance");
+    expect(report).toBeDefined();
+    expect(report.id).toBeTruthy();
+    expect(report.type).toBe("compliance");
+    console.log(`[VERIFY] Report generated: id=${report.id}, type=${report.type}`);
   });
 
   it("report list endpoint returns generated reports", async () => {
-    try {
-      const { reports, total } = await ctx.reportService.listReports();
-      expect(reports).toBeDefined();
-      expect(Array.isArray(reports)).toBe(true);
-      console.log(`[VERIFY] Reports list: ${total} reports`);
-    } catch (err) {
-      console.log(`[VERIFY] Report list: ${(err as Error).message}`);
-      expect((err as Error).message).not.toMatch(/404/);
-    }
+    const { reports, total } = await ctx.reportService.listReports();
+    expect(reports).toBeDefined();
+    expect(Array.isArray(reports)).toBe(true);
+    expect(total).toBeGreaterThanOrEqual(0);
+    console.log(`[VERIFY] Reports list: ${total} reports`);
   });
 
   it("clean org with no vulnerabilities produces passing report", async () => {
     await submitAndComplete(ctx, cleanDiff(ctx.projectId));
 
-    try {
-      const report = await ctx.reportService.generateReport("compliance");
-      if (report?.data) {
-        console.log(`[VERIFY] Clean report data keys: ${Object.keys(report.data).join(", ")}`);
-      }
-    } catch (err) {
-      console.log(`[VERIFY] Clean report: ${(err as Error).message}`);
-      expect((err as Error).message).not.toMatch(/404/);
+    const report = await ctx.reportService.generateReport("compliance");
+    expect(report).toBeDefined();
+    expect(report.id).toBeTruthy();
+    if (report.data) {
+      console.log(`[VERIFY] Clean report data keys: ${Object.keys(report.data).join(", ")}`);
     }
   });
 });
