@@ -741,6 +741,21 @@ app.post("/v1/approvals/:id/decide", { preHandler: authHook }, async (request, r
       payload: { gateId: id, decision, scanId: result.scanId, decidedBy },
       timestamp: new Date().toISOString(),
     });
+
+    await auditLog.append(orgId, {
+      actor: { type: "user", id: decidedBy, name: decidedBy },
+      action: `approval.${decision}`,
+      resource: { type: "approval_gate", id },
+      detail: { scanId: result.scanId, justification, gateType: result.gateType },
+    });
+
+    await eventBus.publish("sentinel.evidence", {
+      orgId,
+      type: "approval_decision",
+      scanId: result.scanId,
+      eventData: { gateId: id, decision, decidedBy, justification },
+    });
+
     return result;
   } catch (err: any) {
     reply.code(400).send({ error: err.message });
