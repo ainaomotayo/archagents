@@ -328,11 +328,11 @@ describe("Compliance API integration", () => {
     expect(res.statusCode).toBe(200);
     const body = JSON.parse(res.payload);
     expect(Array.isArray(body)).toBe(true);
-    // 7 built-in + custom frameworks from mock
-    expect(body.length).toBeGreaterThanOrEqual(7);
+    // 9 built-in + custom frameworks from mock
+    expect(body.length).toBeGreaterThanOrEqual(9);
     // Built-in frameworks have orgId: null
     const builtIn = body.filter((f: any) => f.orgId === null);
-    expect(builtIn.length).toBe(7);
+    expect(builtIn.length).toBe(9);
   });
 
   // ── 2. GET /v1/compliance/frameworks/soc2 — returns built-in (200) ────
