@@ -9,8 +9,10 @@ import { Redis } from "ioredis";
 import { EventBus, withRetry } from "@sentinel/events";
 import { getDb, disconnectDb } from "@sentinel/db";
 import type { PrismaClient } from "@sentinel/db";
-import type { AssessmentStatus, Finding } from "@sentinel/shared";
+import type { Finding } from "@sentinel/shared";
 import { parseDiff } from "@sentinel/shared";
+import { handleVcsResult } from "./vcs/results-consumer.js";
+import type { VcsResultEvent } from "./vcs/results-consumer.js";
 import { createLogger, initTracing, shutdownTracing } from "@sentinel/telemetry";
 import {
   VcsProviderRegistry,
@@ -18,6 +20,7 @@ import {
   GitLabProvider,
   BitbucketProvider,
   AzureDevOpsProvider,
+  VcsRateLimiter,
 } from "@sentinel/vcs";
 import type {
   VcsProvider,
@@ -117,6 +120,7 @@ const triggerBus = new EventBus(new Redis(redisUrl));
 const resultsBus = new EventBus(new Redis(redisUrl));
 const publishBus = new EventBus(new Redis(redisUrl));
 
+const rateLimiter = new VcsRateLimiter(redis);
 const CORRELATION_TTL = 86400; // 24 hours
 
 // ---------------------------------------------------------------------------
@@ -158,7 +162,7 @@ function repoUrlForProvider(provider: VcsProviderType, repo: string): string {
 
 interface ScanTriggerData {
   provider: VcsProviderType;
-  type: "push" | "pull_request" | "merge_request" | "tag_push";
+  type: "push" | "pull_request" | "merge_request";
   installationId: string;
   repo: string;
   owner: string;
@@ -215,6 +219,13 @@ async function handleScanTrigger(
     return;
   }
   await deps.redis.expire(idempotencyKey, CORRELATION_TTL);
+
+  // Rate limit check before calling provider API
+  const allowed = await rateLimiter.check(data.provider, data.installationId);
+  if (!allowed) {
+    logger.warn({ provider: data.provider, installationId: data.installationId }, "Rate limit exceeded, skipping");
+    return;
+  }
 
   // Fetch diff via the provider
   const diffResult = await provider.fetchDiff(trigger);
@@ -293,138 +304,8 @@ async function handleScanTrigger(
 }
 
 // ---------------------------------------------------------------------------
-// Consumer 2: sentinel.results
+// Consumer 2: sentinel.results — delegates to standalone results-consumer module
 // ---------------------------------------------------------------------------
-
-interface ScanResultData {
-  scanId: string;
-  status: string;
-  riskScore: number;
-  certificateId?: string;
-}
-
-async function handleScanResult(
-  event: ScanResultData,
-  deps: { redis: Redis; db: PrismaClient },
-): Promise<void> {
-  const { scanId, status, riskScore } = event;
-
-  // Try each provider's correlation key until we find one
-  let providerType: VcsProviderType | undefined;
-  let correlation: Record<string, string> | undefined;
-
-  for (const pType of registry.list()) {
-    const key = correlationKey(pType, scanId);
-    const data = await deps.redis.hgetall(key);
-    if (data?.provider) {
-      correlation = data;
-      providerType = pType;
-      break;
-    }
-  }
-
-  // Fallback: check scan.triggerMeta in DB
-  if (!providerType || !correlation) {
-    const scan = await deps.db.scan.findUnique({ where: { id: scanId } });
-    const meta = (scan?.triggerMeta ?? {}) as Record<string, unknown>;
-    if (meta.provider && registry.has(meta.provider as VcsProviderType)) {
-      providerType = meta.provider as VcsProviderType;
-      correlation = {
-        provider: providerType,
-        installationId: String(meta.installationId ?? ""),
-        owner: String(meta.owner ?? ""),
-        repo: String(meta.repo ?? ""),
-        commitHash: scan!.commitHash,
-        prNumber: String(meta.prNumber ?? ""),
-      };
-    }
-  }
-
-  if (!providerType || !correlation) {
-    logger.debug({ scanId }, "No VCS context found, skipping status report");
-    return;
-  }
-
-  const provider = registry.get(providerType);
-  if (!provider) {
-    logger.warn({ scanId, provider: providerType }, "Provider not registered, skipping");
-    return;
-  }
-
-  // Load findings
-  const findings = await deps.db.finding.findMany({
-    where: { scanId },
-    orderBy: { createdAt: "asc" },
-  });
-
-  // Build annotations using the provider's base helper
-  const annotations = provider.capabilities.prAnnotations
-    ? findings.slice(0, 50).map((f: any) => ({
-        file: f.file ?? "",
-        lineStart: f.lineStart ?? 0,
-        lineEnd: f.lineEnd ?? 0,
-        level: severityToLevel(f.severity),
-        title: f.title ?? f.type ?? "Finding",
-        message: f.description ?? "",
-      }))
-    : [];
-
-  const trigger: VcsScanTrigger = {
-    provider: providerType,
-    type: "push",
-    installationId: correlation.installationId,
-    repo: correlation.repo,
-    owner: correlation.owner,
-    commitHash: correlation.commitHash,
-    branch: "",
-    author: "",
-    prNumber: correlation.prNumber ? parseInt(correlation.prNumber, 10) || undefined : undefined,
-  };
-
-  const summary = buildResultSummary(findings.length, riskScore, status);
-
-  const report: VcsStatusReport = {
-    scanId,
-    commitHash: correlation.commitHash,
-    status: status as AssessmentStatus,
-    riskScore,
-    summary,
-    annotations,
-  };
-
-  await provider.reportStatus(trigger, report);
-
-  // Cleanup correlation
-  await deps.redis.del(correlationKey(providerType, scanId));
-
-  logger.info({
-    scanId,
-    provider: providerType,
-    status,
-    riskScore,
-    annotationCount: annotations.length,
-    findingCount: findings.length,
-  }, "Status reported to VCS provider");
-}
-
-function severityToLevel(severity: string): "notice" | "warning" | "failure" {
-  switch (severity) {
-    case "critical":
-    case "high":
-      return "failure";
-    case "medium":
-      return "warning";
-    default:
-      return "notice";
-  }
-}
-
-function buildResultSummary(findingCount: number, riskScore: number, status: string): string {
-  if (findingCount === 0) {
-    return `SENTINEL scan completed: ${status}. No findings. Risk score: ${riskScore}/100.`;
-  }
-  return `SENTINEL scan completed: ${status}. ${findingCount} finding(s). Risk score: ${riskScore}/100.`;
-}
 
 // ---------------------------------------------------------------------------
 // Wire up consumers
@@ -443,12 +324,14 @@ triggerBus.subscribe(
 logger.info("Consuming sentinel.scan-triggers...");
 
 const resultsHandler = withRetry(redis, "sentinel.results", async (_id, data) => {
-  await handleScanResult(data as unknown as ScanResultData, { redis, db });
+  await handleVcsResult(data as unknown as VcsResultEvent, { redis, db, registry });
 }, { maxRetries: 3, baseDelayMs: 2000 });
 
+// Use same consumer group as github-bridge ("github-bridge") so only one processes
+// each message. When migrating, stop github-bridge and deploy vcs-bridge instead.
 resultsBus.subscribe(
   "sentinel.results",
-  "vcs-bridge",
+  "github-bridge",
   `vcs-results-${process.pid}`,
   resultsHandler,
 );

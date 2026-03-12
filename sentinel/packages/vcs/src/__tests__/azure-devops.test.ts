@@ -91,9 +91,15 @@ describe("AzureDevOpsProvider", () => {
       expect(result).toBe(true);
     });
 
-    it("returns true when signature header is missing (passthrough)", async () => {
+    it("returns false when signature header is missing and secret is configured", async () => {
       const event = makePushEvent({ headers: {} });
       const result = await provider.verifyWebhook(event, SECRET);
+      expect(result).toBe(false);
+    });
+
+    it("returns true when no signature header and no secret configured", async () => {
+      const event = makePushEvent({ headers: {} });
+      const result = await provider.verifyWebhook(event, "");
       expect(result).toBe(true);
     });
 
@@ -168,14 +174,21 @@ describe("AzureDevOpsProvider", () => {
       vi.stubGlobal("fetch", mockFetch);
     });
 
-    it("fetches commit diff from correct URL", async () => {
+    it("fetches commit diff with parent lookup for push", async () => {
+      // First call: get commit to find parent
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ parents: ["parent-sha-123"] }),
+        status: 200,
+      });
+      // Second call: diff between parent and commit
       const diffResponse = {
         changes: [
           { item: { path: "/src/main.ts" }, changeType: "edit" },
           { item: { path: "/src/new.ts" }, changeType: "add" },
         ],
       };
-      mockFetch.mockResolvedValue({
+      mockFetch.mockResolvedValueOnce({
         ok: true,
         json: () => Promise.resolve(diffResponse),
         status: 200,
@@ -194,18 +207,53 @@ describe("AzureDevOpsProvider", () => {
 
       const result = await provider.fetchDiff(trigger);
 
-      expect(mockFetch).toHaveBeenCalledWith(
-        "https://dev.azure.com/my-org/my-project/_apis/git/repositories/my-repo/diffs/commits?baseVersion=abc123~1&targetVersion=abc123&api-version=7.0",
-        expect.objectContaining({
-          headers: { Authorization: expect.stringMatching(/^Basic /) },
-        }),
-      );
+      // First call: commit details
+      expect(mockFetch.mock.calls[0][0]).toContain("/commits/abc123?api-version=7.0");
+      // Second call: diff with proper SHAs
+      expect(mockFetch.mock.calls[1][0]).toContain("baseVersion=parent-sha-123&baseVersionType=commit&targetVersion=abc123&targetVersionType=commit");
       expect(result.files).toHaveLength(2);
       expect(result.files[0]).toEqual({ path: "src/main.ts", status: "modified" });
       expect(result.files[1]).toEqual({ path: "src/new.ts", status: "added" });
     });
 
-    it("throws on non-ok response", async () => {
+    it("fetches PR diff using iterations API", async () => {
+      // First call: get PR iterations
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ value: [{ id: 1 }, { id: 2 }] }),
+        status: 200,
+      });
+      // Second call: get last iteration changes
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({
+          changeEntries: [
+            { item: { path: "/src/changed.ts" }, changeType: "edit" },
+          ],
+        }),
+        status: 200,
+      });
+
+      const trigger: VcsScanTrigger = {
+        provider: "azure_devops",
+        type: "pull_request",
+        installationId: "repo-guid-1",
+        repo: "my-repo",
+        owner: "my-project",
+        commitHash: "abc123",
+        branch: "feature",
+        author: "Alice",
+        prNumber: 42,
+      };
+
+      const result = await provider.fetchDiff(trigger);
+
+      expect(mockFetch.mock.calls[0][0]).toContain("/pullRequests/42/iterations");
+      expect(mockFetch.mock.calls[1][0]).toContain("/pullRequests/42/iterations/2/changes");
+      expect(result.files).toHaveLength(1);
+    });
+
+    it("throws VcsApiError on non-ok response", async () => {
       mockFetch.mockResolvedValue({
         ok: false,
         status: 404,
@@ -224,7 +272,7 @@ describe("AzureDevOpsProvider", () => {
       };
 
       await expect(provider.fetchDiff(trigger)).rejects.toThrow(
-        "Azure DevOps diff fetch failed: 404 Not Found",
+        "azure_devops fetchCommit failed: 404 Not Found",
       );
     });
   });

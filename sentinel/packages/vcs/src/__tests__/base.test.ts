@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { VcsProviderBase } from "../base.js";
+import { VcsProviderBase, VcsApiError } from "../base.js";
 import type {
   VcsCapabilities,
   VcsScanTrigger,
@@ -117,5 +117,58 @@ describe("VcsProviderBase", () => {
     expect(provider.severityToLevel("low")).toBe("notice");
     expect(provider.severityToLevel("info")).toBe("notice");
     expect(provider.severityToLevel("unknown")).toBe("notice");
+  });
+
+  it("formats PR comment with findings", () => {
+    const report = {
+      scanId: "scan-1",
+      commitHash: "abc123",
+      status: "fail" as const,
+      riskScore: 85,
+      summary: "Found security issues",
+      annotations: [
+        {
+          file: "src/app.ts",
+          lineStart: 10,
+          lineEnd: 15,
+          level: "failure" as const,
+          title: "SQL Injection",
+          message: "Unsanitized input",
+        },
+      ],
+      detailsUrl: "https://example.com/scan-1",
+    };
+    const comment = provider.formatPrComment(report);
+    expect(comment).toContain("❌ Sentinel Scan Results");
+    expect(comment).toContain("**Status:** fail");
+    expect(comment).toContain("SQL Injection");
+    expect(comment).toContain("[View full report]");
+  });
+
+  it("formats PR comment with pass status", () => {
+    const report = {
+      scanId: "scan-2",
+      commitHash: "def456",
+      status: "full_pass" as const,
+      riskScore: 5,
+      summary: "All clear",
+      annotations: [],
+    };
+    const comment = provider.formatPrComment(report);
+    expect(comment).toContain("✅ Sentinel Scan Results");
+    expect(comment).not.toContain("### Findings");
+  });
+});
+
+describe("VcsApiError", () => {
+  it("creates structured error with correct fields", () => {
+    const err = new VcsApiError("github", 404, "Not Found", "fetchDiff");
+    expect(err.name).toBe("VcsApiError");
+    expect(err.provider).toBe("github");
+    expect(err.statusCode).toBe(404);
+    expect(err.statusText).toBe("Not Found");
+    expect(err.operation).toBe("fetchDiff");
+    expect(err.message).toBe("github fetchDiff failed: 404 Not Found");
+    expect(err).toBeInstanceOf(Error);
   });
 });

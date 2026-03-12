@@ -52,6 +52,11 @@ export function registerVcsWebhookRoutes(
         rawBody,
       };
 
+      if (!installation) {
+        reply.code(404).send({ error: "Unknown VCS installation" });
+        return;
+      }
+
       if (!(await provider.verifyWebhook(event, secret))) {
         reply.code(401).send({ error: "Invalid webhook signature" });
         return;
@@ -60,11 +65,6 @@ export function registerVcsWebhookRoutes(
       const trigger = await provider.parseWebhook(event);
       if (!trigger) {
         reply.code(200).send({ ignored: true });
-        return;
-      }
-
-      if (!installation) {
-        reply.code(404).send({ error: "Unknown VCS installation" });
         return;
       }
 

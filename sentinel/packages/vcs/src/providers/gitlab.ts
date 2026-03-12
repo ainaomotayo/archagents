@@ -137,7 +137,7 @@ export class GitLabProvider extends VcsProviderBase {
     });
 
     if (trigger.prNumber && report.annotations.length > 0) {
-      const body = this.formatMrNote(report);
+      const body = this.formatPrComment(report);
       await this.client.MergeRequestNotes.create(projectId, trigger.prNumber, body);
     }
   }
@@ -159,33 +159,6 @@ export class GitLabProvider extends VcsProviderBase {
       default:
         return "pending";
     }
-  }
-
-  private formatMrNote(report: VcsStatusReport): string {
-    const icon = report.status === "full_pass" || report.status === "provisional_pass" ? "✅" : "❌";
-    const lines = [
-      `## ${icon} Sentinel Scan Results`,
-      "",
-      `**Status:** ${report.status} | **Risk Score:** ${report.riskScore}`,
-      "",
-      report.summary,
-    ];
-
-    if (report.annotations.length > 0) {
-      lines.push("", "### Findings", "");
-      for (const a of report.annotations.slice(0, 10)) {
-        lines.push(`- **${a.title}** (${a.level}) — \`${a.file}:${a.lineStart}\`: ${a.message}`);
-      }
-      if (report.annotations.length > 10) {
-        lines.push(`- _...and ${report.annotations.length - 10} more_`);
-      }
-    }
-
-    if (report.detailsUrl) {
-      lines.push("", `[View full report](${report.detailsUrl})`);
-    }
-
-    return lines.join("\n");
   }
 
   private buildDiffResult(diffs: GitLabDiff[]): VcsDiffResult {

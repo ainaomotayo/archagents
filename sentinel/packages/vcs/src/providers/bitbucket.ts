@@ -1,5 +1,5 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
-import { VcsProviderBase } from "../base.js";
+import { VcsProviderBase, VcsApiError } from "../base.js";
 import type {
   VcsCapabilities,
   VcsScanTrigger,
@@ -121,7 +121,7 @@ export class BitbucketProvider extends VcsProviderBase {
     });
 
     if (!response.ok) {
-      throw new Error(`Bitbucket diff fetch failed: ${response.status} ${response.statusText}`);
+      throw new VcsApiError("bitbucket", response.status, response.statusText, "fetchDiff");
     }
 
     const rawDiff = await response.text();
@@ -137,7 +137,7 @@ export class BitbucketProvider extends VcsProviderBase {
     const statusUrl = `${API_BASE}/repositories/${repo}/commit/${report.commitHash}/statuses/build`;
     const state = this.mapStatus(report.status);
 
-    await fetch(statusUrl, {
+    const statusResp = await fetch(statusUrl, {
       method: "POST",
       headers: {
         Authorization: this.authHeader,
@@ -151,13 +151,16 @@ export class BitbucketProvider extends VcsProviderBase {
         url: report.detailsUrl ?? "",
       }),
     });
+    if (!statusResp.ok) {
+      throw new VcsApiError("bitbucket", statusResp.status, statusResp.statusText, "reportStatus");
+    }
 
     // Post PR comment if applicable
     if (trigger.prNumber && report.annotations.length > 0) {
       const commentUrl = `${API_BASE}/repositories/${repo}/pullrequests/${trigger.prNumber}/comments`;
       const commentBody = this.formatPrComment(report);
 
-      await fetch(commentUrl, {
+      const commentResp = await fetch(commentUrl, {
         method: "POST",
         headers: {
           Authorization: this.authHeader,
@@ -167,6 +170,9 @@ export class BitbucketProvider extends VcsProviderBase {
           content: { raw: commentBody },
         }),
       });
+      if (!commentResp.ok) {
+        throw new VcsApiError("bitbucket", commentResp.status, commentResp.statusText, "reportPrComment");
+      }
     }
   }
 
@@ -187,33 +193,6 @@ export class BitbucketProvider extends VcsProviderBase {
       default:
         return "INPROGRESS";
     }
-  }
-
-  private formatPrComment(report: VcsStatusReport): string {
-    const icon = report.status === "full_pass" || report.status === "provisional_pass" ? "✅" : "❌";
-    const lines = [
-      `## ${icon} Sentinel Scan Results`,
-      "",
-      `**Status:** ${report.status} | **Risk Score:** ${report.riskScore}`,
-      "",
-      report.summary,
-    ];
-
-    if (report.annotations.length > 0) {
-      lines.push("", "### Findings", "");
-      for (const a of report.annotations.slice(0, 10)) {
-        lines.push(`- **${a.title}** (${a.level}) — \`${a.file}:${a.lineStart}\`: ${a.message}`);
-      }
-      if (report.annotations.length > 10) {
-        lines.push(`- _...and ${report.annotations.length - 10} more_`);
-      }
-    }
-
-    if (report.detailsUrl) {
-      lines.push("", `[View full report](${report.detailsUrl})`);
-    }
-
-    return lines.join("\n");
   }
 
   private parseDiffFiles(rawDiff: string): Array<{ path: string; status: "added" | "modified" | "deleted" | "renamed" }> {

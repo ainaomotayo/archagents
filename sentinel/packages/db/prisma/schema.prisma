@@ -667,7 +667,11 @@ model VcsInstallation {
   createdAt      DateTime @default(now()) @map("created_at")
   updatedAt      DateTime @updatedAt @map("updated_at")
 
-  organization Organization @relation(fields: [orgId], references: [id])
+  organization   Organization              @relation(fields: [orgId], references: [id])
+  githubExt      VcsInstallationGitHub?
+  gitlabExt      VcsInstallationGitLab?
+  bitbucketExt   VcsInstallationBitbucket?
+  azureDevOpsExt VcsInstallationAzureDevOps?
 
   @@unique([provider, installationId])
   @@index([orgId, provider])
@@ -682,6 +686,8 @@ model VcsInstallationGitHub {
   numericInstallId  Int    @map("numeric_install_id")
   privateKey        String @map("private_key")
 
+  vcsInstallation VcsInstallation @relation(fields: [vcsInstallationId], references: [id], onDelete: Cascade)
+
   @@map("vcs_installation_github")
 }
 
@@ -691,6 +697,8 @@ model VcsInstallationGitLab {
   gitlabUrl         String @map("gitlab_url")
   accessToken       String @map("access_token")
   tokenType         String @map("token_type")
+
+  vcsInstallation VcsInstallation @relation(fields: [vcsInstallationId], references: [id], onDelete: Cascade)
 
   @@map("vcs_installation_gitlab")
 }
@@ -702,6 +710,8 @@ model VcsInstallationBitbucket {
   clientKey         String @map("client_key")
   sharedSecret      String @map("shared_secret")
 
+  vcsInstallation VcsInstallation @relation(fields: [vcsInstallationId], references: [id], onDelete: Cascade)
+
   @@map("vcs_installation_bitbucket")
 }
 
@@ -711,6 +721,8 @@ model VcsInstallationAzureDevOps {
   organizationUrl   String @map("organization_url")
   projectName       String @map("project_name")
   pat               String
+
+  vcsInstallation VcsInstallation @relation(fields: [vcsInstallationId], references: [id], onDelete: Cascade)
 
   @@map("vcs_installation_azure_devops")
 }

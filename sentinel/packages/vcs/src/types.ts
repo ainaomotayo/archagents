@@ -9,8 +9,7 @@ export type VcsProviderType =
 export type VcsTriggerType =
   | "push"
   | "pull_request"
-  | "merge_request"
-  | "tag_push";
+  | "merge_request";
 
 export interface VcsCapabilities {
   checkRuns: boolean;              // GitHub only

@@ -75,7 +75,7 @@ export class GitHubProvider extends VcsProviderBase {
         mediaType: { format: "diff" },
       });
       const rawDiff = res.data as unknown as string;
-      return { rawDiff, files: [] }; // files parsed downstream by parseDiff
+      return { rawDiff, files: this.parseDiffFiles(rawDiff) };
     }
 
     const res = await octokit.rest.repos.compareCommitsWithBasehead({
@@ -83,14 +83,19 @@ export class GitHubProvider extends VcsProviderBase {
       repo: repoName,
       basehead: `${trigger.commitHash}~1...${trigger.commitHash}`,
     });
-    const files = (res.data as any).files ?? [];
+    const ghFiles = (res.data as any).files ?? [];
     const parts: string[] = [];
-    for (const file of files) {
+    const files: Array<{ path: string; status: "added" | "modified" | "deleted" | "renamed" }> = [];
+    for (const file of ghFiles) {
+      files.push({
+        path: file.filename,
+        status: this.mapGitHubStatus(file.status),
+      });
       if (file.patch) {
         parts.push(`diff --git a/${file.filename} b/${file.filename}\n${file.patch}`);
       }
     }
-    return { rawDiff: parts.join("\n"), files: [] };
+    return { rawDiff: parts.join("\n"), files };
   }
 
   async reportStatus(trigger: VcsScanTrigger, report: VcsStatusReport): Promise<void> {
@@ -117,18 +122,65 @@ export class GitHubProvider extends VcsProviderBase {
       findingsToAnnotations(annotations as any),
     );
 
-    await octokit.rest.checks.update({
-      owner: trigger.owner,
-      repo: repoName,
-      check_run_id: 0, // caller should set this via correlation
-      status: checkRunPayload.status,
-      conclusion: checkRunPayload.conclusion,
-      output: checkRunPayload.output,
-    });
+    const checkRunId = trigger.metadata?.checkRunId as number | undefined;
+    if (checkRunId) {
+      await octokit.rest.checks.update({
+        owner: trigger.owner,
+        repo: repoName,
+        check_run_id: checkRunId,
+        status: checkRunPayload.status,
+        conclusion: checkRunPayload.conclusion,
+        output: checkRunPayload.output,
+      });
+    } else {
+      await octokit.rest.checks.create({
+        owner: trigger.owner,
+        repo: repoName,
+        name: "Sentinel Security Scan",
+        head_sha: trigger.commitHash,
+        status: checkRunPayload.status,
+        conclusion: checkRunPayload.conclusion,
+        output: checkRunPayload.output,
+      });
+    }
   }
 
   async getInstallationToken(installationId: string): Promise<string> {
     // GitHub App generates tokens per-installation via Octokit
     return `github-installation-${installationId}`;
+  }
+
+  private mapGitHubStatus(status: string): "added" | "modified" | "deleted" | "renamed" {
+    switch (status) {
+      case "added": return "added";
+      case "removed": return "deleted";
+      case "renamed": return "renamed";
+      default: return "modified";
+    }
+  }
+
+  private parseDiffFiles(rawDiff: string): Array<{ path: string; status: "added" | "modified" | "deleted" | "renamed" }> {
+    const files: Array<{ path: string; status: "added" | "modified" | "deleted" | "renamed" }> = [];
+    const diffHeaders = rawDiff.match(/^diff --git a\/.+ b\/(.+)$/gm);
+    if (!diffHeaders) return files;
+
+    for (const header of diffHeaders) {
+      const match = header.match(/^diff --git a\/(.+) b\/(.+)$/);
+      if (!match) continue;
+      const oldPath = match[1];
+      const newPath = match[2];
+
+      const idx = rawDiff.indexOf(header);
+      const nextDiff = rawDiff.indexOf("diff --git", idx + header.length);
+      const section = rawDiff.slice(idx, nextDiff === -1 ? undefined : nextDiff);
+
+      let status: "added" | "modified" | "deleted" | "renamed" = "modified";
+      if (section.includes("new file mode")) status = "added";
+      else if (section.includes("deleted file mode")) status = "deleted";
+      else if (oldPath !== newPath) status = "renamed";
+
+      files.push({ path: newPath, status });
+    }
+    return files;
   }
 }

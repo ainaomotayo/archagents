@@ -9,9 +9,21 @@ import type {
   VcsProviderType,
 } from "./types.js";
 
+export class VcsApiError extends Error {
+  constructor(
+    public readonly provider: VcsProviderType,
+    public readonly statusCode: number,
+    public readonly statusText: string,
+    public readonly operation: string,
+  ) {
+    super(`${provider} ${operation} failed: ${statusCode} ${statusText}`);
+    this.name = "VcsApiError";
+  }
+}
+
 const ANNOTATION_CAP = 50;
 
-interface FindingInput {
+export interface FindingInput {
   file: string;
   lineStart: number;
   lineEnd: number;
@@ -60,5 +72,37 @@ export abstract class VcsProviderBase implements VcsProvider {
       title: f.title,
       message: f.description,
     }));
+  }
+
+  formatPrComment(report: VcsStatusReport): string {
+    const icon =
+      report.status === "full_pass" || report.status === "provisional_pass"
+        ? "✅"
+        : "❌";
+    const lines = [
+      `## ${icon} Sentinel Scan Results`,
+      "",
+      `**Status:** ${report.status} | **Risk Score:** ${report.riskScore}`,
+      "",
+      report.summary,
+    ];
+
+    if (report.annotations.length > 0) {
+      lines.push("", "### Findings", "");
+      for (const a of report.annotations.slice(0, 10)) {
+        lines.push(
+          `- **${a.title}** (${a.level}) — \`${a.file}:${a.lineStart}\`: ${a.message}`,
+        );
+      }
+      if (report.annotations.length > 10) {
+        lines.push(`- _...and ${report.annotations.length - 10} more_`);
+      }
+    }
+
+    if (report.detailsUrl) {
+      lines.push("", `[View full report](${report.detailsUrl})`);
+    }
+
+    return lines.join("\n");
   }
 }
