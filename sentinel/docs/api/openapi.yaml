@@ -1923,6 +1923,340 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /v1/api-keys:
+    post:
+      operationId: createApiKey
+      summary: Create an API key
+      description: |
+        Generate a new API key for programmatic access. The full key value
+        is returned only once in the response.
+      tags: [API Keys]
+      security:
+        - hmacAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name:
+                  type: string
+                  minLength: 1
+                role:
+                  type: string
+                  enum: [admin, manager, developer, viewer, service]
+                  default: service
+                expiresAt:
+                  type: string
+                  format: date-time
+      responses:
+        "201":
+          description: API key created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiKeyCreated"
+        "400":
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    get:
+      operationId: listApiKeys
+      summary: List API keys
+      tags: [API Keys]
+      security:
+        - hmacAuth: []
+      responses:
+        "200":
+          description: List of API keys
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  apiKeys:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/ApiKey"
+
+  /v1/api-keys/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    delete:
+      operationId: revokeApiKey
+      summary: Revoke an API key
+      tags: [API Keys]
+      security:
+        - hmacAuth: []
+      responses:
+        "204":
+          description: API key revoked
+        "404":
+          description: API key not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /v1/sso-configs:
+    get:
+      operationId: listSsoConfigs
+      summary: List SSO configurations
+      tags: [SSO]
+      security:
+        - hmacAuth: []
+      responses:
+        "200":
+          description: List of SSO configurations
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ssoConfigs:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/SsoConfig"
+    post:
+      operationId: createSsoConfig
+      summary: Create an SSO configuration
+      tags: [SSO]
+      security:
+        - hmacAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SsoConfigInput"
+      responses:
+        "201":
+          description: SSO configuration created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SsoConfig"
+        "400":
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /v1/sso-configs/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    put:
+      operationId: updateSsoConfig
+      summary: Update an SSO configuration
+      tags: [SSO]
+      security:
+        - hmacAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SsoConfigInput"
+      responses:
+        "200":
+          description: SSO configuration updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SsoConfig"
+        "404":
+          description: SSO configuration not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      operationId: deleteSsoConfig
+      summary: Delete an SSO configuration
+      tags: [SSO]
+      security:
+        - hmacAuth: []
+      responses:
+        "204":
+          description: SSO configuration deleted
+        "404":
+          description: SSO configuration not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /v1/sso-configs/{id}/scim-token:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      operationId: generateScimToken
+      summary: Generate a SCIM bearer token
+      description: |
+        Generates a new SCIM bearer token for the given SSO configuration.
+        The token is used to authenticate SCIM provisioning requests.
+      tags: [SSO]
+      security:
+        - hmacAuth: []
+      responses:
+        "200":
+          description: SCIM token generated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  scimToken:
+                    type: string
+                  message:
+                    type: string
+        "404":
+          description: SSO configuration not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /v1/memberships:
+    get:
+      operationId: listMemberships
+      summary: List organisation memberships
+      tags: [Memberships]
+      security:
+        - hmacAuth: []
+      responses:
+        "200":
+          description: List of memberships
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  memberships:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Membership"
+    post:
+      operationId: createMembership
+      summary: Add a member to the organisation
+      tags: [Memberships]
+      security:
+        - hmacAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [userId]
+              properties:
+                userId:
+                  type: string
+                  format: uuid
+                role:
+                  type: string
+                  enum: [admin, manager, developer, viewer, service]
+                  default: viewer
+      responses:
+        "201":
+          description: Membership created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Membership"
+        "400":
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /v1/memberships/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    put:
+      operationId: updateMembership
+      summary: Update a membership role
+      tags: [Memberships]
+      security:
+        - hmacAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [role]
+              properties:
+                role:
+                  type: string
+                  enum: [admin, manager, developer, viewer, service]
+      responses:
+        "200":
+          description: Membership updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Membership"
+        "400":
+          description: Cannot demote self from admin
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Membership not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      operationId: deleteMembership
+      summary: Remove a member from the organisation
+      tags: [Memberships]
+      security:
+        - hmacAuth: []
+      responses:
+        "204":
+          description: Membership removed
+        "400":
+          description: Cannot remove own membership
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Membership not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /health:
     get:
       operationId: healthCheck
@@ -2736,6 +3070,123 @@ components:
         createdAt:
           type: string
           format: date-time
+
+    ApiKeyCreated:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        key:
+          type: string
+          description: The full API key value; shown only once on creation
+        prefix:
+          type: string
+        name:
+          type: string
+        role:
+          type: string
+          enum: [admin, manager, developer, viewer, service]
+        expiresAt:
+          type: string
+          format: date-time
+
+    ApiKey:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        keyPrefix:
+          type: string
+        role:
+          type: string
+          enum: [admin, manager, developer, viewer, service]
+        expiresAt:
+          type: string
+          format: date-time
+        lastUsedAt:
+          type: string
+          format: date-time
+        revokedAt:
+          type: string
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+
+    SsoConfig:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        provider:
+          type: string
+          enum: [oidc, saml, github, gitlab, google, microsoft]
+        displayName:
+          type: string
+        issuerUrl:
+          type: string
+        enabled:
+          type: boolean
+        enforced:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    SsoConfigInput:
+      type: object
+      required: [provider, displayName, clientId, clientSecret]
+      properties:
+        provider:
+          type: string
+          enum: [oidc, saml, github, gitlab, google, microsoft]
+        displayName:
+          type: string
+        clientId:
+          type: string
+        clientSecret:
+          type: string
+        issuerUrl:
+          type: string
+        samlMetadata:
+          type: string
+        enforced:
+          type: boolean
+          default: false
+
+    Membership:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        orgId:
+          type: string
+          format: uuid
+        userId:
+          type: string
+          format: uuid
+        role:
+          type: string
+          enum: [admin, manager, developer, viewer, service]
+        user:
+          type: object
+          properties:
+            id:
+              type: string
+              format: uuid
+            email:
+              type: string
+            name:
+              type: string
 
   parameters:
     LimitParam:
