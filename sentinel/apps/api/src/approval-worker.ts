@@ -21,35 +21,43 @@ export async function processEscalations(dbClient: any, bus: any): Promise<numbe
     },
   });
 
+  let processed = 0;
   for (const gate of gates) {
-    const newStatus = ApprovalFSM.transition(gate.status, "escalate");
-    await dbClient.approvalGate.update({
-      where: { id: gate.id },
-      data: {
-        status: newStatus,
-        assignedRole: "admin",
-        priority: 90,
-      },
-    });
+    try {
+      const newStatus = ApprovalFSM.transition(gate.status, "escalate");
+      await dbClient.approvalGate.update({
+        where: { id: gate.id },
+        data: {
+          status: newStatus,
+          assignedRole: "admin",
+          priority: 90,
+        },
+      });
 
-    await bus.publish("sentinel.notifications", {
-      id: `evt-${gate.id}-escalated`,
-      orgId: gate.orgId,
-      topic: "approval.escalated",
-      payload: {
-        gateId: gate.id,
-        scanId: gate.scanId,
-        previousRole: gate.assignedRole,
-        escalatedTo: "admin",
-      },
-      timestamp: new Date().toISOString(),
-    });
+      await bus.publish("sentinel.notifications", {
+        id: `evt-${gate.id}-escalated`,
+        orgId: gate.orgId,
+        topic: "approval.escalated",
+        payload: {
+          gateId: gate.id,
+          scanId: gate.scanId,
+          previousRole: gate.assignedRole,
+          escalatedTo: "admin",
+        },
+        timestamp: new Date().toISOString(),
+      });
+      processed++;
+    } catch (_err) {
+      // Gate may have been decided between query and update — skip and continue
+    }
   }
 
-  return gates.length;
+  return processed;
 }
 
 export async function processExpirations(dbClient: any, bus: any): Promise<number> {
+  const { ApprovalFSM } = await import("@sentinel/assessor");
+
   const gates = await dbClient.approvalGate.findMany({
     where: {
       status: { in: ["pending", "escalated"] },
@@ -57,45 +65,52 @@ export async function processExpirations(dbClient: any, bus: any): Promise<numbe
     },
   });
 
+  let processed = 0;
   for (const gate of gates) {
-    const effectiveAction = gate.expiryAction ?? "reject";
-    const approvalStatus = effectiveAction === "approve" ? "approved" : "rejected";
+    try {
+      const newStatus = ApprovalFSM.transition(gate.status, "expire");
+      const effectiveAction = gate.expiryAction ?? "reject";
+      const approvalStatus = effectiveAction === "approve" ? "approved" : "rejected";
 
-    await dbClient.approvalGate.update({
-      where: { id: gate.id },
-      data: { status: "expired", decidedAt: new Date() },
-    });
-
-    await dbClient.scan.update({
-      where: { id: gate.scanId },
-      data: { approvalStatus },
-    });
-
-    if (effectiveAction === "approve") {
-      await bus.publish("sentinel.approvals", {
-        type: "gate.decided",
-        gateId: gate.id,
-        decision: "approve",
-        scanId: gate.scanId,
-        orgId: gate.orgId,
-        autoExpired: true,
+      await dbClient.approvalGate.update({
+        where: { id: gate.id },
+        data: { status: newStatus, decidedAt: new Date() },
       });
-    }
 
-    await bus.publish("sentinel.notifications", {
-      id: `evt-${gate.id}-expired`,
-      orgId: gate.orgId,
-      topic: "approval.expired",
-      payload: {
-        gateId: gate.id,
-        scanId: gate.scanId,
-        expiryAction: effectiveAction,
-      },
-      timestamp: new Date().toISOString(),
-    });
+      await dbClient.scan.update({
+        where: { id: gate.scanId },
+        data: { approvalStatus },
+      });
+
+      if (effectiveAction === "approve") {
+        await bus.publish("sentinel.approvals", {
+          type: "gate.decided",
+          gateId: gate.id,
+          decision: "approve",
+          scanId: gate.scanId,
+          orgId: gate.orgId,
+          autoExpired: true,
+        });
+      }
+
+      await bus.publish("sentinel.notifications", {
+        id: `evt-${gate.id}-expired`,
+        orgId: gate.orgId,
+        topic: "approval.expired",
+        payload: {
+          gateId: gate.id,
+          scanId: gate.scanId,
+          expiryAction: effectiveAction,
+        },
+        timestamp: new Date().toISOString(),
+      });
+      processed++;
+    } catch (_err) {
+      // Gate may have been decided between query and update — skip and continue
+    }
   }
 
-  return gates.length;
+  return processed;
 }
 
 // ---------------------------------------------------------------------------

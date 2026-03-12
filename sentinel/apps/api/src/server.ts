@@ -784,10 +784,29 @@ app.post("/v1/approvals/:id/decide", { preHandler: authHook }, async (request, r
 app.post("/v1/approvals/:id/reassign", { preHandler: authHook }, async (request, reply) => {
   const orgId = (request as any).orgId ?? "default";
   const { id } = request.params as { id: string };
+  const decidedBy = (request as any).userId ?? "unknown";
   try {
-    return await withTenant(db, orgId, () =>
+    const result = await withTenant(db, orgId, () =>
       approvalRoutes.reassignGate(orgId, id, request.body as any),
     );
+
+    const { assignedTo, assignedRole } = request.body as any;
+    await auditLog.append(orgId, {
+      actor: { type: "user", id: decidedBy, name: decidedBy },
+      action: "approval.reassign",
+      resource: { type: "approval_gate", id },
+      detail: { assignedTo, assignedRole },
+    });
+
+    await eventBus.publish("sentinel.notifications", {
+      id: `evt-${id}-reassigned`,
+      orgId,
+      topic: "approval.reassigned",
+      payload: { gateId: id, assignedTo, assignedRole, reassignedBy: decidedBy },
+      timestamp: new Date().toISOString(),
+    });
+
+    return result;
   } catch (err: any) {
     reply.code(400).send({ error: err.message });
   }
