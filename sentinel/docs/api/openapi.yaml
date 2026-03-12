@@ -1013,6 +1013,371 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /v1/compliance/frameworks:
+    get:
+      operationId: listComplianceFrameworks
+      summary: List compliance frameworks
+      description: List all available compliance frameworks (built-in and custom).
+      tags: [Compliance]
+      security:
+        - hmacAuth: []
+      responses:
+        "200":
+          description: List of compliance frameworks
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  frameworks:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/ComplianceFramework"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    post:
+      operationId: createComplianceFramework
+      summary: Create a compliance framework
+      description: Create a custom compliance framework.
+      tags: [Compliance]
+      security:
+        - hmacAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ComplianceFrameworkInput"
+      responses:
+        "201":
+          description: Framework created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ComplianceFramework"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Slug conflicts with a built-in framework
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /v1/compliance/frameworks/{id}:
+    get:
+      operationId: getComplianceFramework
+      summary: Get a compliance framework
+      description: Retrieve a single compliance framework by ID.
+      tags: [Compliance]
+      security:
+        - hmacAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Framework ID
+      responses:
+        "200":
+          description: Framework details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ComplianceFramework"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Framework not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    put:
+      operationId: updateComplianceFramework
+      summary: Update a compliance framework
+      description: Update an existing custom compliance framework. Built-in frameworks cannot be modified.
+      tags: [Compliance]
+      security:
+        - hmacAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Framework ID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ComplianceFrameworkInput"
+      responses:
+        "200":
+          description: Framework updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ComplianceFramework"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Cannot modify a built-in framework
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Framework not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      operationId: deleteComplianceFramework
+      summary: Delete a compliance framework
+      description: Delete a custom compliance framework. Built-in frameworks cannot be deleted.
+      tags: [Compliance]
+      security:
+        - hmacAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Framework ID
+      responses:
+        "204":
+          description: Framework deleted
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Cannot delete a built-in framework
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Framework not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /v1/compliance/controls/{id}/override:
+    post:
+      operationId: createControlOverride
+      summary: Create a control override
+      description: Override the default behaviour of a compliance control.
+      tags: [Compliance]
+      security:
+        - hmacAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Control ID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                matchRules:
+                  type: array
+                  items:
+                    type: object
+                weight:
+                  type: number
+                enabled:
+                  type: boolean
+      responses:
+        "200":
+          description: Override created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  controlId:
+                    type: string
+                  override:
+                    type: object
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Control not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      operationId: deleteControlOverride
+      summary: Delete a control override
+      description: Remove the override from a compliance control, restoring default behaviour.
+      tags: [Compliance]
+      security:
+        - hmacAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Control ID
+      responses:
+        "204":
+          description: Override removed
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Control not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /v1/compliance/assess/{frameworkId}:
+    get:
+      operationId: assessCompliance
+      summary: Assess compliance
+      description: Run a compliance assessment against a specific framework.
+      tags: [Compliance]
+      security:
+        - hmacAuth: []
+      parameters:
+        - name: frameworkId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Framework ID
+      responses:
+        "200":
+          description: Compliance assessment result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ComplianceAssessment"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Framework not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /v1/compliance/scores:
+    get:
+      operationId: getComplianceScores
+      summary: Get compliance scores
+      description: Retrieve current compliance scores across all frameworks.
+      tags: [Compliance]
+      security:
+        - hmacAuth: []
+      responses:
+        "200":
+          description: Compliance scores
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  scores:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/ComplianceSnapshot"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /v1/compliance/trends/{frameworkId}:
+    get:
+      operationId: getComplianceTrends
+      summary: Get compliance trends
+      description: Retrieve compliance score trends over time for a specific framework.
+      tags: [Compliance]
+      security:
+        - hmacAuth: []
+      parameters:
+        - name: frameworkId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Framework ID
+      responses:
+        "200":
+          description: Compliance trend data
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  trends:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/ComplianceSnapshot"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Framework not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /health:
     get:
       operationId: healthCheck
@@ -1555,6 +1920,92 @@ components:
           description: Machine-readable error code
         details:
           description: Additional error context
+
+    ComplianceFramework:
+      type: object
+      required: [id, slug, name, version]
+      properties:
+        id:
+          type: string
+          format: uuid
+        slug:
+          type: string
+        name:
+          type: string
+        version:
+          type: string
+        builtIn:
+          type: boolean
+        controls:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+              name:
+                type: string
+              description:
+                type: string
+              weight:
+                type: number
+
+    ComplianceFrameworkInput:
+      type: object
+      required: [slug, name]
+      properties:
+        slug:
+          type: string
+        name:
+          type: string
+        version:
+          type: string
+        controls:
+          type: array
+          items:
+            type: object
+
+    ComplianceAssessment:
+      type: object
+      properties:
+        frameworkId:
+          type: string
+        frameworkSlug:
+          type: string
+        score:
+          type: number
+          minimum: 0
+          maximum: 100
+        status:
+          type: string
+          enum: [compliant, non-compliant, partial]
+        controlResults:
+          type: array
+          items:
+            type: object
+            properties:
+              controlId:
+                type: string
+              status:
+                type: string
+              score:
+                type: number
+        assessedAt:
+          type: string
+          format: date-time
+
+    ComplianceSnapshot:
+      type: object
+      properties:
+        frameworkId:
+          type: string
+        score:
+          type: number
+        status:
+          type: string
+        snapshotAt:
+          type: string
+          format: date-time
 
     PolicyVersion:
       type: object
