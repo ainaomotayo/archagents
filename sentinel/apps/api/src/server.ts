@@ -20,6 +20,7 @@ import { createAuthHook } from "./middleware/auth.js";
 import { buildScanRoutes } from "./routes/scans.js";
 import { registerWebhookRoutes } from "./routes/webhooks.js";
 import { buildWebhookRoutes } from "./routes/notification-endpoints.js";
+import { buildApprovalRoutes } from "./routes/approvals.js";
 import { buildNotificationRuleRoutes } from "./routes/notification-rules.js";
 import { HttpWebhookAdapter, SseManager } from "@sentinel/notifications";
 import { randomUUID } from "node:crypto";
@@ -101,6 +102,9 @@ const webhookRoutes = buildWebhookRoutes({ db });
 
 // --- Notification rule route handlers ---
 const ruleRoutes = buildNotificationRuleRoutes({ db });
+
+// --- Approval route handlers ---
+const approvalRoutes = buildApprovalRoutes({ db });
 
 const sseManager = new SseManager();
 
@@ -677,6 +681,80 @@ app.get("/v1/audit", { preHandler: authHook }, async (request) => {
     ]);
     return { events, total, limit: Number(limit), offset: Number(offset) };
   });
+});
+
+// --- Approval Policies ---
+app.post("/v1/approval-policies", { preHandler: authHook }, async (request) => {
+  const orgId = (request as any).orgId ?? "default";
+  return approvalRoutes.createPolicy(orgId, request.body);
+});
+
+app.get("/v1/approval-policies", { preHandler: authHook }, async (request) => {
+  const orgId = (request as any).orgId ?? "default";
+  return approvalRoutes.listPolicies(orgId);
+});
+
+app.patch("/v1/approval-policies/:id", { preHandler: authHook }, async (request) => {
+  const orgId = (request as any).orgId ?? "default";
+  const { id } = request.params as { id: string };
+  return approvalRoutes.updatePolicy(orgId, id, request.body);
+});
+
+app.delete("/v1/approval-policies/:id", { preHandler: authHook }, async (request) => {
+  const orgId = (request as any).orgId ?? "default";
+  const { id } = request.params as { id: string };
+  return approvalRoutes.deletePolicy(orgId, id);
+});
+
+// --- Approval Gates ---
+app.get("/v1/approvals", { preHandler: authHook }, async (request) => {
+  const orgId = (request as any).orgId ?? "default";
+  const { limit = "50", offset = "0" } = request.query as any;
+  return approvalRoutes.listPendingGates(orgId, { limit: Number(limit), offset: Number(offset) });
+});
+
+app.get("/v1/approvals/stats", { preHandler: authHook }, async (request) => {
+  const orgId = (request as any).orgId ?? "default";
+  return approvalRoutes.getStats(orgId);
+});
+
+app.get("/v1/approvals/:id", { preHandler: authHook }, async (request, reply) => {
+  const orgId = (request as any).orgId ?? "default";
+  const { id } = request.params as { id: string };
+  const gate = await approvalRoutes.getGate(orgId, id);
+  if (!gate) { reply.code(404).send({ error: "Approval gate not found" }); return; }
+  return gate;
+});
+
+app.post("/v1/approvals/:id/decide", { preHandler: authHook }, async (request, reply) => {
+  const orgId = (request as any).orgId ?? "default";
+  const { id } = request.params as { id: string };
+  const { decision, justification } = request.body as any;
+  const decidedBy = (request as any).userId ?? "unknown";
+  try {
+    const result = await approvalRoutes.submitDecision(orgId, id, { decision, justification, decidedBy });
+    await eventBus.publish("sentinel.approvals", { type: "gate.decided", gateId: id, decision, scanId: result.scanId, orgId });
+    await eventBus.publish("sentinel.notifications", {
+      id: `evt-${id}-${decision}`,
+      orgId,
+      topic: `approval.${decision === "approve" ? "approved" : "rejected"}`,
+      payload: { gateId: id, decision, scanId: result.scanId, decidedBy },
+      timestamp: new Date().toISOString(),
+    });
+    return result;
+  } catch (err: any) {
+    reply.code(400).send({ error: err.message });
+  }
+});
+
+app.post("/v1/approvals/:id/reassign", { preHandler: authHook }, async (request, reply) => {
+  const orgId = (request as any).orgId ?? "default";
+  const { id } = request.params as { id: string };
+  try {
+    return await approvalRoutes.reassignGate(orgId, id, request.body as any);
+  } catch (err: any) {
+    reply.code(400).send({ error: err.message });
+  }
 });
 
 // --- DLQ monitoring ---
