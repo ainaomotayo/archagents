@@ -4,6 +4,7 @@ import { createE2EContext, type E2EContext } from "../fixtures/factory.js";
 import { securityVulnDiff, dependencyVulnDiff, combinedVulnDiff } from "../fixtures/diffs.js";
 import { submitConcurrent } from "../scenarios/pipeline.js";
 import { expectScanIsolation, expectPipelineComplete } from "../helpers/assertions.js";
+import { assertScanIsolation } from "../helpers/invariant-checker.js";
 
 describe("E2E: Concurrent Scan Isolation", () => {
   let ctx: E2EContext;
@@ -70,5 +71,8 @@ describe("E2E: Concurrent Scan Isolation", () => {
     for (const result of results) {
       expectPipelineComplete(result.scan, result.findings, result.certificate);
     }
+
+    // Formal scan isolation invariant check across all pipeline states
+    assertScanIsolation(results.map((r) => ({ scan: r.scan, findings: r.findings, certificate: r.certificate })));
   });
 });
