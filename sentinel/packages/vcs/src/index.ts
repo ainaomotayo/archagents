@@ -13,3 +13,4 @@ export type {
 } from "./types.js";
 
 export { VcsProviderBase } from "./base.js";
+export { GitLabProvider } from "./providers/gitlab.js";
