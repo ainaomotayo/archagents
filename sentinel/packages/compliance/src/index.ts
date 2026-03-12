@@ -23,10 +23,14 @@ export {
   generateComplianceSummaryPdf,
   generateAuditEvidencePdf,
   generateExecutivePdf,
+  generateNistProfilePdf,
+  generateHipaaAssessmentPdf,
   type ComplianceSummaryData,
   type AuditEvidenceData,
   type EvidenceItem,
   type ExecutiveReportData,
+  type NistProfileData,
+  type HipaaAssessmentData,
 } from "./reports/generator.js";
 
 export { computeGapAnalysis, type GapAnalysis, type GapItem } from "./gap-analysis/service.js";

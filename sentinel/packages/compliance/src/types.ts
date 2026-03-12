@@ -54,7 +54,7 @@ export interface FindingInput {
   suppressed: boolean;
 }
 
-export const VALID_REPORT_TYPES = ["compliance_summary", "audit_evidence", "executive"] as const;
+export const VALID_REPORT_TYPES = ["compliance_summary", "audit_evidence", "executive", "nist_profile", "hipaa_assessment"] as const;
 export type ReportType = (typeof VALID_REPORT_TYPES)[number];
 
 export const EVIDENCE_EVENT_TYPES = [
