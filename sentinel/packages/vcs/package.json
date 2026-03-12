@@ -15,7 +15,11 @@
     "@sentinel/github": "workspace:*",
     "@sentinel/shared": "workspace:*"
   },
+  "peerDependencies": {
+    "ioredis": "^5.6"
+  },
   "devDependencies": {
+    "ioredis": "^5.6",
     "typescript": "^5.7",
     "vitest": "^3.0"
   }
