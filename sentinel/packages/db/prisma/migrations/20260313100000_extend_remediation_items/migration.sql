@@ -30,3 +30,22 @@ ALTER TABLE "remediation_items" ADD CONSTRAINT "remediation_items_parent_id_fkey
 
 -- AddForeignKey: Finding relation
 ALTER TABLE "remediation_items" ADD CONSTRAINT "remediation_items_finding_id_fkey" FOREIGN KEY ("finding_id") REFERENCES "findings"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- CreateTable: IntegrationConfig
+CREATE TABLE "integration_configs" (
+    "id" UUID NOT NULL DEFAULT gen_random_uuid(),
+    "org_id" UUID NOT NULL,
+    "provider" TEXT NOT NULL,
+    "config" JSONB NOT NULL,
+    "enabled" BOOLEAN NOT NULL DEFAULT true,
+    "created_at" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMPTZ NOT NULL,
+
+    CONSTRAINT "integration_configs_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateIndex
+CREATE UNIQUE INDEX "integration_configs_org_id_provider_key" ON "integration_configs"("org_id", "provider");
+
+-- AddForeignKey
+ALTER TABLE "integration_configs" ADD CONSTRAINT "integration_configs_org_id_fkey" FOREIGN KEY ("org_id") REFERENCES "organizations"("id") ON DELETE RESTRICT ON UPDATE CASCADE;

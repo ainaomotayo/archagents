@@ -32,6 +32,7 @@ model Organization {
   remediationItems           RemediationItem[]
   businessAssociateAgreements BusinessAssociateAgreement[]
   vcsInstallations            VcsInstallation[]
+  integrationConfigs          IntegrationConfig[]
 
   @@map("organizations")
 }
@@ -649,6 +650,21 @@ model RemediationItem {
   @@index([parentId], map: "idx_remediation_parent")
   @@index([findingId], map: "idx_remediation_finding")
   @@map("remediation_items")
+}
+
+model IntegrationConfig {
+  id        String   @id @default(uuid()) @db.Uuid
+  orgId     String   @map("org_id") @db.Uuid
+  provider  String
+  config    Json
+  enabled   Boolean  @default(true)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  organization Organization @relation(fields: [orgId], references: [id])
+
+  @@unique([orgId, provider])
+  @@map("integration_configs")
 }
 
 model BusinessAssociateAgreement {
