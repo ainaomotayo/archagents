@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { getRemediationById } from "@/lib/api";
+import { getRemediationById, listEvidence } from "@/lib/api";
 import { IconChevronLeft } from "@/components/icons";
 import { RemediationDetailClient } from "./detail-client";
 
@@ -9,7 +9,10 @@ interface RemediationDetailPageProps {
 
 export default async function RemediationDetailPage({ params }: RemediationDetailPageProps) {
   const { id } = await params;
-  const item = await getRemediationById(id);
+  const [item, evidence] = await Promise.all([
+    getRemediationById(id),
+    listEvidence(id),
+  ]);
 
   if (!item) {
     return (
@@ -67,7 +70,7 @@ export default async function RemediationDetailPage({ params }: RemediationDetai
         </p>
       </div>
       <div className="animate-fade-up max-w-2xl" style={{ animationDelay: "0.05s" }}>
-        <RemediationDetailClient item={item} />
+        <RemediationDetailClient item={item} initialEvidence={evidence} />
       </div>
     </div>
   );

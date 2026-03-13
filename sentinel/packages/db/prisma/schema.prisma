@@ -35,6 +35,7 @@ model Organization {
   vcsInstallations            VcsInstallation[]
   integrationConfigs          IntegrationConfig[]
   workflowConfig              WorkflowConfig?
+  remediationSnapshots        RemediationSnapshot[]
 
   @@map("organizations")
 }
@@ -800,4 +801,24 @@ model EvidenceAttachment {
   @@index([remediationId])
   @@index([orgId])
   @@map("evidence_attachments")
+}
+
+model RemediationSnapshot {
+  id                String   @id @default(uuid()) @db.Uuid
+  orgId             String   @map("org_id") @db.Uuid
+  snapshotDate      DateTime @map("snapshot_date") @db.Date
+  scope             String   @default("org")
+  scopeValue        String?  @map("scope_value")
+  openCount         Int      @map("open_count")
+  inProgressCount   Int      @map("in_progress_count")
+  completedCount    Int      @map("completed_count")
+  acceptedRiskCount Int      @map("accepted_risk_count")
+  avgResolutionHours Float?  @map("avg_resolution_hours")
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  organization Organization @relation(fields: [orgId], references: [id])
+
+  @@unique([orgId, snapshotDate, scope, scopeValue])
+  @@index([orgId, scope, snapshotDate])
+  @@map("remediation_snapshots")
 }

@@ -160,3 +160,42 @@ export interface RemediationStats {
   avgResolutionDays: number;
   slaCompliance: number;
 }
+
+// ── Evidence ─────────────────────────────────────────────────────────
+
+export interface EvidenceAttachment {
+  id: string;
+  remediationId: string;
+  fileName: string;
+  fileSize: number;
+  mimeType: string;
+  s3Key: string;
+  uploadedBy: string;
+  createdAt: string;
+}
+
+// ── Charts ───────────────────────────────────────────────────────────
+
+export interface BurndownDataPoint {
+  date: string;
+  open: number;
+  inProgress: number;
+}
+
+export interface VelocityDataPoint {
+  week: string;
+  completed: number;
+}
+
+export interface AgingDataPoint {
+  bucket: string;
+  critical: number;
+  high: number;
+  medium: number;
+  low: number;
+}
+
+export interface SlaDataPoint {
+  date: string;
+  compliance: number;
+}

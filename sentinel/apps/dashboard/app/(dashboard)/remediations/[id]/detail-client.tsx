@@ -2,7 +2,7 @@
 
 import { useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import type { RemediationItem } from "@/lib/types";
+import type { RemediationItem, EvidenceAttachment } from "@/lib/types";
 import { RemediationDetailPanel } from "@/components/remediations/remediation-detail-panel";
 import {
   updateRemediationAction,
@@ -11,9 +11,10 @@ import {
 
 interface RemediationDetailClientProps {
   item: RemediationItem;
+  initialEvidence?: EvidenceAttachment[];
 }
 
-export function RemediationDetailClient({ item: initialItem }: RemediationDetailClientProps) {
+export function RemediationDetailClient({ item: initialItem, initialEvidence = [] }: RemediationDetailClientProps) {
   const [item, setItem] = useState(initialItem);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const router = useRouter();
@@ -69,13 +70,28 @@ export function RemediationDetailClient({ item: initialItem }: RemediationDetail
     [initialItem, router],
   );
 
+  const handleDownloadEvidence = useCallback(
+    async (evidenceId: string): Promise<string | null> => {
+      try {
+        const { getEvidenceDownloadUrl } = await import("@/lib/api");
+        const result = await getEvidenceDownloadUrl(initialItem.id, evidenceId);
+        return result.url;
+      } catch {
+        return null;
+      }
+    },
+    [initialItem.id],
+  );
+
   return (
     <RemediationDetailPanel
       item={item}
       onStatusChange={handleStatusChange}
       onAssign={handleAssign}
       onLinkExternal={handleLinkExternal}
+      onDownloadEvidence={handleDownloadEvidence}
       isSubmitting={isSubmitting}
+      initialEvidence={initialEvidence}
     />
   );
 }

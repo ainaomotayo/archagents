@@ -6,9 +6,12 @@
  */
 
 import type {
+  AgingDataPoint,
   ApprovalGate,
   ApprovalStats,
+  BurndownDataPoint,
   Certificate,
+  EvidenceAttachment,
   Finding,
   FindingCountByCategory,
   OverviewStats,
@@ -16,6 +19,8 @@ import type {
   RemediationItem,
   RemediationStats,
   Scan,
+  SlaDataPoint,
+  VelocityDataPoint,
 } from "./types";
 
 import {
@@ -407,6 +412,155 @@ export async function linkRemediationExternal(
   const { apiPost } = await import("./api-client");
   const headers = await getSessionHeaders();
   return apiPost<RemediationItem>(`/v1/remediations/${id}/link`, { provider, externalRef }, headers);
+}
+
+// ── Evidence ─────────────────────────────────────────────────────────
+
+export async function requestEvidenceUpload(
+  remediationId: string,
+  fileName: string,
+  fileSize: number,
+  mimeType: string,
+): Promise<{ uploadUrl: string; s3Key: string }> {
+  const { apiPost } = await import("./api-client");
+  const headers = await getSessionHeaders();
+  return apiPost(`/v1/compliance/remediations/${remediationId}/evidence/presign`, { fileName, fileSize, mimeType }, headers);
+}
+
+export async function confirmEvidenceUpload(
+  remediationId: string,
+  s3Key: string,
+  fileName: string,
+  fileSize: number,
+  mimeType: string,
+): Promise<any> {
+  const { apiPost } = await import("./api-client");
+  const headers = await getSessionHeaders();
+  return apiPost(`/v1/compliance/remediations/${remediationId}/evidence/confirm`, { s3Key, fileName, fileSize, mimeType }, headers);
+}
+
+export async function listEvidence(remediationId: string): Promise<EvidenceAttachment[]> {
+  return tryApi(async (headers) => {
+    const { apiGet } = await import("./api-client");
+    return apiGet<EvidenceAttachment[]>(`/v1/compliance/remediations/${remediationId}/evidence`, undefined, headers);
+  }, []);
+}
+
+export async function getEvidenceDownloadUrl(
+  remediationId: string,
+  evidenceId: string,
+): Promise<{ url: string }> {
+  const { apiGet } = await import("./api-client");
+  const headers = await getSessionHeaders();
+  return apiGet(`/v1/compliance/remediations/${remediationId}/evidence/${evidenceId}/url`, undefined, headers);
+}
+
+export async function deleteEvidence(remediationId: string, evidenceId: string): Promise<void> {
+  const { apiDelete } = await import("./api-client");
+  const headers = await getSessionHeaders();
+  await apiDelete(`/v1/compliance/remediations/${remediationId}/evidence/${evidenceId}`, headers);
+}
+
+// ── Charts ───────────────────────────────────────────────────────────
+
+export async function getBurndownData(
+  scope?: string,
+  scopeValue?: string,
+  days?: number,
+): Promise<BurndownDataPoint[]> {
+  return tryApi(async (headers) => {
+    const { apiGet } = await import("./api-client");
+    const query: Record<string, string> = {};
+    if (scope) query.scope = scope;
+    if (scopeValue) query.scopeValue = scopeValue;
+    if (days) query.days = String(days);
+    return apiGet<BurndownDataPoint[]>("/v1/compliance/remediations/charts/burndown", query, headers);
+  }, []);
+}
+
+export async function getVelocityData(
+  scope?: string,
+  scopeValue?: string,
+  days?: number,
+): Promise<VelocityDataPoint[]> {
+  return tryApi(async (headers) => {
+    const { apiGet } = await import("./api-client");
+    const query: Record<string, string> = {};
+    if (scope) query.scope = scope;
+    if (scopeValue) query.scopeValue = scopeValue;
+    if (days) query.days = String(days);
+    return apiGet<VelocityDataPoint[]>("/v1/compliance/remediations/charts/velocity", query, headers);
+  }, []);
+}
+
+export async function getAgingData(
+  scope?: string,
+  scopeValue?: string,
+): Promise<AgingDataPoint[]> {
+  return tryApi(async (headers) => {
+    const { apiGet } = await import("./api-client");
+    const query: Record<string, string> = {};
+    if (scope) query.scope = scope;
+    if (scopeValue) query.scopeValue = scopeValue;
+    return apiGet<AgingDataPoint[]>("/v1/compliance/remediations/charts/aging", query, headers);
+  }, []);
+}
+
+export async function getSlaData(
+  scope?: string,
+  scopeValue?: string,
+  days?: number,
+): Promise<SlaDataPoint[]> {
+  return tryApi(async (headers) => {
+    const { apiGet } = await import("./api-client");
+    const query: Record<string, string> = {};
+    if (scope) query.scope = scope;
+    if (scopeValue) query.scopeValue = scopeValue;
+    if (days) query.days = String(days);
+    return apiGet<SlaDataPoint[]>("/v1/compliance/remediations/charts/sla", query, headers);
+  }, []);
+}
+
+// ── Workflow Config ──────────────────────────────────────────────────
+
+export async function getWorkflowConfig(): Promise<{ skipStages: string[] }> {
+  return tryApi(async (headers) => {
+    const { apiGet } = await import("./api-client");
+    return apiGet<{ skipStages: string[] }>("/v1/compliance/workflow-config", undefined, headers);
+  }, { skipStages: [] });
+}
+
+export async function updateWorkflowConfig(skipStages: string[]): Promise<void> {
+  const { apiPut } = await import("./api-client");
+  const headers = await getSessionHeaders();
+  await apiPut("/v1/compliance/workflow-config", { skipStages }, headers);
+}
+
+// ── Auto-Fix ─────────────────────────────────────────────────────────
+
+export async function triggerAutoFix(
+  remediationId: string,
+): Promise<{ prUrl: string; branch: string }> {
+  const { apiPost } = await import("./api-client");
+  const headers = await getSessionHeaders();
+  return apiPost<{ prUrl: string; branch: string }>(
+    `/v1/compliance/remediations/${remediationId}/auto-fix`,
+    {},
+    headers,
+  );
+}
+
+export async function getAutoFixStatus(
+  remediationId: string,
+): Promise<{ status: string; prUrl?: string }> {
+  return tryApi(async (headers) => {
+    const { apiGet } = await import("./api-client");
+    return apiGet<{ status: string; prUrl?: string }>(
+      `/v1/compliance/remediations/${remediationId}/auto-fix/status`,
+      undefined,
+      headers,
+    );
+  }, { status: "none" });
 }
 
 function filterMockRemediations(filters?: {

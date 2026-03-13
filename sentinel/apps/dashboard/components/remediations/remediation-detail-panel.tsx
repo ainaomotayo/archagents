@@ -1,15 +1,19 @@
 "use client";
 
 import { useState } from "react";
-import type { RemediationItem } from "@/lib/types";
+import type { RemediationItem, EvidenceAttachment } from "@/lib/types";
 import { PRIORITY_STYLES, STATUS_STYLES, STATUS_LABELS, isOverdue } from "./remediation-card";
+import { EvidenceUpload } from "./evidence-upload";
+import { AutoFixButton } from "./auto-fix-button";
 
 interface RemediationDetailPanelProps {
   item: RemediationItem;
   onStatusChange: (id: string, status: string) => Promise<void>;
   onAssign: (id: string, assignedTo: string) => Promise<void>;
   onLinkExternal: (id: string, provider: string, externalRef: string) => Promise<void>;
+  onDownloadEvidence?: (evidenceId: string) => Promise<string | null>;
   isSubmitting: boolean;
+  initialEvidence?: EvidenceAttachment[];
 }
 
 const STATUS_TRANSITIONS: Record<string, string[]> = {
@@ -43,7 +47,9 @@ export function RemediationDetailPanel({
   onStatusChange,
   onAssign,
   onLinkExternal,
+  onDownloadEvidence,
   isSubmitting,
+  initialEvidence = [],
 }: RemediationDetailPanelProps) {
   const [error, setError] = useState<string | null>(null);
   const [showAssign, setShowAssign] = useState(false);
@@ -326,38 +332,52 @@ export function RemediationDetailPanel({
         </div>
       )}
 
+      {/* Evidence Attachments */}
+      <EvidenceUpload
+        remediationId={item.id}
+        initialEvidence={initialEvidence}
+        onDownload={onDownloadEvidence ?? (async () => null)}
+      />
+
       {/* Actions */}
-      {availableTransitions.length > 0 && (
+      {(availableTransitions.length > 0 || item.findingId) && (
         <div>
           <h2 className="mb-3 text-sm font-semibold text-text-primary">Actions</h2>
           <div className="rounded-xl border border-border bg-surface-1 p-5">
             {error && (
               <p className="mb-3 text-[12px] text-status-fail">{error}</p>
             )}
-            <div className="flex flex-wrap gap-3">
-              {availableTransitions.map((status) => {
-                const style = STATUS_STYLES[status] ?? STATUS_STYLES.open;
-                const label = STATUS_LABELS[status] ?? status;
-                const isComplete = status === "completed";
-                const isAccept = status === "accepted_risk";
-                return (
-                  <button
-                    key={status}
-                    onClick={() => handleStatusChange(status)}
-                    disabled={isSubmitting}
-                    className={`flex items-center gap-2 rounded-lg px-4 py-2 text-[13px] font-semibold border transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
-                      isComplete
-                        ? "bg-status-pass/20 text-status-pass border-status-pass/30 hover:bg-status-pass/30"
-                        : isAccept
-                          ? "bg-surface-3 text-text-secondary border-border hover:bg-surface-3/80"
-                          : `${style.bg} ${style.text} border-current/30 hover:opacity-80`
-                    }`}
-                  >
-                    {isSubmitting ? "Updating..." : `Move to ${label}`}
-                  </button>
-                );
-              })}
-            </div>
+            {availableTransitions.length > 0 && (
+              <div className="flex flex-wrap gap-3">
+                {availableTransitions.map((status) => {
+                  const style = STATUS_STYLES[status] ?? STATUS_STYLES.open;
+                  const label = STATUS_LABELS[status] ?? status;
+                  const isComplete = status === "completed";
+                  const isAccept = status === "accepted_risk";
+                  return (
+                    <button
+                      key={status}
+                      onClick={() => handleStatusChange(status)}
+                      disabled={isSubmitting}
+                      className={`flex items-center gap-2 rounded-lg px-4 py-2 text-[13px] font-semibold border transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
+                        isComplete
+                          ? "bg-status-pass/20 text-status-pass border-status-pass/30 hover:bg-status-pass/30"
+                          : isAccept
+                            ? "bg-surface-3 text-text-secondary border-border hover:bg-surface-3/80"
+                            : `${style.bg} ${style.text} border-current/30 hover:opacity-80`
+                      }`}
+                    >
+                      {isSubmitting ? "Updating..." : `Move to ${label}`}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+            {item.findingId && (
+              <div className="mt-3">
+                <AutoFixButton item={item} />
+              </div>
+            )}
           </div>
         </div>
       )}
