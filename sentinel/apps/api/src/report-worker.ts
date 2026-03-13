@@ -54,7 +54,7 @@ async function assembleAndGeneratePdf(orgId: string, type: string, frameworkId: 
 
   const remediationsRaw = await db.remediationItem.findMany({ where: { orgId, frameworkSlug: slug } });
   const remediations: Record<string, any> = {};
-  for (const r of remediationsRaw) remediations[r.controlCode] = r;
+  for (const r of remediationsRaw) if (r.controlCode) remediations[r.controlCode] = r;
 
   const analysis = computeGapAnalysis(framework, findings, attestations, remediations);
   const now = new Date().toISOString();
