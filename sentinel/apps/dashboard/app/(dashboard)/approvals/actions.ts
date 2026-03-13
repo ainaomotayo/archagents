@@ -29,3 +29,21 @@ export async function submitDecision(
   revalidatePath("/approvals");
   revalidatePath(`/approvals/${gateId}`);
 }
+
+export async function reassignGate(gateId: string, assignedTo: string) {
+  const { reassignApprovalGate } = await import("@/lib/api");
+  try {
+    await reassignApprovalGate(gateId, assignedTo);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (msg.includes("404")) {
+      throw new Error("This approval gate no longer exists.");
+    }
+    if (msg.includes("409")) {
+      throw new Error("Cannot reassign a gate that has already been decided.");
+    }
+    throw err;
+  }
+  revalidatePath("/approvals");
+  revalidatePath(`/approvals/${gateId}`);
+}

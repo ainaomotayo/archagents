@@ -8,12 +8,17 @@ import { GATE_TYPE_LABEL, formatTimeRemaining } from "./approval-card";
 interface ApprovalDetailPanelProps {
   gate: ApprovalGate;
   onDecision: (gateId: string, decision: "approve" | "reject", justification: string) => Promise<void>;
+  onReassign?: (gateId: string, assignedTo: string) => Promise<void>;
   isSubmitting: boolean;
 }
 
-export function ApprovalDetailPanel({ gate, onDecision, isSubmitting }: ApprovalDetailPanelProps) {
+export function ApprovalDetailPanel({ gate, onDecision, onReassign, isSubmitting }: ApprovalDetailPanelProps) {
   const [justification, setJustification] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [showReassign, setShowReassign] = useState(false);
+  const [reassignTo, setReassignTo] = useState("");
+  const [reassigning, setReassigning] = useState(false);
+  const [reassignError, setReassignError] = useState<string | null>(null);
   const isActionable = gate.status === "pending" || gate.status === "escalated";
   const canSubmit = justification.trim().length >= 10 && !isSubmitting;
   const sla = formatTimeRemaining(gate.expiresAt);
@@ -25,6 +30,21 @@ export function ApprovalDetailPanel({ gate, onDecision, isSubmitting }: Approval
       setJustification("");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to submit decision");
+    }
+  };
+
+  const handleReassign = async () => {
+    if (!onReassign || !reassignTo.trim()) return;
+    setReassignError(null);
+    setReassigning(true);
+    try {
+      await onReassign(gate.id, reassignTo.trim());
+      setShowReassign(false);
+      setReassignTo("");
+    } catch (err) {
+      setReassignError(err instanceof Error ? err.message : "Failed to reassign");
+    } finally {
+      setReassigning(false);
     }
   };
 
@@ -60,7 +80,19 @@ export function ApprovalDetailPanel({ gate, onDecision, isSubmitting }: Approval
             </div>
             <div>
               <p className="text-[11px] font-medium uppercase tracking-wider text-text-tertiary">Assigned To</p>
-              <p className="mt-1 text-[12px] capitalize text-text-secondary">{gate.assignedRole ?? "Unassigned"}</p>
+              <div className="mt-1 flex items-center gap-2">
+                <p className="text-[12px] capitalize text-text-secondary">
+                  {gate.assignedTo ?? gate.assignedRole ?? "Unassigned"}
+                </p>
+                {isActionable && onReassign && (
+                  <button
+                    onClick={() => setShowReassign(!showReassign)}
+                    className="rounded px-1.5 py-0.5 text-[11px] font-medium text-accent hover:bg-accent-subtle transition-colors"
+                  >
+                    Reassign
+                  </button>
+                )}
+              </div>
             </div>
             <div>
               <p className="text-[11px] font-medium uppercase tracking-wider text-text-tertiary">Expiry Action</p>
@@ -73,6 +105,41 @@ export function ApprovalDetailPanel({ gate, onDecision, isSubmitting }: Approval
           </div>
         </div>
       </div>
+
+      {/* Reassign Form */}
+      {showReassign && isActionable && onReassign && (
+        <div className="rounded-xl border border-accent/30 bg-accent-subtle/30 p-4">
+          <label htmlFor="reassign-to" className="block text-[11px] font-medium uppercase tracking-wider text-text-tertiary">
+            Reassign to (username or email)
+          </label>
+          <div className="mt-2 flex gap-2">
+            <input
+              id="reassign-to"
+              type="text"
+              value={reassignTo}
+              onChange={(e) => setReassignTo(e.target.value)}
+              placeholder="e.g. jane@company.com"
+              className="flex-1 rounded-lg border border-border bg-surface-2 px-3 py-1.5 text-[13px] text-text-primary placeholder:text-text-tertiary focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
+            />
+            <button
+              onClick={handleReassign}
+              disabled={!reassignTo.trim() || reassigning}
+              className="rounded-lg bg-accent px-4 py-1.5 text-[13px] font-semibold text-white transition-colors hover:bg-accent/90 disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              {reassigning ? "Reassigning..." : "Confirm"}
+            </button>
+            <button
+              onClick={() => { setShowReassign(false); setReassignTo(""); setReassignError(null); }}
+              className="rounded-lg border border-border px-3 py-1.5 text-[13px] text-text-secondary hover:bg-surface-2 transition-colors"
+            >
+              Cancel
+            </button>
+          </div>
+          {reassignError && (
+            <p className="mt-2 text-[12px] text-status-fail">{reassignError}</p>
+          )}
+        </div>
+      )}
 
       {/* Scan Details */}
       <div>

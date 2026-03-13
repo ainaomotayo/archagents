@@ -6,7 +6,7 @@ import { ApprovalCard } from "./approval-card";
 import { ApprovalStatsBar } from "./approval-stats-bar";
 import { ApprovalDetailPanel } from "./approval-detail-panel";
 import { useApprovalStream } from "@/lib/use-approval-stream";
-import { submitDecision } from "@/app/(dashboard)/approvals/actions";
+import { submitDecision, reassignGate } from "@/app/(dashboard)/approvals/actions";
 
 interface ApprovalQueueProps {
   initialGates: ApprovalGate[];
@@ -156,6 +156,16 @@ export function ApprovalQueue({ initialGates, initialStats }: ApprovalQueueProps
     [],
   );
 
+  const handleReassign = useCallback(
+    async (gateId: string, assignedTo: string) => {
+      await reassignGate(gateId, assignedTo);
+      setGates((prev) =>
+        prev.map((g) => (g.id === gateId ? { ...g, assignedTo } : g)),
+      );
+    },
+    [],
+  );
+
   return (
     <div className="space-y-6">
       {/* Stats bar */}
@@ -241,6 +251,7 @@ export function ApprovalQueue({ initialGates, initialStats }: ApprovalQueueProps
               <ApprovalDetailPanel
                 gate={selectedGate}
                 onDecision={handleDecision}
+                onReassign={handleReassign}
                 isSubmitting={submittingId === selectedGate.id}
               />
             ) : (

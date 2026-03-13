@@ -4,7 +4,7 @@ import { useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import type { ApprovalGate } from "@/lib/types";
 import { ApprovalDetailPanel } from "@/components/approvals/approval-detail-panel";
-import { submitDecision } from "@/app/(dashboard)/approvals/actions";
+import { submitDecision, reassignGate } from "@/app/(dashboard)/approvals/actions";
 
 interface ApprovalDetailClientProps {
   gate: ApprovalGate;
@@ -49,10 +49,20 @@ export function ApprovalDetailClient({ gate: initialGate }: ApprovalDetailClient
     [initialGate, router],
   );
 
+  const handleReassign = useCallback(
+    async (gateId: string, assignedTo: string) => {
+      await reassignGate(gateId, assignedTo);
+      setGate((prev) => ({ ...prev, assignedTo }));
+      router.refresh();
+    },
+    [router],
+  );
+
   return (
     <ApprovalDetailPanel
       gate={gate}
       onDecision={handleDecision}
+      onReassign={handleReassign}
       isSubmitting={isSubmitting}
     />
   );
