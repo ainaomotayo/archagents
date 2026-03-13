@@ -88,6 +88,8 @@ export class GitLabProvider extends VcsProviderBase {
       const repo = project.path_with_namespace ?? "";
       const owner = repo.split("/").slice(0, -1).join("/") || repo;
       const lastCommit = attrs.last_commit ?? {};
+      const commitHash = lastCommit.id ?? "";
+      if (!commitHash) return null;
 
       return {
         provider: "gitlab",
@@ -95,7 +97,7 @@ export class GitLabProvider extends VcsProviderBase {
         installationId: String(project.id ?? ""),
         repo,
         owner,
-        commitHash: lastCommit.id ?? attrs.last_commit?.id ?? "",
+        commitHash,
         branch: attrs.source_branch ?? "",
         author: lastCommit.author?.name ?? body.user?.name ?? "unknown",
         prNumber: attrs.iid,

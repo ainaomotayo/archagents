@@ -86,6 +86,9 @@ export class BitbucketProvider extends VcsProviderBase {
       const pr = body.pullrequest;
       if (!pr) return null;
 
+      const commitHash = pr.source?.commit?.hash ?? "";
+      if (!commitHash) return null;
+
       const repoData = body.repository ?? {};
       const fullName = repoData.full_name ?? "";
       const owner = fullName.split("/")[0] ?? "";
@@ -96,7 +99,7 @@ export class BitbucketProvider extends VcsProviderBase {
         installationId: repoData.uuid ?? "",
         repo: fullName,
         owner,
-        commitHash: pr.source?.commit?.hash ?? "",
+        commitHash,
         branch: pr.source?.branch?.name ?? "",
         author: pr.author?.display_name ?? body.actor?.display_name ?? "unknown",
         prNumber: pr.id,
@@ -107,27 +110,32 @@ export class BitbucketProvider extends VcsProviderBase {
   }
 
   async fetchDiff(trigger: VcsScanTrigger): Promise<VcsDiffResult> {
-    const repo = trigger.repo;
-    let url: string;
+    try {
+      const repo = trigger.repo;
+      let url: string;
 
-    if (trigger.type === "pull_request" && trigger.prNumber) {
-      url = `${API_BASE}/repositories/${repo}/pullrequests/${trigger.prNumber}/diff`;
-    } else {
-      url = `${API_BASE}/repositories/${repo}/diff/${trigger.commitHash}`;
+      if (trigger.type === "pull_request" && trigger.prNumber) {
+        url = `${API_BASE}/repositories/${repo}/pullrequests/${trigger.prNumber}/diff`;
+      } else {
+        url = `${API_BASE}/repositories/${repo}/diff/${trigger.commitHash}`;
+      }
+
+      const response = await fetch(url, {
+        headers: { Authorization: this.authHeader },
+      });
+
+      if (!response.ok) {
+        throw new VcsApiError("bitbucket", response.status, response.statusText, "fetchDiff");
+      }
+
+      const rawDiff = await response.text();
+      const files = this.parseDiffFiles(rawDiff);
+
+      return { rawDiff, files };
+    } catch (err: any) {
+      if (err instanceof VcsApiError) throw err;
+      throw new VcsApiError("bitbucket", err.status ?? 500, err.message ?? "Unknown error", "fetchDiff");
     }
-
-    const response = await fetch(url, {
-      headers: { Authorization: this.authHeader },
-    });
-
-    if (!response.ok) {
-      throw new VcsApiError("bitbucket", response.status, response.statusText, "fetchDiff");
-    }
-
-    const rawDiff = await response.text();
-    const files = this.parseDiffFiles(rawDiff);
-
-    return { rawDiff, files };
   }
 
   async reportStatus(trigger: VcsScanTrigger, report: VcsStatusReport): Promise<void> {

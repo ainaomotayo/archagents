@@ -254,7 +254,8 @@ async function handleScanTrigger(
   });
 
   if (!diffResult.rawDiff.trim()) {
-    logger.warn({ repo: data.repo, commit: data.commitHash }, "Empty diff, skipping");
+    logger.warn({ repo: data.repo, commit: data.commitHash }, "Empty diff, marking scan completed");
+    await deps.db.scan.update({ where: { id: scan.id }, data: { status: "full_pass" } });
     return;
   }
 

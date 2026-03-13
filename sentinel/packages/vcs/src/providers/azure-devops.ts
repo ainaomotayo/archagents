@@ -98,6 +98,7 @@ export class AzureDevOpsProvider extends VcsProviderBase {
       const sourceRef = (resource.sourceRefName ?? "") as string;
       const branch = sourceRef.replace(/^refs\/heads\//, "");
       const commitHash = resource.lastMergeSourceCommit?.commitId ?? "";
+      if (!commitHash) return null;
       const prId = resource.pullRequestId;
       const author = resource.createdBy?.displayName ?? "unknown";
 
@@ -120,14 +121,19 @@ export class AzureDevOpsProvider extends VcsProviderBase {
   }
 
   async fetchDiff(trigger: VcsScanTrigger): Promise<VcsDiffResult> {
-    const repoName = trigger.repo;
-    const baseUrl = `${this.organizationUrl}/${this.project}/_apis/git/repositories/${repoName}`;
+    try {
+      const repoName = trigger.repo;
+      const baseUrl = `${this.organizationUrl}/${this.project}/_apis/git/repositories/${repoName}`;
 
-    if (trigger.type === "pull_request" && trigger.prNumber) {
-      return this.fetchPrDiff(baseUrl, trigger.prNumber);
+      if (trigger.type === "pull_request" && trigger.prNumber) {
+        return await this.fetchPrDiff(baseUrl, trigger.prNumber);
+      }
+
+      return await this.fetchCommitDiff(baseUrl, trigger.commitHash);
+    } catch (err: any) {
+      if (err instanceof VcsApiError) throw err;
+      throw new VcsApiError("azure_devops", err.status ?? 500, err.message ?? "Unknown error", "fetchDiff");
     }
-
-    return this.fetchCommitDiff(baseUrl, trigger.commitHash);
   }
 
   private async fetchPrDiff(baseUrl: string, prNumber: number): Promise<VcsDiffResult> {

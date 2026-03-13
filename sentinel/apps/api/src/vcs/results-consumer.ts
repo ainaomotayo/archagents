@@ -51,7 +51,11 @@ export async function handleVcsResult(
   // Fallback: check scan.triggerMeta in DB
   if (!provider || !correlation) {
     const scan = await db.scan.findUnique({ where: { id: scanId } });
-    const meta = (scan?.triggerMeta ?? {}) as Record<string, unknown>;
+    if (!scan) {
+      logger.debug({ scanId }, "Scan not found in DB, skipping");
+      return;
+    }
+    const meta = (scan.triggerMeta ?? {}) as Record<string, unknown>;
     if (meta.provider && registry.has(meta.provider as VcsProviderType)) {
       provider = meta.provider as VcsProviderType;
       correlation = {
@@ -59,7 +63,7 @@ export async function handleVcsResult(
         installationId: String(meta.installationId ?? ""),
         owner: String(meta.owner ?? ""),
         repo: String(meta.repo ?? ""),
-        commitHash: scan!.commitHash,
+        commitHash: scan.commitHash,
         prNumber: String(meta.prNumber ?? ""),
         projectId: String(meta.projectId ?? ""),
       };

@@ -51,10 +51,18 @@ export function registerVcsWebhookRoutes(
         ? request.body
         : JSON.stringify(request.body);
 
+      let parsedBody: unknown;
+      try {
+        parsedBody = typeof request.body === "string" ? JSON.parse(request.body) : request.body;
+      } catch {
+        reply.code(400).send({ error: "Invalid JSON payload" });
+        return;
+      }
+
       const event = {
         provider: providerType,
         headers: request.headers as Record<string, string>,
-        body: typeof request.body === "string" ? JSON.parse(request.body) : request.body,
+        body: parsedBody,
         rawBody,
       };
 
