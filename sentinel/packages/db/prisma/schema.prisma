@@ -107,6 +107,7 @@ model Finding {
   createdAt    DateTime  @default(now()) @map("created_at")
 
   scan Scan @relation(fields: [scanId], references: [id])
+  remediationItems RemediationItem[]
 
   @@index([scanId, severity])
   @@index([orgId])
@@ -615,26 +616,38 @@ model AttestationHistory {
 model RemediationItem {
   id               String    @id @default(uuid()) @db.Uuid
   orgId            String    @map("org_id") @db.Uuid
-  frameworkSlug    String    @map("framework_slug")
-  controlCode      String    @map("control_code")
+  frameworkSlug    String?   @map("framework_slug")
+  controlCode      String?   @map("control_code")
   title            String
   description      String
   status           String    @default("open")
   priority         String    @default("medium")
   assignedTo       String?   @map("assigned_to")
-  dueDate          DateTime? @map("due_date")
-  completedAt      DateTime? @map("completed_at")
+  dueDate          DateTime? @map("due_date") @db.Timestamptz
+  completedAt      DateTime? @map("completed_at") @db.Timestamptz
   completedBy      String?   @map("completed_by")
   evidenceNotes    String?   @map("evidence_notes")
   linkedFindingIds String[]  @map("linked_finding_ids")
   createdBy        String    @map("created_by")
-  createdAt        DateTime  @default(now()) @map("created_at")
-  updatedAt        DateTime  @updatedAt @map("updated_at")
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt        DateTime  @updatedAt @map("updated_at") @db.Timestamptz
 
-  organization Organization @relation(fields: [orgId], references: [id])
+  parentId         String?   @map("parent_id") @db.Uuid
+  findingId        String?   @map("finding_id") @db.Uuid
+  itemType         String    @default("compliance") @map("item_type")
+  priorityScore    Int       @default(0) @map("priority_score")
+  externalRef      String?   @map("external_ref")
 
-  @@index([orgId, frameworkSlug, status])
-  @@index([orgId, dueDate])
+  parent           RemediationItem?  @relation("RemediationTree", fields: [parentId], references: [id])
+  children         RemediationItem[] @relation("RemediationTree")
+  finding          Finding?          @relation(fields: [findingId], references: [id])
+  organization     Organization      @relation(fields: [orgId], references: [id])
+
+  @@index([orgId, status, priorityScore], map: "idx_remediation_queue")
+  @@index([orgId, dueDate], map: "idx_remediation_due")
+  @@index([orgId, itemType, status], map: "idx_remediation_type_status")
+  @@index([parentId], map: "idx_remediation_parent")
+  @@index([findingId], map: "idx_remediation_finding")
   @@map("remediation_items")
 }
 
