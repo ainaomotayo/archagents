@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback, useRef, useMemo } from "react";
+import { useRouter } from "next/navigation";
 import type { RemediationItem, RemediationStats } from "@/lib/types";
 import { RemediationStatsBar } from "./remediation-stats-bar";
 import {
@@ -20,6 +21,7 @@ import {
   linkExternalAction,
   createRemediation,
 } from "@/app/(dashboard)/remediations/actions";
+import { useRemediationStream } from "@/hooks/use-remediation-stream";
 
 interface RemediationQueueProps {
   initialItems: RemediationItem[];
@@ -27,9 +29,15 @@ interface RemediationQueueProps {
 }
 
 export function RemediationQueue({ initialItems, initialStats }: RemediationQueueProps) {
+  const router = useRouter();
   const [items, setItems] = useState<RemediationItem[]>(initialItems);
   const [stats, setStats] = useState<RemediationStats>(initialStats);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+
+  // SSE: refresh data when backend pushes remediation events
+  useRemediationStream(useCallback(() => {
+    router.refresh();
+  }, [router]));
   const [typeFilter, setTypeFilter] = useState<TypeFilter>("all");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [priorityFilter, setPriorityFilter] = useState<PriorityFilter>("all");
@@ -298,6 +306,7 @@ export function RemediationQueue({ initialItems, initialStats }: RemediationQueu
             items={filteredItems}
             selectedId={selectedId}
             onSelect={setSelectedId}
+            onStatusChange={handleStatusChange}
           />
           {/* Detail panel below kanban when selected */}
           {selectedItem && (
