@@ -117,18 +117,25 @@ export async function handleVcsResult(
       : undefined,
   };
 
-  await providerInstance.reportStatus(trigger, {
-    scanId,
-    commitHash: correlation.commitHash,
-    status: status as AssessmentStatus,
-    riskScore,
-    summary: `Scan ${scanId}: ${status.replace(/_/g, " ")} (risk ${riskScore}/100), ${findings.length} findings`,
-    annotations,
-  });
+  try {
+    await providerInstance.reportStatus(trigger, {
+      scanId,
+      commitHash: correlation.commitHash,
+      status: status as AssessmentStatus,
+      riskScore,
+      summary: `Scan ${scanId}: ${status.replace(/_/g, " ")} (risk ${riskScore}/100), ${findings.length} findings`,
+      annotations,
+    });
+  } catch (err) {
+    logger.error({ scanId, provider, err }, "Failed to report VCS status");
+    // Don't rethrow — allow cleanup and prevent consumer crash
+  }
 
   // Cleanup correlation
   const key = `scan:vcs:${provider}:${scanId}`;
-  await redis.del(key);
+  await redis.del(key).catch((err) => {
+    logger.warn({ key, err }, "Failed to cleanup correlation key");
+  });
 
   logger.info(
     { scanId, provider, status, riskScore, findings: findings.length },

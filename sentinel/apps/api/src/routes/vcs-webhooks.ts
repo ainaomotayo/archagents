@@ -51,13 +51,6 @@ export function registerVcsWebhookRoutes(
         ? request.body
         : JSON.stringify(request.body);
 
-      // Look up VCS installation for webhook secret
-      const installation = await opts.db.vcsInstallation.findFirst({
-        where: { provider: providerType, active: true },
-      });
-
-      const secret = installation?.webhookSecret ?? "";
-
       const event = {
         provider: providerType,
         headers: request.headers as Record<string, string>,
@@ -65,19 +58,26 @@ export function registerVcsWebhookRoutes(
         rawBody,
       };
 
+      // Parse first to extract owner/repo for installation lookup
+      const trigger = await provider.parseWebhook(event);
+      if (!trigger) {
+        reply.code(200).send({ ignored: true });
+        return;
+      }
+
+      // Look up VCS installation scoped to provider + owner for multi-tenant safety
+      const installation = await opts.db.vcsInstallation.findFirst({
+        where: { provider: providerType, owner: trigger.owner, active: true },
+      });
+
       if (!installation) {
         reply.code(404).send({ error: "Unknown VCS installation" });
         return;
       }
 
-      if (!(await provider.verifyWebhook(event, secret))) {
+      const secret = installation.webhookSecret ?? "";
+      if (secret && !(await provider.verifyWebhook(event, secret))) {
         reply.code(401).send({ error: "Invalid webhook signature" });
-        return;
-      }
-
-      const trigger = await provider.parseWebhook(event);
-      if (!trigger) {
-        reply.code(200).send({ ignored: true });
         return;
       }
 

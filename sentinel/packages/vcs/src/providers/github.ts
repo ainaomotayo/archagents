@@ -105,61 +105,61 @@ export class GitHubProvider extends VcsProviderBase {
 
   async reportStatus(trigger: VcsScanTrigger, report: VcsStatusReport): Promise<void> {
     try {
-    const octokit = getInstallationOctokit(Number(trigger.installationId));
-    const repoName = trigger.repo.includes("/") ? trigger.repo.split("/")[1] : trigger.repo;
+      const octokit = getInstallationOctokit(Number(trigger.installationId));
+      const repoName = trigger.repo.includes("/") ? trigger.repo.split("/")[1] : trigger.repo;
 
-    // Convert VcsAnnotations back to GitHub Finding format for findingsToAnnotations
-    const annotations = report.annotations.map((a) => ({
-      file: a.file,
-      lineStart: a.lineStart,
-      lineEnd: a.lineEnd,
-      severity: a.level === "failure" ? "high" : a.level === "warning" ? "medium" : "low",
-      title: a.title,
-      description: a.message,
-      type: "security",
-      confidence: "high" as const,
-      remediation: "",
-    }));
+      // Convert VcsAnnotations back to GitHub Finding format for findingsToAnnotations
+      const annotations = report.annotations.map((a) => ({
+        file: a.file,
+        lineStart: a.lineStart,
+        lineEnd: a.lineEnd,
+        severity: a.level === "failure" ? "high" : a.level === "warning" ? "medium" : "low",
+        title: a.title,
+        description: a.message,
+        type: "security",
+        confidence: "high" as const,
+        remediation: "",
+      }));
 
-    const checkRunPayload = buildCheckRunComplete(
-      report.scanId,
-      report.status,
-      report.riskScore,
-      findingsToAnnotations(annotations as any),
-    );
+      const checkRunPayload = buildCheckRunComplete(
+        report.scanId,
+        report.status,
+        report.riskScore,
+        findingsToAnnotations(annotations as any),
+      );
 
-    const checkRunId = trigger.metadata?.checkRunId as number | undefined;
-    if (checkRunId) {
-      await octokit.rest.checks.update({
-        owner: trigger.owner,
-        repo: repoName,
-        check_run_id: checkRunId,
-        status: checkRunPayload.status,
-        conclusion: checkRunPayload.conclusion,
-        output: checkRunPayload.output,
-      });
-    } else {
-      await octokit.rest.checks.create({
-        owner: trigger.owner,
-        repo: repoName,
-        name: "Sentinel Security Scan",
-        head_sha: trigger.commitHash,
-        status: checkRunPayload.status,
-        conclusion: checkRunPayload.conclusion,
-        output: checkRunPayload.output,
-      });
-    }
+      const checkRunId = trigger.metadata?.checkRunId as number | undefined;
+      if (checkRunId) {
+        await octokit.rest.checks.update({
+          owner: trigger.owner,
+          repo: repoName,
+          check_run_id: checkRunId,
+          status: checkRunPayload.status,
+          conclusion: checkRunPayload.conclusion,
+          output: checkRunPayload.output,
+        });
+      } else {
+        await octokit.rest.checks.create({
+          owner: trigger.owner,
+          repo: repoName,
+          name: "Sentinel Security Scan",
+          head_sha: trigger.commitHash,
+          status: checkRunPayload.status,
+          conclusion: checkRunPayload.conclusion,
+          output: checkRunPayload.output,
+        });
+      }
 
-    // Post PR comment for visibility (like other providers)
-    if (trigger.prNumber && report.annotations.length > 0) {
-      const commentBody = this.formatPrComment(report);
-      await octokit.rest.issues.createComment({
-        owner: trigger.owner,
-        repo: repoName,
-        issue_number: trigger.prNumber,
-        body: commentBody,
-      });
-    }
+      // Post PR comment for visibility (like other providers)
+      if (trigger.prNumber && report.annotations.length > 0) {
+        const commentBody = this.formatPrComment(report);
+        await octokit.rest.issues.createComment({
+          owner: trigger.owner,
+          repo: repoName,
+          issue_number: trigger.prNumber,
+          body: commentBody,
+        });
+      }
     } catch (err: any) {
       if (err instanceof VcsApiError) throw err;
       throw new VcsApiError("github", err.status ?? 500, err.message ?? "Unknown error", "reportStatus");

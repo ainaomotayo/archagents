@@ -267,6 +267,7 @@ async function handleScanTrigger(
     repo: data.repo,
     commitHash: data.commitHash,
     prNumber: String(data.prNumber ?? ""),
+    projectId: String(project.id),
   });
   await deps.redis.expire(corrKey, CORRELATION_TTL);
 
@@ -370,7 +371,7 @@ const shutdown = async () => {
   await triggerBus.disconnect();
   await resultsBus.disconnect();
   await publishBus.disconnect();
-  redis.disconnect();
+  await redis.disconnect();
   await shutdownTracing();
   await disconnectDb();
   process.exit(0);

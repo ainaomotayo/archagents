@@ -242,58 +242,63 @@ export class AzureDevOpsProvider extends VcsProviderBase {
   }
 
   async reportStatus(trigger: VcsScanTrigger, report: VcsStatusReport): Promise<void> {
-    const repoName = trigger.repo;
-    const baseUrl = `${this.organizationUrl}/${this.project}/_apis/git/repositories/${repoName}`;
+    try {
+      const repoName = trigger.repo;
+      const baseUrl = `${this.organizationUrl}/${this.project}/_apis/git/repositories/${repoName}`;
 
-    // Post commit status
-    const statusUrl = `${baseUrl}/commits/${report.commitHash}/statuses?api-version=7.0`;
-    const state = this.mapStatus(report.status);
+      // Post commit status
+      const statusUrl = `${baseUrl}/commits/${report.commitHash}/statuses?api-version=7.0`;
+      const state = this.mapStatus(report.status);
 
-    const statusResp = await fetch(statusUrl, {
-      method: "POST",
-      headers: {
-        Authorization: this.authHeader,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        state,
-        description: report.summary.slice(0, 255),
-        context: {
-          name: "sentinel-scan",
-          genre: "security",
-        },
-        targetUrl: report.detailsUrl ?? "",
-      }),
-    });
-    if (!statusResp.ok) {
-      throw new VcsApiError("azure_devops", statusResp.status, statusResp.statusText, "reportStatus");
-    }
-
-    // Post PR comment thread if applicable
-    if (trigger.prNumber && report.annotations.length > 0) {
-      const threadUrl = `${baseUrl}/pullRequests/${trigger.prNumber}/threads?api-version=7.0`;
-      const commentBody = this.formatPrComment(report);
-
-      const threadResp = await fetch(threadUrl, {
+      const statusResp = await fetch(statusUrl, {
         method: "POST",
         headers: {
           Authorization: this.authHeader,
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          comments: [
-            {
-              parentCommentId: 0,
-              content: commentBody,
-              commentType: 1, // text
-            },
-          ],
-          status: 1, // active
+          state,
+          description: report.summary.slice(0, 255),
+          context: {
+            name: "sentinel-scan",
+            genre: "security",
+          },
+          targetUrl: report.detailsUrl ?? "",
         }),
       });
-      if (!threadResp.ok) {
-        throw new VcsApiError("azure_devops", threadResp.status, threadResp.statusText, "reportPrComment");
+      if (!statusResp.ok) {
+        throw new VcsApiError("azure_devops", statusResp.status, statusResp.statusText, "reportStatus");
       }
+
+      // Post PR comment thread if applicable
+      if (trigger.prNumber && report.annotations.length > 0) {
+        const threadUrl = `${baseUrl}/pullRequests/${trigger.prNumber}/threads?api-version=7.0`;
+        const commentBody = this.formatPrComment(report);
+
+        const threadResp = await fetch(threadUrl, {
+          method: "POST",
+          headers: {
+            Authorization: this.authHeader,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            comments: [
+              {
+                parentCommentId: 0,
+                content: commentBody,
+                commentType: 1, // text
+              },
+            ],
+            status: 1, // active
+          }),
+        });
+        if (!threadResp.ok) {
+          throw new VcsApiError("azure_devops", threadResp.status, threadResp.statusText, "reportPrComment");
+        }
+      }
+    } catch (err: any) {
+      if (err instanceof VcsApiError) throw err;
+      throw new VcsApiError("azure_devops", err.status ?? 500, err.message ?? "Unknown error", "reportStatus");
     }
   }
 

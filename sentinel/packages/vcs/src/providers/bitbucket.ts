@@ -131,48 +131,53 @@ export class BitbucketProvider extends VcsProviderBase {
   }
 
   async reportStatus(trigger: VcsScanTrigger, report: VcsStatusReport): Promise<void> {
-    const repo = trigger.repo;
+    try {
+      const repo = trigger.repo;
 
-    // Post build status
-    const statusUrl = `${API_BASE}/repositories/${repo}/commit/${report.commitHash}/statuses/build`;
-    const state = this.mapStatus(report.status);
+      // Post build status
+      const statusUrl = `${API_BASE}/repositories/${repo}/commit/${report.commitHash}/statuses/build`;
+      const state = this.mapStatus(report.status);
 
-    const statusResp = await fetch(statusUrl, {
-      method: "POST",
-      headers: {
-        Authorization: this.authHeader,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        state,
-        key: "sentinel-scan",
-        name: "Sentinel Security",
-        description: report.summary.slice(0, 255),
-        url: report.detailsUrl ?? "",
-      }),
-    });
-    if (!statusResp.ok) {
-      throw new VcsApiError("bitbucket", statusResp.status, statusResp.statusText, "reportStatus");
-    }
-
-    // Post PR comment if applicable
-    if (trigger.prNumber && report.annotations.length > 0) {
-      const commentUrl = `${API_BASE}/repositories/${repo}/pullrequests/${trigger.prNumber}/comments`;
-      const commentBody = this.formatPrComment(report);
-
-      const commentResp = await fetch(commentUrl, {
+      const statusResp = await fetch(statusUrl, {
         method: "POST",
         headers: {
           Authorization: this.authHeader,
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          content: { raw: commentBody },
+          state,
+          key: "sentinel-scan",
+          name: "Sentinel Security",
+          description: report.summary.slice(0, 255),
+          url: report.detailsUrl ?? "",
         }),
       });
-      if (!commentResp.ok) {
-        throw new VcsApiError("bitbucket", commentResp.status, commentResp.statusText, "reportPrComment");
+      if (!statusResp.ok) {
+        throw new VcsApiError("bitbucket", statusResp.status, statusResp.statusText, "reportStatus");
       }
+
+      // Post PR comment if applicable
+      if (trigger.prNumber && report.annotations.length > 0) {
+        const commentUrl = `${API_BASE}/repositories/${repo}/pullrequests/${trigger.prNumber}/comments`;
+        const commentBody = this.formatPrComment(report);
+
+        const commentResp = await fetch(commentUrl, {
+          method: "POST",
+          headers: {
+            Authorization: this.authHeader,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            content: { raw: commentBody },
+          }),
+        });
+        if (!commentResp.ok) {
+          throw new VcsApiError("bitbucket", commentResp.status, commentResp.statusText, "reportPrComment");
+        }
+      }
+    } catch (err: any) {
+      if (err instanceof VcsApiError) throw err;
+      throw new VcsApiError("bitbucket", err.status ?? 500, err.message ?? "Unknown error", "reportStatus");
     }
   }
 
