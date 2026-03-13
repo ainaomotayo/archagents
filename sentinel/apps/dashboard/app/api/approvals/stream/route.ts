@@ -51,8 +51,11 @@ export async function GET(request: NextRequest) {
         const data = await res.json();
         return Response.json(data);
       }
+      if (res.status === 401 || res.status === 403) {
+        return new Response(JSON.stringify({ error: "Unauthorized" }), { status: res.status });
+      }
     } catch {
-      // Fall through to mock
+      // API unreachable — fall through to mock
     }
     return buildMockPollResponse();
   }
@@ -81,6 +84,9 @@ export async function GET(request: NextRequest) {
           Connection: "keep-alive",
         },
       });
+    }
+    if (apiRes.status === 401 || apiRes.status === 403) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), { status: apiRes.status });
     }
   } catch {
     // API unreachable — fall through to mock

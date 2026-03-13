@@ -714,24 +714,57 @@ app.get("/v1/audit", { preHandler: authHook }, async (request) => {
 // --- Approval Policies ---
 app.post("/v1/approval-policies", { preHandler: authHook }, async (request, reply) => {
   const orgId = (request as any).orgId ?? "default";
+  const userId = (request as any).userId ?? "unknown";
   try {
     const result = await withTenant(db, orgId, () => approvalRoutes.createPolicy(orgId, request.body));
+    await auditLog.append(orgId, {
+      actor: { type: "user", id: userId, name: userId },
+      action: "approval_policy.create",
+      resource: { type: "approval_policy", id: result.id },
+      detail: { name: (request.body as any)?.name, strategyType: (request.body as any)?.strategyType },
+    });
+    await eventBus.publish("sentinel.notifications", {
+      id: `evt-policy-${result.id}-created`,
+      orgId,
+      topic: "approval_policy.created",
+      payload: { policyId: result.id, name: result.name },
+      timestamp: new Date().toISOString(),
+    });
     reply.code(201).send(result);
   } catch (err: any) {
     reply.code(400).send({ error: err.message });
   }
 });
 
-app.get("/v1/approval-policies", { preHandler: authHook }, async (request) => {
+app.get("/v1/approval-policies", { preHandler: authHook }, async (request, reply) => {
   const orgId = (request as any).orgId ?? "default";
-  return withTenant(db, orgId, () => approvalRoutes.listPolicies(orgId));
+  try {
+    return await withTenant(db, orgId, () => approvalRoutes.listPolicies(orgId));
+  } catch (err: any) {
+    reply.code(500).send({ error: "Failed to list policies" });
+  }
 });
 
 app.patch("/v1/approval-policies/:id", { preHandler: authHook }, async (request, reply) => {
   const orgId = (request as any).orgId ?? "default";
+  const userId = (request as any).userId ?? "unknown";
   const { id } = request.params as { id: string };
   try {
-    return await withTenant(db, orgId, () => approvalRoutes.updatePolicy(orgId, id, request.body));
+    const result = await withTenant(db, orgId, () => approvalRoutes.updatePolicy(orgId, id, request.body));
+    await auditLog.append(orgId, {
+      actor: { type: "user", id: userId, name: userId },
+      action: "approval_policy.update",
+      resource: { type: "approval_policy", id },
+      detail: request.body as Record<string, unknown>,
+    });
+    await eventBus.publish("sentinel.notifications", {
+      id: `evt-policy-${id}-updated`,
+      orgId,
+      topic: "approval_policy.updated",
+      payload: { policyId: id },
+      timestamp: new Date().toISOString(),
+    });
+    return result;
   } catch (err: any) {
     reply.code(400).send({ error: err.message });
   }
@@ -739,26 +772,49 @@ app.patch("/v1/approval-policies/:id", { preHandler: authHook }, async (request,
 
 app.delete("/v1/approval-policies/:id", { preHandler: authHook }, async (request, reply) => {
   const orgId = (request as any).orgId ?? "default";
+  const userId = (request as any).userId ?? "unknown";
   const { id } = request.params as { id: string };
   try {
-    return await withTenant(db, orgId, () => approvalRoutes.deletePolicy(orgId, id));
+    const result = await withTenant(db, orgId, () => approvalRoutes.deletePolicy(orgId, id));
+    await auditLog.append(orgId, {
+      actor: { type: "user", id: userId, name: userId },
+      action: "approval_policy.delete",
+      resource: { type: "approval_policy", id },
+      detail: {},
+    });
+    await eventBus.publish("sentinel.notifications", {
+      id: `evt-policy-${id}-deleted`,
+      orgId,
+      topic: "approval_policy.deleted",
+      payload: { policyId: id },
+      timestamp: new Date().toISOString(),
+    });
+    return result;
   } catch (err: any) {
     reply.code(400).send({ error: err.message });
   }
 });
 
 // --- Approval Gates ---
-app.get("/v1/approvals", { preHandler: authHook }, async (request) => {
+app.get("/v1/approvals", { preHandler: authHook }, async (request, reply) => {
   const orgId = (request as any).orgId ?? "default";
   const { limit = "50", offset = "0" } = request.query as any;
-  return withTenant(db, orgId, () =>
-    approvalRoutes.listPendingGates(orgId, { limit: Number(limit), offset: Number(offset) }),
-  );
+  try {
+    return await withTenant(db, orgId, () =>
+      approvalRoutes.listPendingGates(orgId, { limit: Number(limit), offset: Number(offset) }),
+    );
+  } catch (err: any) {
+    reply.code(500).send({ error: "Failed to list approval gates" });
+  }
 });
 
-app.get("/v1/approvals/stats", { preHandler: authHook }, async (request) => {
+app.get("/v1/approvals/stats", { preHandler: authHook }, async (request, reply) => {
   const orgId = (request as any).orgId ?? "default";
-  return withTenant(db, orgId, () => approvalRoutes.getStats(orgId));
+  try {
+    return await withTenant(db, orgId, () => approvalRoutes.getStats(orgId));
+  } catch (err: any) {
+    reply.code(500).send({ error: "Failed to get approval stats" });
+  }
 });
 
 app.get("/v1/approvals/stream", { preHandler: authHook }, async (request, reply) => {

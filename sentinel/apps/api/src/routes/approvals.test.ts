@@ -61,6 +61,27 @@ describe("buildApprovalRoutes", () => {
       expect(result).toHaveProperty("id", "pol-1");
       expect(mockDb.approvalPolicy.create).toHaveBeenCalled();
     });
+
+    it("rejects invalid strategy type on create", async () => {
+      const routes = buildApprovalRoutes({ db: mockDb as any });
+
+      await expect(
+        routes.createPolicy("org-1", { name: "Bad", strategyType: "invalid_type" }),
+      ).rejects.toThrow("Invalid strategy type");
+    });
+  });
+
+  describe("listPolicies", () => {
+    it("returns policies for the given org", async () => {
+      const routes = buildApprovalRoutes({ db: mockDb as any });
+      mockDb.approvalPolicy.findMany.mockResolvedValue([{ id: "pol-1", orgId: "org-1" }]);
+
+      const result = await routes.listPolicies("org-1");
+      expect(result).toHaveLength(1);
+      expect(mockDb.approvalPolicy.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { orgId: "org-1" } }),
+      );
+    });
   });
 
   describe("listPendingGates", () => {
@@ -111,6 +132,40 @@ describe("buildApprovalRoutes", () => {
       ).rejects.toThrow("at least 10");
     });
 
+    it("rejects decision for gate in different org", async () => {
+      const routes = buildApprovalRoutes({ db: mockDb as any });
+      mockDb.approvalGate.findUnique.mockResolvedValue({
+        id: "g1",
+        status: "pending",
+        orgId: "org-other",
+      });
+
+      await expect(
+        routes.submitDecision("org-1", "g1", {
+          decision: "approve",
+          justification: "Risk is acceptable after review",
+          decidedBy: "user-1",
+        }),
+      ).rejects.toThrow("not found");
+    });
+
+    it("rejects invalid decision value", async () => {
+      const routes = buildApprovalRoutes({ db: mockDb as any });
+      mockDb.approvalGate.findUnique.mockResolvedValue({
+        id: "g1",
+        status: "pending",
+        orgId: "org-1",
+      });
+
+      await expect(
+        routes.submitDecision("org-1", "g1", {
+          decision: "maybe",
+          justification: "Risk is acceptable after review",
+          decidedBy: "user-1",
+        }),
+      ).rejects.toThrow("Invalid decision");
+    });
+
     it("approves a pending gate", async () => {
       const routes = buildApprovalRoutes({ db: mockDb as any });
       mockDb.approvalGate.findUnique.mockResolvedValue({
@@ -148,6 +203,13 @@ describe("buildApprovalRoutes", () => {
     it("rejects update for non-existent policy", async () => {
       const routes = buildApprovalRoutes({ db: mockDb as any });
       mockDb.approvalPolicy.findUnique.mockResolvedValue(null);
+
+      await expect(routes.updatePolicy("org-1", "pol-1", { name: "X" })).rejects.toThrow("not found");
+    });
+
+    it("rejects update for wrong org", async () => {
+      const routes = buildApprovalRoutes({ db: mockDb as any });
+      mockDb.approvalPolicy.findUnique.mockResolvedValue({ id: "pol-1", orgId: "org-other" });
 
       await expect(routes.updatePolicy("org-1", "pol-1", { name: "X" })).rejects.toThrow("not found");
     });
@@ -206,6 +268,14 @@ describe("buildApprovalRoutes", () => {
 
       const result = await routes.reassignGate("org-1", "g1", { assignedTo: "user-2" });
       expect(result).toHaveProperty("assignedTo", "user-2");
+    });
+
+    it("rejects reassignment for gate in different org", async () => {
+      const routes = buildApprovalRoutes({ db: mockDb as any });
+      mockDb.approvalGate.findUnique.mockResolvedValue({ id: "g1", orgId: "org-other", status: "pending" });
+
+      await expect(routes.reassignGate("org-1", "g1", { assignedTo: "user-2" })).rejects.toThrow("not found");
+      expect(mockDb.approvalGate.update).not.toHaveBeenCalled();
     });
 
     it("rejects reassignment of terminal gate", async () => {

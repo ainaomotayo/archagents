@@ -12,8 +12,8 @@ CREATE TABLE "approval_policies" (
     "sla_hours" INTEGER NOT NULL DEFAULT 24,
     "escalate_after_hours" INTEGER NOT NULL DEFAULT 48,
     "expiry_action" TEXT NOT NULL DEFAULT 'reject',
-    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updated_at" TIMESTAMP(3) NOT NULL,
+    "created_at" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMPTZ NOT NULL,
 
     CONSTRAINT "approval_policies_pkey" PRIMARY KEY ("id")
 );
@@ -27,16 +27,16 @@ CREATE TABLE "approval_gates" (
     "policy_id" UUID,
     "status" TEXT NOT NULL DEFAULT 'pending',
     "gate_type" TEXT NOT NULL,
-    "trigger_criteria" JSONB NOT NULL,
-    "priority" INTEGER NOT NULL DEFAULT 50,
+    "trigger_criteria" JSONB NOT NULL DEFAULT '{}',
+    "priority" INTEGER NOT NULL DEFAULT 0,
     "assigned_role" TEXT,
-    "assigned_to" TEXT,
-    "requested_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "assigned_to" UUID,
+    "requested_at" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "requested_by" TEXT NOT NULL,
-    "expires_at" TIMESTAMP(3) NOT NULL,
-    "escalates_at" TIMESTAMP(3),
+    "expires_at" TIMESTAMPTZ NOT NULL,
+    "escalates_at" TIMESTAMPTZ,
     "expiry_action" TEXT NOT NULL DEFAULT 'reject',
-    "decided_at" TIMESTAMP(3),
+    "decided_at" TIMESTAMPTZ,
 
     CONSTRAINT "approval_gates_pkey" PRIMARY KEY ("id")
 );
@@ -45,10 +45,11 @@ CREATE TABLE "approval_gates" (
 CREATE TABLE "approval_decisions" (
     "id" UUID NOT NULL DEFAULT gen_random_uuid(),
     "gate_id" UUID NOT NULL,
+    "org_id" UUID NOT NULL,
     "decided_by" TEXT NOT NULL,
     "decision" TEXT NOT NULL,
     "justification" TEXT NOT NULL,
-    "decided_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "decided_at" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "approval_decisions_pkey" PRIMARY KEY ("id")
 );
@@ -58,7 +59,7 @@ ALTER TABLE "scans" ADD COLUMN "approval_status" TEXT;
 
 -- AlterTable: Add approved_by and approved_at to certificates
 ALTER TABLE "certificates" ADD COLUMN "approved_by" TEXT;
-ALTER TABLE "certificates" ADD COLUMN "approved_at" TIMESTAMP(3);
+ALTER TABLE "certificates" ADD COLUMN "approved_at" TIMESTAMPTZ;
 
 -- CreateIndex
 CREATE INDEX "approval_policies_org_id_enabled_idx" ON "approval_policies"("org_id", "enabled");
@@ -67,7 +68,10 @@ CREATE INDEX "approval_policies_org_id_enabled_idx" ON "approval_policies"("org_
 CREATE INDEX "approval_gates_org_id_status_idx" ON "approval_gates"("org_id", "status");
 
 -- CreateIndex
-CREATE INDEX "idx_approval_gate_scan" ON "approval_gates"("scan_id");
+CREATE INDEX "approval_gates_scan_id_idx" ON "approval_gates"("scan_id");
+
+-- CreateIndex
+CREATE INDEX "approval_gates_expires_at_idx" ON "approval_gates"("expires_at");
 
 -- CreateIndex
 CREATE INDEX "idx_approval_queue" ON "approval_gates"("org_id", "status", "priority");
@@ -75,14 +79,20 @@ CREATE INDEX "idx_approval_queue" ON "approval_gates"("org_id", "status", "prior
 -- CreateIndex
 CREATE INDEX "approval_decisions_gate_id_idx" ON "approval_decisions"("gate_id");
 
+-- CreateIndex
+CREATE INDEX "approval_decisions_org_id_decided_at_idx" ON "approval_decisions"("org_id", "decided_at");
+
 -- AddForeignKey
 ALTER TABLE "approval_policies" ADD CONSTRAINT "approval_policies_org_id_fkey" FOREIGN KEY ("org_id") REFERENCES "organizations"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "approval_gates" ADD CONSTRAINT "approval_gates_org_id_fkey" FOREIGN KEY ("org_id") REFERENCES "organizations"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "approval_gates" ADD CONSTRAINT "approval_gates_scan_id_fkey" FOREIGN KEY ("scan_id") REFERENCES "scans"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "approval_gates" ADD CONSTRAINT "approval_gates_org_id_fkey" FOREIGN KEY ("org_id") REFERENCES "organizations"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "approval_gates" ADD CONSTRAINT "approval_gates_project_id_fkey" FOREIGN KEY ("project_id") REFERENCES "projects"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "approval_decisions" ADD CONSTRAINT "approval_decisions_gate_id_fkey" FOREIGN KEY ("gate_id") REFERENCES "approval_gates"("id") ON DELETE RESTRICT ON UPDATE CASCADE;

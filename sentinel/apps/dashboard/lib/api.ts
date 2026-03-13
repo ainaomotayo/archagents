@@ -320,8 +320,8 @@ export async function getApprovalStats(): Promise<ApprovalStats> {
 
 export async function reassignApprovalGate(gateId: string, assignTo: string): Promise<void> {
   return tryApi(async (headers) => {
-    const { apiPatch } = await import("./api-client");
-    await apiPatch(`/v1/approvals/${gateId}/assign`, { assignTo }, headers);
+    const { apiPost } = await import("./api-client");
+    await apiPost(`/v1/approvals/${gateId}/reassign`, { assignedTo: assignTo }, headers);
   }, undefined);
 }
 
