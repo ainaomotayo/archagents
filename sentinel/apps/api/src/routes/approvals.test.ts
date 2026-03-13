@@ -130,6 +130,8 @@ describe("buildApprovalRoutes", () => {
 
       expect(result.status).toBe("approved");
       expect(mockDb.approvalDecision.create).toHaveBeenCalled();
+      const decisionData = mockDb.approvalDecision.create.mock.calls[0][0].data;
+      expect(decisionData.orgId).toBe("org-1");
     });
   });
 

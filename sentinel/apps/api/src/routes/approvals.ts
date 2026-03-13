@@ -128,6 +128,7 @@ export function buildApprovalRoutes(deps: ApprovalRouteDeps) {
     await db.approvalDecision.create({
       data: {
         gateId,
+        orgId,
         decidedBy: input.decidedBy,
         decision: input.decision,
         justification: input.justification,
