@@ -2,11 +2,11 @@
 
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
-**Goal:** Unified remediation tracking dashboard with parent-child hierarchy, priority scoring, hybrid table/kanban views, SSE toast notifications, and Jira/GitHub Issues outbound integration.
+**Goal:** Unified remediation tracking dashboard with parent-child hierarchy, priority scoring, hybrid table/kanban views, SSE toast notifications, Jira/GitHub outbound + inbound integration, custom workflow stages, evidence file uploads, auto-remediation PRs, and burndown/velocity charts.
 
-**Architecture:** Modular monolith — extend existing Fastify API with new endpoints, add integration worker for async Jira/GitHub calls. Dashboard uses hybrid table/kanban with SSE toast + targeted refetch.
+**Architecture:** Modular monolith — extend existing Fastify API with new endpoints, add integration worker for async Jira/GitHub calls, inbound webhook routes for two-way sync. Dashboard uses hybrid table/kanban with SSE toast + targeted refetch.
 
-**Tech Stack:** Prisma 6, PostgreSQL, Fastify 5, Redis Streams, Next.js 15, SSE, Vitest
+**Tech Stack:** Prisma 6, PostgreSQL, Fastify 5, Redis Streams, Next.js 15, SSE, Vitest, @aws-sdk/s3-request-presigner, @octokit/rest, Recharts
 
 ---
 
@@ -1787,6 +1787,1359 @@ git commit -m "fix: address integration test issues for remediation dashboard"
 
 ---
 
+---
+
+## Task 21: Custom Workflow FSM + WorkflowConfig Schema
+
+**Files:**
+- Create: `packages/compliance/src/remediation/workflow-fsm.ts`
+- Create: `packages/compliance/src/__tests__/workflow-fsm.test.ts`
+- Modify: `packages/db/prisma/schema.prisma` (add WorkflowConfig model)
+- Create: `packages/db/prisma/migrations/20260313110000_add_workflow_config/migration.sql`
+
+**Step 1: Add WorkflowConfig model to schema.prisma**
+
+Add after EvidenceAttachment model (or after IntegrationConfig if evidence not yet added):
+
+```prisma
+model WorkflowConfig {
+  id            String   @id @default(uuid()) @db.Uuid
+  orgId         String   @map("org_id") @db.Uuid
+  skipStages    String[] @map("skip_stages")
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt     DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  organization Organization @relation(fields: [orgId], references: [id])
+
+  @@unique([orgId])
+  @@map("workflow_configs")
+}
+```
+
+Add `workflowConfig WorkflowConfig?` backrelation on Organization model.
+
+**Step 2: Write migration SQL**
+
+```sql
+CREATE TABLE "workflow_configs" (
+    "id" UUID NOT NULL DEFAULT gen_random_uuid(),
+    "org_id" UUID NOT NULL,
+    "skip_stages" TEXT[] NOT NULL DEFAULT '{}',
+    "created_at" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMPTZ NOT NULL,
+    CONSTRAINT "workflow_configs_pkey" PRIMARY KEY ("id")
+);
+
+CREATE UNIQUE INDEX "workflow_configs_org_id_key" ON "workflow_configs"("org_id");
+ALTER TABLE "workflow_configs" ADD CONSTRAINT "workflow_configs_org_id_fkey" FOREIGN KEY ("org_id") REFERENCES "organizations"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+```
+
+**Step 3: Write failing tests for workflow FSM**
+
+Create `packages/compliance/src/__tests__/workflow-fsm.test.ts`:
+
+```typescript
+import { describe, it, expect } from "vitest";
+import { WorkflowFSM, WORKFLOW_STAGES, TERMINAL_STAGES } from "../remediation/workflow-fsm.js";
+
+describe("WorkflowFSM", () => {
+  const fsm = new WorkflowFSM([]);
+
+  it("advances open -> assigned", () => {
+    expect(fsm.nextStage("open")).toBe("assigned");
+  });
+
+  it("advances through full pipeline", () => {
+    let stage = "open";
+    const visited = [stage];
+    while (!TERMINAL_STAGES.has(stage)) {
+      stage = fsm.nextStage(stage)!;
+      visited.push(stage);
+    }
+    expect(visited).toEqual(["open", "assigned", "in_progress", "in_review", "awaiting_deployment", "completed"]);
+  });
+
+  it("allows transition to accepted_risk from any non-terminal", () => {
+    expect(fsm.canTransition("open", "accepted_risk")).toBe(true);
+    expect(fsm.canTransition("in_progress", "accepted_risk")).toBe(true);
+    expect(fsm.canTransition("completed", "accepted_risk")).toBe(false);
+  });
+
+  it("allows transition to blocked from any non-terminal", () => {
+    expect(fsm.canTransition("in_progress", "blocked")).toBe(true);
+    expect(fsm.canTransition("completed", "blocked")).toBe(false);
+  });
+
+  it("skips stages when configured", () => {
+    const skipFsm = new WorkflowFSM(["assigned", "in_review", "awaiting_deployment"]);
+    expect(skipFsm.nextStage("open")).toBe("in_progress");
+    expect(skipFsm.nextStage("in_progress")).toBe("completed");
+  });
+
+  it("allows backward transition (reopen)", () => {
+    expect(fsm.canTransition("in_progress", "open")).toBe(true);
+    expect(fsm.canTransition("assigned", "open")).toBe(true);
+  });
+
+  it("rejects invalid transitions from terminal states", () => {
+    expect(fsm.canTransition("completed", "open")).toBe(false);
+    expect(fsm.canTransition("accepted_risk", "open")).toBe(false);
+  });
+
+  it("returns all active stages (excluding skipped)", () => {
+    const skipFsm = new WorkflowFSM(["in_review"]);
+    const active = skipFsm.getActiveStages();
+    expect(active).not.toContain("in_review");
+    expect(active).toContain("open");
+    expect(active).toContain("completed");
+  });
+
+  it("validates skip stages against allowed list", () => {
+    expect(() => new WorkflowFSM(["invalid_stage"])).toThrow("Invalid skip stage");
+  });
+
+  it("prevents skipping required stages (open, completed)", () => {
+    expect(() => new WorkflowFSM(["open"])).toThrow("Cannot skip required stage");
+    expect(() => new WorkflowFSM(["completed"])).toThrow("Cannot skip required stage");
+  });
+});
+```
+
+**Step 4: Run tests to verify they fail**
+
+Run: `cd packages/compliance && npx vitest run src/__tests__/workflow-fsm.test.ts`
+Expected: FAIL — module not found
+
+**Step 5: Implement WorkflowFSM**
+
+Create `packages/compliance/src/remediation/workflow-fsm.ts`:
+
+```typescript
+export const WORKFLOW_STAGES = [
+  "open",
+  "assigned",
+  "in_progress",
+  "in_review",
+  "awaiting_deployment",
+  "completed",
+] as const;
+
+export const TERMINAL_STAGES = new Set(["completed", "accepted_risk"]);
+export const SPECIAL_STAGES = new Set(["accepted_risk", "blocked"]);
+const REQUIRED_STAGES = new Set(["open", "completed"]);
+const SKIPPABLE_STAGES = new Set(["assigned", "in_progress", "in_review", "awaiting_deployment"]);
+
+export class WorkflowFSM {
+  private activeStages: string[];
+
+  constructor(skipStages: string[]) {
+    for (const s of skipStages) {
+      if (!SKIPPABLE_STAGES.has(s)) {
+        if (REQUIRED_STAGES.has(s)) throw new Error(`Cannot skip required stage: ${s}`);
+        throw new Error(`Invalid skip stage: ${s}`);
+      }
+    }
+    const skipSet = new Set(skipStages);
+    this.activeStages = WORKFLOW_STAGES.filter((s) => !skipSet.has(s));
+  }
+
+  getActiveStages(): string[] {
+    return [...this.activeStages, "accepted_risk", "blocked"];
+  }
+
+  nextStage(current: string): string | null {
+    const idx = this.activeStages.indexOf(current);
+    if (idx === -1 || idx >= this.activeStages.length - 1) return null;
+    return this.activeStages[idx + 1];
+  }
+
+  previousStage(current: string): string | null {
+    const idx = this.activeStages.indexOf(current);
+    if (idx <= 0) return null;
+    return this.activeStages[idx - 1];
+  }
+
+  canTransition(from: string, to: string): boolean {
+    if (TERMINAL_STAGES.has(from)) return false;
+
+    // Any non-terminal -> accepted_risk or blocked
+    if (to === "accepted_risk" || to === "blocked") return true;
+
+    // Forward transition
+    const fromIdx = this.activeStages.indexOf(from);
+    const toIdx = this.activeStages.indexOf(to);
+    if (fromIdx === -1 || toIdx === -1) return false;
+
+    // Allow forward by 1 step or backward to any earlier stage
+    return toIdx === fromIdx + 1 || toIdx < fromIdx;
+  }
+}
+```
+
+**Step 6: Run tests to verify they pass**
+
+Run: `cd packages/compliance && npx vitest run src/__tests__/workflow-fsm.test.ts`
+Expected: 10 tests PASS
+
+**Step 7: Export from package index**
+
+Add to `packages/compliance/src/index.ts`:
+```typescript
+export { WorkflowFSM, WORKFLOW_STAGES, TERMINAL_STAGES, SPECIAL_STAGES } from "./remediation/workflow-fsm.js";
+```
+
+**Step 8: Generate Prisma client and commit**
+
+```bash
+cd packages/db && npx prisma generate
+git add packages/compliance/src/remediation/workflow-fsm.ts packages/compliance/src/__tests__/workflow-fsm.test.ts packages/compliance/src/index.ts packages/db/prisma/schema.prisma packages/db/prisma/migrations/20260313110000_add_workflow_config/
+git commit -m "feat(compliance): add custom workflow FSM with configurable skip stages"
+```
+
+---
+
+## Task 22: Update RemediationService for Custom Workflow
+
+**Files:**
+- Modify: `packages/compliance/src/remediation/service.ts`
+- Modify: `packages/compliance/src/__tests__/remediation-service.test.ts`
+
+**Step 1: Write failing tests**
+
+Add to `packages/compliance/src/__tests__/remediation-service.test.ts`:
+
+```typescript
+  // --- Custom workflow tests ---
+
+  it("validates status transitions against workflow FSM", async () => {
+    mockDb.remediationItem.findUnique.mockResolvedValue({
+      id: "rem-1", orgId: "org-1", status: "open", parentId: null,
+    });
+    mockDb.workflowConfig.findUnique.mockResolvedValue(null); // default workflow
+
+    await expect(service.update("org-1", "rem-1", { status: "in_review" })).rejects.toThrow();
+  });
+
+  it("respects org skip stages", async () => {
+    mockDb.remediationItem.findUnique.mockResolvedValue({
+      id: "rem-1", orgId: "org-1", status: "open", parentId: null,
+    });
+    mockDb.workflowConfig.findUnique.mockResolvedValue({ skipStages: ["assigned"] });
+    mockDb.remediationItem.update.mockResolvedValue({ id: "rem-1", status: "in_progress" });
+
+    const result = await service.update("org-1", "rem-1", { status: "in_progress" });
+    expect(result.status).toBe("in_progress");
+  });
+
+  it("allows accepted_risk from any non-terminal state", async () => {
+    mockDb.remediationItem.findUnique.mockResolvedValue({
+      id: "rem-1", orgId: "org-1", status: "in_review", parentId: null,
+    });
+    mockDb.workflowConfig.findUnique.mockResolvedValue(null);
+    mockDb.remediationItem.update.mockResolvedValue({ id: "rem-1", status: "accepted_risk" });
+
+    const result = await service.update("org-1", "rem-1", { status: "accepted_risk" });
+    expect(result.status).toBe("accepted_risk");
+  });
+```
+
+**Step 2: Update service to use WorkflowFSM**
+
+In `service.ts`, replace the static `VALID_TRANSITIONS` map with WorkflowFSM-based validation:
+- Load `WorkflowConfig` for the org on status change
+- Construct `WorkflowFSM(config.skipStages ?? [])`
+- Use `fsm.canTransition(existing.status, input.status)` instead of the map lookup
+- Keep backward compat: old 4-status items still work since those statuses are subset of the 8-stage pipeline
+
+**Step 3: Run tests, verify pass, commit**
+
+```bash
+git commit -m "feat(compliance): integrate custom workflow FSM into RemediationService"
+```
+
+---
+
+## Task 23: Workflow Config API Routes + RBAC
+
+**Files:**
+- Modify: `apps/api/src/routes/remediations.ts` or create `apps/api/src/routes/workflow-config.ts`
+- Modify: `apps/api/src/server.ts`
+- Modify: `packages/security/src/rbac.ts`
+
+**Step 1: Add RBAC entries**
+
+```typescript
+{ method: "GET", path: "/v1/compliance/workflow-config", roles: ["admin", "manager"] },
+{ method: "PUT", path: "/v1/compliance/workflow-config", roles: ["admin"] },
+```
+
+**Step 2: Implement routes**
+
+- `GET /v1/compliance/workflow-config` — Return org's WorkflowConfig or default (empty skipStages)
+- `PUT /v1/compliance/workflow-config` — Upsert skipStages array, validate against allowed skippable stages
+
+**Step 3: Wire into server.ts, commit**
+
+```bash
+git commit -m "feat(api): add workflow config API routes"
+```
+
+---
+
+## Task 24: Evidence Attachment Schema + S3 Presigned URLs
+
+**Files:**
+- Modify: `packages/db/prisma/schema.prisma` (add EvidenceAttachment model)
+- Create: `packages/db/prisma/migrations/20260313120000_add_evidence_attachments/migration.sql`
+- Create: `packages/compliance/src/remediation/evidence-service.ts`
+- Create: `packages/compliance/src/__tests__/evidence-service.test.ts`
+
+**Step 1: Add EvidenceAttachment model**
+
+```prisma
+model EvidenceAttachment {
+  id               String   @id @default(uuid()) @db.Uuid
+  orgId            String   @map("org_id") @db.Uuid
+  remediationId    String   @map("remediation_id") @db.Uuid
+  fileName         String   @map("file_name")
+  fileSize         Int      @map("file_size")
+  mimeType         String   @map("mime_type")
+  s3Key            String   @map("s3_key")
+  uploadedBy       String   @map("uploaded_by")
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  remediation RemediationItem @relation(fields: [remediationId], references: [id])
+  organization Organization @relation(fields: [orgId], references: [id])
+
+  @@index([remediationId])
+  @@index([orgId])
+  @@map("evidence_attachments")
+}
+```
+
+Add `evidenceAttachments EvidenceAttachment[]` backrelation on RemediationItem and Organization.
+
+**Step 2: Write migration SQL**
+
+```sql
+CREATE TABLE "evidence_attachments" (
+    "id" UUID NOT NULL DEFAULT gen_random_uuid(),
+    "org_id" UUID NOT NULL,
+    "remediation_id" UUID NOT NULL,
+    "file_name" TEXT NOT NULL,
+    "file_size" INTEGER NOT NULL,
+    "mime_type" TEXT NOT NULL,
+    "s3_key" TEXT NOT NULL,
+    "uploaded_by" TEXT NOT NULL,
+    "created_at" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT "evidence_attachments_pkey" PRIMARY KEY ("id")
+);
+
+CREATE INDEX "evidence_attachments_remediation_id_idx" ON "evidence_attachments"("remediation_id");
+CREATE INDEX "evidence_attachments_org_id_idx" ON "evidence_attachments"("org_id");
+ALTER TABLE "evidence_attachments" ADD CONSTRAINT "evidence_attachments_remediation_id_fkey" FOREIGN KEY ("remediation_id") REFERENCES "remediation_items"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "evidence_attachments" ADD CONSTRAINT "evidence_attachments_org_id_fkey" FOREIGN KEY ("org_id") REFERENCES "organizations"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+```
+
+**Step 3: Write failing tests for EvidenceService**
+
+Create `packages/compliance/src/__tests__/evidence-service.test.ts`:
+
+```typescript
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import { EvidenceService } from "../remediation/evidence-service.js";
+
+const ALLOWED_TYPES = ["application/pdf", "image/png", "image/jpeg", "text/csv", "application/json", "text/plain", "text/markdown"];
+const MAX_FILE_SIZE = 25 * 1024 * 1024;
+
+describe("EvidenceService", () => {
+  let service: EvidenceService;
+  let mockDb: any;
+  let mockS3: any;
+
+  beforeEach(() => {
+    mockDb = {
+      evidenceAttachment: { create: vi.fn(), findMany: vi.fn(), findUnique: vi.fn(), delete: vi.fn() },
+      remediationItem: { findUnique: vi.fn() },
+    };
+    mockS3 = { getPresignedUploadUrl: vi.fn(), getPresignedDownloadUrl: vi.fn() };
+    service = new EvidenceService(mockDb, mockS3);
+  });
+
+  it("rejects files larger than 25MB", async () => {
+    await expect(service.requestUpload("org-1", "rem-1", "huge.pdf", MAX_FILE_SIZE + 1, "application/pdf", "user-1"))
+      .rejects.toThrow("25MB");
+  });
+
+  it("rejects disallowed MIME types", async () => {
+    await expect(service.requestUpload("org-1", "rem-1", "malware.exe", 1024, "application/x-executable", "user-1"))
+      .rejects.toThrow("not allowed");
+  });
+
+  it("generates presigned upload URL for valid file", async () => {
+    mockDb.remediationItem.findUnique.mockResolvedValue({ id: "rem-1", orgId: "org-1" });
+    mockS3.getPresignedUploadUrl.mockResolvedValue({ url: "https://s3.example.com/upload", key: "evidence/org-1/rem-1/uuid/test.pdf" });
+
+    const result = await service.requestUpload("org-1", "rem-1", "test.pdf", 1024, "application/pdf", "user-1");
+    expect(result).toHaveProperty("uploadUrl");
+    expect(result).toHaveProperty("s3Key");
+  });
+
+  it("confirms upload and creates DB record", async () => {
+    mockDb.evidenceAttachment.create.mockResolvedValue({ id: "ev-1", fileName: "test.pdf" });
+
+    const result = await service.confirmUpload("org-1", "rem-1", "evidence/org-1/rem-1/uuid/test.pdf", "test.pdf", 1024, "application/pdf", "user-1");
+    expect(result).toHaveProperty("id");
+  });
+
+  it("lists evidence for a remediation item", async () => {
+    mockDb.evidenceAttachment.findMany.mockResolvedValue([{ id: "ev-1" }]);
+    const result = await service.list("org-1", "rem-1");
+    expect(result).toHaveLength(1);
+  });
+
+  it("generates presigned download URL", async () => {
+    mockDb.evidenceAttachment.findUnique.mockResolvedValue({ id: "ev-1", orgId: "org-1", s3Key: "evidence/key" });
+    mockS3.getPresignedDownloadUrl.mockResolvedValue("https://s3.example.com/download");
+
+    const result = await service.getDownloadUrl("org-1", "ev-1");
+    expect(result).toContain("https://");
+  });
+});
+```
+
+**Step 4: Implement EvidenceService**
+
+Create `packages/compliance/src/remediation/evidence-service.ts`:
+
+```typescript
+import { randomUUID } from "node:crypto";
+
+const MAX_FILE_SIZE = 25 * 1024 * 1024; // 25MB
+const ALLOWED_MIME_TYPES = new Set([
+  "application/pdf", "image/png", "image/jpeg", "text/csv",
+  "application/json", "text/plain", "text/markdown",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+]);
+
+export interface S3Presigner {
+  getPresignedUploadUrl(key: string, contentType: string, maxSize: number): Promise<{ url: string; key: string }>;
+  getPresignedDownloadUrl(key: string): Promise<string>;
+}
+
+export class EvidenceService {
+  constructor(private db: any, private s3: S3Presigner) {}
+
+  async requestUpload(orgId: string, remediationId: string, fileName: string, fileSize: number, mimeType: string, userId: string) {
+    if (fileSize > MAX_FILE_SIZE) throw new Error("File exceeds 25MB limit");
+    if (!ALLOWED_MIME_TYPES.has(mimeType)) throw new Error(`File type ${mimeType} not allowed`);
+
+    const item = await this.db.remediationItem.findUnique({ where: { id: remediationId } });
+    if (!item || item.orgId !== orgId) throw new Error("Remediation item not found");
+
+    const s3Key = `evidence/${orgId}/${remediationId}/${randomUUID()}/${fileName}`;
+    const { url } = await this.s3.getPresignedUploadUrl(s3Key, mimeType, fileSize);
+
+    return { uploadUrl: url, s3Key, expiresIn: 900 };
+  }
+
+  async confirmUpload(orgId: string, remediationId: string, s3Key: string, fileName: string, fileSize: number, mimeType: string, userId: string) {
+    return this.db.evidenceAttachment.create({
+      data: { orgId, remediationId, fileName, fileSize, mimeType, s3Key, uploadedBy: userId },
+    });
+  }
+
+  async list(orgId: string, remediationId: string) {
+    return this.db.evidenceAttachment.findMany({
+      where: { orgId, remediationId },
+      orderBy: { createdAt: "desc" },
+    });
+  }
+
+  async getDownloadUrl(orgId: string, evidenceId: string) {
+    const evidence = await this.db.evidenceAttachment.findUnique({ where: { id: evidenceId } });
+    if (!evidence || evidence.orgId !== orgId) throw new Error("Evidence not found");
+    return this.s3.getPresignedDownloadUrl(evidence.s3Key);
+  }
+
+  async delete(orgId: string, evidenceId: string) {
+    const evidence = await this.db.evidenceAttachment.findUnique({ where: { id: evidenceId } });
+    if (!evidence || evidence.orgId !== orgId) throw new Error("Evidence not found");
+    return this.db.evidenceAttachment.delete({ where: { id: evidenceId } });
+  }
+}
+```
+
+**Step 5: Run tests, export, commit**
+
+```bash
+cd packages/compliance && npx vitest run src/__tests__/evidence-service.test.ts
+git commit -m "feat(compliance): add evidence attachment service with S3 presigned URLs"
+```
+
+---
+
+## Task 25: Evidence Upload API Routes + RBAC
+
+**Files:**
+- Modify: `apps/api/src/routes/remediations.ts` or `apps/api/src/server.ts`
+- Modify: `packages/security/src/rbac.ts`
+- Create: `packages/compliance/src/remediation/s3-presigner.ts`
+
+**Step 1: Add RBAC entries**
+
+```typescript
+{ method: "POST", path: "/v1/compliance/remediations/:id/evidence/presign", roles: ["admin", "manager"] },
+{ method: "POST", path: "/v1/compliance/remediations/:id/evidence/confirm", roles: ["admin", "manager"] },
+{ method: "GET", path: "/v1/compliance/remediations/:id/evidence", roles: ["admin", "manager", "developer"] },
+{ method: "GET", path: "/v1/compliance/remediations/:id/evidence/:eid/url", roles: ["admin", "manager", "developer"] },
+{ method: "DELETE", path: "/v1/compliance/remediations/:id/evidence/:eid", roles: ["admin", "manager"] },
+```
+
+**Step 2: Create S3 presigner adapter**
+
+Create `packages/compliance/src/remediation/s3-presigner.ts` that wraps `@aws-sdk/s3-request-presigner`:
+
+```typescript
+import { S3Client, PutObjectCommand, GetObjectCommand } from "@aws-sdk/client-s3";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+import type { S3Presigner } from "./evidence-service.js";
+
+export function createS3Presigner(bucket: string): S3Presigner {
+  const client = new S3Client({});
+
+  return {
+    async getPresignedUploadUrl(key: string, contentType: string, maxSize: number) {
+      const command = new PutObjectCommand({ Bucket: bucket, Key: key, ContentType: contentType });
+      const url = await getSignedUrl(client, command, { expiresIn: 900 });
+      return { url, key };
+    },
+    async getPresignedDownloadUrl(key: string) {
+      const command = new GetObjectCommand({ Bucket: bucket, Key: key });
+      return getSignedUrl(client, command, { expiresIn: 3600 });
+    },
+  };
+}
+```
+
+**Step 3: Wire routes into server.ts**
+
+- `POST /:id/evidence/presign` — Validate input, call `evidenceService.requestUpload()`, return `{ uploadUrl, s3Key }`
+- `POST /:id/evidence/confirm` — Validate s3Key matches org prefix, call `evidenceService.confirmUpload()`
+- `GET /:id/evidence` — Call `evidenceService.list()`
+- `GET /:id/evidence/:eid/url` — Call `evidenceService.getDownloadUrl()`
+- `DELETE /:id/evidence/:eid` — Call `evidenceService.delete()`
+
+**Step 4: Install dependency, commit**
+
+```bash
+cd packages/compliance && pnpm add @aws-sdk/client-s3 @aws-sdk/s3-request-presigner
+git commit -m "feat(api): add evidence upload routes with S3 presigned URLs"
+```
+
+---
+
+## Task 26: RemediationSnapshot Schema + Snapshot Cron Job
+
+**Files:**
+- Modify: `packages/db/prisma/schema.prisma` (add RemediationSnapshot model)
+- Create: `packages/db/prisma/migrations/20260313130000_add_remediation_snapshots/migration.sql`
+- Create: `apps/api/src/scheduler/jobs/remediation-snapshot.ts`
+- Create: `apps/api/src/scheduler/jobs/__tests__/remediation-snapshot.test.ts`
+
+**Step 1: Add RemediationSnapshot model**
+
+```prisma
+model RemediationSnapshot {
+  id                String   @id @default(uuid()) @db.Uuid
+  orgId             String   @map("org_id") @db.Uuid
+  snapshotDate      DateTime @map("snapshot_date") @db.Date
+  scope             String   @default("org")
+  scopeValue        String?  @map("scope_value")
+  openCount         Int      @map("open_count")
+  inProgressCount   Int      @map("in_progress_count")
+  completedCount    Int      @map("completed_count")
+  acceptedRiskCount Int      @map("accepted_risk_count")
+  avgResolutionHours Float?  @map("avg_resolution_hours")
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  organization Organization @relation(fields: [orgId], references: [id])
+
+  @@unique([orgId, snapshotDate, scope, scopeValue])
+  @@index([orgId, scope, snapshotDate])
+  @@map("remediation_snapshots")
+}
+```
+
+**Step 2: Write migration SQL**
+
+```sql
+CREATE TABLE "remediation_snapshots" (
+    "id" UUID NOT NULL DEFAULT gen_random_uuid(),
+    "org_id" UUID NOT NULL,
+    "snapshot_date" DATE NOT NULL,
+    "scope" TEXT NOT NULL DEFAULT 'org',
+    "scope_value" TEXT,
+    "open_count" INTEGER NOT NULL,
+    "in_progress_count" INTEGER NOT NULL,
+    "completed_count" INTEGER NOT NULL,
+    "accepted_risk_count" INTEGER NOT NULL,
+    "avg_resolution_hours" DOUBLE PRECISION,
+    "created_at" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT "remediation_snapshots_pkey" PRIMARY KEY ("id")
+);
+
+CREATE UNIQUE INDEX "remediation_snapshots_org_scope_date_key" ON "remediation_snapshots"("org_id", "snapshot_date", "scope", "scope_value");
+CREATE INDEX "remediation_snapshots_org_scope_idx" ON "remediation_snapshots"("org_id", "scope", "snapshot_date");
+ALTER TABLE "remediation_snapshots" ADD CONSTRAINT "remediation_snapshots_org_id_fkey" FOREIGN KEY ("org_id") REFERENCES "organizations"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+```
+
+**Step 3: Write failing test for snapshot job**
+
+Create `apps/api/src/scheduler/jobs/__tests__/remediation-snapshot.test.ts`:
+
+```typescript
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import { RemediationSnapshotJob } from "../remediation-snapshot.js";
+
+describe("RemediationSnapshotJob", () => {
+  let job: RemediationSnapshotJob;
+  let ctx: any;
+
+  beforeEach(() => {
+    job = new RemediationSnapshotJob();
+    ctx = {
+      db: {
+        organization: { findMany: vi.fn().mockResolvedValue([{ id: "org-1" }]) },
+        remediationItem: { count: vi.fn().mockResolvedValue(5), findMany: vi.fn().mockResolvedValue([]) },
+        remediationSnapshot: { upsert: vi.fn().mockResolvedValue({}) },
+      },
+      eventBus: { publish: vi.fn() },
+      logger: { info: vi.fn(), error: vi.fn() },
+      metrics: { recordTrigger: vi.fn(), recordError: vi.fn() },
+      audit: { log: vi.fn() },
+      redis: {},
+    };
+  });
+
+  it("has correct schedule (daily at 2am)", () => {
+    expect(job.schedule).toBe("0 2 * * *");
+  });
+
+  it("creates org-level snapshot", async () => {
+    await job.execute(ctx);
+    expect(ctx.db.remediationSnapshot.upsert).toHaveBeenCalled();
+  });
+
+  it("handles multiple orgs", async () => {
+    ctx.db.organization.findMany.mockResolvedValue([{ id: "org-1" }, { id: "org-2" }]);
+    await job.execute(ctx);
+    expect(ctx.db.remediationSnapshot.upsert).toHaveBeenCalledTimes(2);
+  });
+});
+```
+
+**Step 4: Implement RemediationSnapshotJob**
+
+Create `apps/api/src/scheduler/jobs/remediation-snapshot.ts`:
+
+```typescript
+import type { SchedulerJob, JobContext } from "../types.js";
+
+export class RemediationSnapshotJob implements SchedulerJob {
+  name = "remediation-snapshot" as const;
+  schedule = "0 2 * * *";
+  tier = "non-critical" as const;
+  dependencies = ["postgres"] as const;
+
+  async execute(ctx: JobContext): Promise<void> {
+    const { db, logger } = ctx;
+    const today = new Date();
+    today.setUTCHours(0, 0, 0, 0);
+
+    const orgs = await db.organization.findMany({ select: { id: true } });
+
+    for (const org of orgs) {
+      const [openCount, inProgressCount, completedCount, acceptedRiskCount] = await Promise.all([
+        db.remediationItem.count({ where: { orgId: org.id, status: "open" } }),
+        db.remediationItem.count({ where: { orgId: org.id, status: { in: ["in_progress", "assigned", "in_review", "awaiting_deployment"] } } }),
+        db.remediationItem.count({ where: { orgId: org.id, status: "completed" } }),
+        db.remediationItem.count({ where: { orgId: org.id, status: "accepted_risk" } }),
+      ]);
+
+      await db.remediationSnapshot.upsert({
+        where: { orgId_snapshotDate_scope_scopeValue: { orgId: org.id, snapshotDate: today, scope: "org", scopeValue: null } },
+        create: { orgId: org.id, snapshotDate: today, scope: "org", openCount, inProgressCount, completedCount, acceptedRiskCount },
+        update: { openCount, inProgressCount, completedCount, acceptedRiskCount },
+      });
+    }
+
+    logger.info({ orgs: orgs.length }, "Remediation snapshots captured");
+  }
+}
+```
+
+**Step 5: Register job in scheduler index, run tests, commit**
+
+Add to `apps/api/src/scheduler/index.ts` job registry:
+```typescript
+import { RemediationSnapshotJob } from "./jobs/remediation-snapshot.js";
+// Add to jobs array: new RemediationSnapshotJob()
+```
+
+```bash
+git commit -m "feat(scheduler): add remediation snapshot cron job for burndown data"
+```
+
+---
+
+## Task 27: Charts API Endpoints
+
+**Files:**
+- Modify: `apps/api/src/routes/remediations.ts` or `apps/api/src/server.ts`
+- Create: `packages/compliance/src/remediation/charts-service.ts`
+- Modify: `packages/security/src/rbac.ts`
+
+**Step 1: Add RBAC entries**
+
+```typescript
+{ method: "GET", path: "/v1/compliance/remediations/charts/burndown", roles: ["admin", "manager", "developer"] },
+{ method: "GET", path: "/v1/compliance/remediations/charts/velocity", roles: ["admin", "manager", "developer"] },
+{ method: "GET", path: "/v1/compliance/remediations/charts/aging", roles: ["admin", "manager", "developer"] },
+{ method: "GET", path: "/v1/compliance/remediations/charts/sla", roles: ["admin", "manager", "developer"] },
+```
+
+**Step 2: Implement ChartsService**
+
+```typescript
+export class ChartsService {
+  constructor(private db: any) {}
+
+  async getBurndown(orgId: string, opts: { scope?: string; scopeValue?: string; days?: number }) {
+    const since = new Date();
+    since.setDate(since.getDate() - (opts.days ?? 30));
+
+    return this.db.remediationSnapshot.findMany({
+      where: {
+        orgId,
+        scope: opts.scope ?? "org",
+        scopeValue: opts.scopeValue ?? null,
+        snapshotDate: { gte: since },
+      },
+      orderBy: { snapshotDate: "asc" },
+    });
+  }
+
+  async getVelocity(orgId: string, opts: { scope?: string; scopeValue?: string; days?: number }) {
+    const since = new Date();
+    since.setDate(since.getDate() - (opts.days ?? 90));
+
+    return this.db.remediationItem.findMany({
+      where: { orgId, status: "completed", completedAt: { gte: since } },
+      select: { completedAt: true },
+      orderBy: { completedAt: "asc" },
+    });
+  }
+
+  async getAging(orgId: string) {
+    const items = await this.db.remediationItem.findMany({
+      where: { orgId, status: { in: ["open", "in_progress", "assigned", "in_review", "awaiting_deployment"] } },
+      select: { createdAt: true, priority: true },
+    });
+
+    const now = Date.now();
+    const buckets = { "0-7d": 0, "7-14d": 0, "14-30d": 0, "30d+": 0 };
+    for (const item of items) {
+      const ageDays = (now - new Date(item.createdAt).getTime()) / 86400000;
+      if (ageDays <= 7) buckets["0-7d"]++;
+      else if (ageDays <= 14) buckets["7-14d"]++;
+      else if (ageDays <= 30) buckets["14-30d"]++;
+      else buckets["30d+"]++;
+    }
+    return buckets;
+  }
+
+  async getSlaCompliance(orgId: string, opts: { days?: number }) {
+    const since = new Date();
+    since.setDate(since.getDate() - (opts.days ?? 90));
+
+    const completed = await this.db.remediationItem.findMany({
+      where: { orgId, status: "completed", completedAt: { gte: since }, dueDate: { not: null } },
+      select: { completedAt: true, dueDate: true },
+    });
+
+    const total = completed.length;
+    const onTime = completed.filter((i: any) => new Date(i.completedAt) <= new Date(i.dueDate)).length;
+    return { total, onTime, rate: total > 0 ? Math.round((onTime / total) * 100) : 100 };
+  }
+}
+```
+
+**Step 3: Wire routes, commit**
+
+```bash
+git commit -m "feat(api): add remediation chart endpoints (burndown, velocity, aging, SLA)"
+```
+
+---
+
+## Task 28: Auto-Remediation Service
+
+**Files:**
+- Create: `packages/compliance/src/remediation/auto-fix-service.ts`
+- Create: `packages/compliance/src/__tests__/auto-fix-service.test.ts`
+
+**Step 1: Write failing tests**
+
+```typescript
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import { AutoFixService } from "../remediation/auto-fix-service.js";
+
+describe("AutoFixService", () => {
+  let service: AutoFixService;
+  let mockDb: any;
+  let mockGitHub: any;
+  let mockEventBus: any;
+
+  beforeEach(() => {
+    mockDb = {
+      remediationItem: { findUnique: vi.fn(), update: vi.fn() },
+      finding: { findUnique: vi.fn() },
+    };
+    mockGitHub = {
+      createBranch: vi.fn().mockResolvedValue("fix/cve-2024-1234"),
+      commitFile: vi.fn().mockResolvedValue("abc123"),
+      createPullRequest: vi.fn().mockResolvedValue({ html_url: "https://github.com/org/repo/pull/42", number: 42 }),
+    };
+    mockEventBus = { publish: vi.fn() };
+    service = new AutoFixService(mockDb, mockGitHub, mockEventBus);
+  });
+
+  it("rejects item without linked finding", async () => {
+    mockDb.remediationItem.findUnique.mockResolvedValue({ id: "rem-1", orgId: "org-1", findingId: null });
+    await expect(service.triggerAutoFix("org-1", "rem-1", "user-1")).rejects.toThrow("No linked finding");
+  });
+
+  it("rejects finding without fix strategy", async () => {
+    mockDb.remediationItem.findUnique.mockResolvedValue({ id: "rem-1", orgId: "org-1", findingId: "f-1" });
+    mockDb.finding.findUnique.mockResolvedValue({ id: "f-1", type: "custom", metadata: {} });
+    await expect(service.triggerAutoFix("org-1", "rem-1", "user-1")).rejects.toThrow("No auto-fix strategy");
+  });
+
+  it("creates a PR for dependency vulnerability fix", async () => {
+    mockDb.remediationItem.findUnique.mockResolvedValue({ id: "rem-1", orgId: "org-1", findingId: "f-1", title: "CVE-2024-1234" });
+    mockDb.finding.findUnique.mockResolvedValue({
+      id: "f-1", type: "dependency", metadata: { packageName: "jsonwebtoken", fixedVersion: "9.0.3", manifestPath: "package.json" },
+    });
+    mockDb.remediationItem.update.mockResolvedValue({ id: "rem-1", externalRef: "github:org/repo#42" });
+
+    const result = await service.triggerAutoFix("org-1", "rem-1", "user-1");
+    expect(result).toHaveProperty("prUrl");
+    expect(mockGitHub.createPullRequest).toHaveBeenCalled();
+  });
+
+  it("publishes remediation.auto_fix event", async () => {
+    mockDb.remediationItem.findUnique.mockResolvedValue({ id: "rem-1", orgId: "org-1", findingId: "f-1", title: "CVE-2024-1234" });
+    mockDb.finding.findUnique.mockResolvedValue({
+      id: "f-1", type: "dependency", metadata: { packageName: "jsonwebtoken", fixedVersion: "9.0.3", manifestPath: "package.json" },
+    });
+    mockDb.remediationItem.update.mockResolvedValue({});
+
+    await service.triggerAutoFix("org-1", "rem-1", "user-1");
+    expect(mockEventBus.publish).toHaveBeenCalledWith("sentinel.notifications", expect.objectContaining({ topic: "remediation.auto_fix" }));
+  });
+});
+```
+
+**Step 2: Implement AutoFixService**
+
+```typescript
+export interface GitHubPRClient {
+  createBranch(repo: string, baseBranch: string, branchName: string): Promise<string>;
+  commitFile(repo: string, branch: string, path: string, content: string, message: string): Promise<string>;
+  createPullRequest(repo: string, head: string, base: string, title: string, body: string, draft: boolean): Promise<{ html_url: string; number: number }>;
+}
+
+const FIX_STRATEGIES: Record<string, (finding: any) => { path: string; content: string; message: string } | null> = {
+  dependency: (finding) => {
+    const { packageName, fixedVersion, manifestPath } = finding.metadata ?? {};
+    if (!fixedVersion || !manifestPath) return null;
+    return {
+      path: manifestPath,
+      content: `// Auto-fix: upgrade ${packageName} to ${fixedVersion}`,
+      message: `fix(deps): upgrade ${packageName} to ${fixedVersion}`,
+    };
+  },
+};
+
+export class AutoFixService {
+  constructor(private db: any, private github: GitHubPRClient, private eventBus: any) {}
+
+  async triggerAutoFix(orgId: string, remediationId: string, userId: string) {
+    const item = await this.db.remediationItem.findUnique({ where: { id: remediationId } });
+    if (!item || item.orgId !== orgId) throw new Error("Remediation item not found");
+    if (!item.findingId) throw new Error("No linked finding for auto-fix");
+
+    const finding = await this.db.finding.findUnique({ where: { id: item.findingId } });
+    const strategy = FIX_STRATEGIES[finding?.type];
+    const fix = strategy?.(finding);
+    if (!fix) throw new Error("No auto-fix strategy available for this finding type");
+
+    const branchName = `sentinel/fix/${remediationId.slice(0, 8)}`;
+    // In real implementation: clone, apply fix, push, create PR
+    // For now: use GitHub API to create branch + commit + PR
+    const repo = finding.metadata?.repo ?? "unknown/repo";
+    await this.github.createBranch(repo, "main", branchName);
+    await this.github.commitFile(repo, branchName, fix.path, fix.content, fix.message);
+    const pr = await this.github.createPullRequest(repo, branchName, "main", fix.message, `Auto-fix for ${item.title}\n\n[Sentinel] Remediation: ${remediationId}`, true);
+
+    await this.db.remediationItem.update({
+      where: { id: remediationId },
+      data: { externalRef: `github:${repo}#${pr.number}` },
+    });
+
+    await this.eventBus.publish("sentinel.notifications", {
+      id: `evt-${remediationId}-autofix`,
+      orgId,
+      topic: "remediation.auto_fix",
+      payload: { remediationId, prUrl: pr.html_url, triggeredBy: userId },
+      timestamp: new Date().toISOString(),
+    });
+
+    return { prUrl: pr.html_url, prNumber: pr.number, branch: branchName };
+  }
+}
+```
+
+**Step 3: Run tests, export, commit**
+
+```bash
+cd packages/compliance && npx vitest run src/__tests__/auto-fix-service.test.ts
+git commit -m "feat(compliance): add auto-remediation service with PR creation"
+```
+
+---
+
+## Task 29: Auto-Fix API Route + RBAC
+
+**Files:**
+- Modify: `apps/api/src/server.ts`
+- Modify: `packages/security/src/rbac.ts`
+
+**Step 1: Add RBAC entries**
+
+```typescript
+{ method: "POST", path: "/v1/compliance/remediations/:id/auto-fix", roles: ["admin", "manager"] },
+{ method: "GET", path: "/v1/compliance/remediations/:id/auto-fix/status", roles: ["admin", "manager", "developer"] },
+```
+
+**Step 2: Wire routes**
+
+- `POST /:id/auto-fix` — Call `autoFixService.triggerAutoFix()`, return `{ prUrl, prNumber }`
+- `GET /:id/auto-fix/status` — Read `externalRef`, return PR status if linked
+
+**Step 3: Commit**
+
+```bash
+git commit -m "feat(api): add auto-fix routes for remediation items"
+```
+
+---
+
+## Task 30: Two-Way Sync — Inbound Webhook Routes
+
+**Files:**
+- Create: `apps/api/src/routes/integration-webhooks.ts`
+- Create: `packages/compliance/src/remediation/sync-handler.ts`
+- Create: `packages/compliance/src/__tests__/sync-handler.test.ts`
+- Modify: `apps/api/src/server.ts`
+
+**Step 1: Write failing tests for SyncHandler**
+
+```typescript
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import { SyncHandler } from "../remediation/sync-handler.js";
+
+describe("SyncHandler", () => {
+  let handler: SyncHandler;
+  let mockDb: any;
+  let mockEventBus: any;
+
+  beforeEach(() => {
+    mockDb = {
+      remediationItem: { findFirst: vi.fn(), update: vi.fn() },
+      integrationConfig: { findUnique: vi.fn() },
+    };
+    mockEventBus = { publish: vi.fn() };
+    handler = new SyncHandler(mockDb, mockEventBus);
+  });
+
+  it("ignores updates with [Sentinel] prefix (echo prevention)", async () => {
+    const result = await handler.handleJiraWebhook({
+      issue: { key: "PROJ-123", fields: { summary: "[Sentinel] Fix CVE", status: { name: "Done" } } },
+      webhookEvent: "jira:issue_updated",
+      comment: { body: "[Sentinel] Auto-comment" },
+    }, "org-1");
+    expect(result.skipped).toBe(true);
+  });
+
+  it("maps Jira status to Sentinel status", async () => {
+    mockDb.remediationItem.findFirst.mockResolvedValue({ id: "rem-1", orgId: "org-1", status: "open", externalRef: "jira:PROJ-123" });
+    mockDb.remediationItem.update.mockResolvedValue({ id: "rem-1", status: "completed" });
+
+    await handler.handleJiraWebhook({
+      issue: { key: "PROJ-123", fields: { summary: "Fix something", status: { name: "Done" } } },
+      webhookEvent: "jira:issue_updated",
+    }, "org-1");
+
+    expect(mockDb.remediationItem.update).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ status: "completed" }),
+    }));
+  });
+
+  it("maps GitHub issue close to completed", async () => {
+    mockDb.remediationItem.findFirst.mockResolvedValue({ id: "rem-1", orgId: "org-1", status: "open", externalRef: "github:org/repo#42" });
+    mockDb.remediationItem.update.mockResolvedValue({ id: "rem-1", status: "completed" });
+
+    await handler.handleGitHubWebhook({
+      action: "closed",
+      issue: { number: 42, state: "closed" },
+      repository: { full_name: "org/repo" },
+    }, "org-1");
+
+    expect(mockDb.remediationItem.update).toHaveBeenCalled();
+  });
+
+  it("skips if no matching remediation item found", async () => {
+    mockDb.remediationItem.findFirst.mockResolvedValue(null);
+
+    const result = await handler.handleJiraWebhook({
+      issue: { key: "PROJ-999", fields: { summary: "Unknown", status: { name: "In Progress" } } },
+      webhookEvent: "jira:issue_updated",
+    }, "org-1");
+
+    expect(result.skipped).toBe(true);
+    expect(mockDb.remediationItem.update).not.toHaveBeenCalled();
+  });
+
+  it("publishes remediation.synced event", async () => {
+    mockDb.remediationItem.findFirst.mockResolvedValue({ id: "rem-1", orgId: "org-1", status: "open", externalRef: "jira:PROJ-123" });
+    mockDb.remediationItem.update.mockResolvedValue({ id: "rem-1", status: "in_progress" });
+
+    await handler.handleJiraWebhook({
+      issue: { key: "PROJ-123", fields: { summary: "Fix it", status: { name: "In Progress" } } },
+      webhookEvent: "jira:issue_updated",
+    }, "org-1");
+
+    expect(mockEventBus.publish).toHaveBeenCalledWith("sentinel.notifications", expect.objectContaining({ topic: "remediation.synced" }));
+  });
+});
+```
+
+**Step 2: Implement SyncHandler**
+
+```typescript
+const JIRA_STATUS_MAP: Record<string, string> = {
+  "To Do": "open",
+  "In Progress": "in_progress",
+  "In Review": "in_review",
+  "Done": "completed",
+};
+
+const GITHUB_STATE_MAP: Record<string, string> = {
+  open: "open",
+  closed: "completed",
+};
+
+export class SyncHandler {
+  constructor(private db: any, private eventBus: any) {}
+
+  async handleJiraWebhook(payload: any, orgId: string) {
+    const issueKey = payload.issue?.key;
+    const summary = payload.issue?.fields?.summary ?? "";
+    const commentBody = payload.comment?.body ?? "";
+
+    // Echo prevention
+    if (summary.startsWith("[Sentinel]") || commentBody.startsWith("[Sentinel]")) {
+      return { skipped: true, reason: "echo_prevention" };
+    }
+
+    const externalRef = `jira:${issueKey}`;
+    const item = await this.db.remediationItem.findFirst({ where: { orgId, externalRef } });
+    if (!item) return { skipped: true, reason: "no_matching_item" };
+
+    const jiraStatus = payload.issue?.fields?.status?.name;
+    const newStatus = JIRA_STATUS_MAP[jiraStatus];
+    if (!newStatus || newStatus === item.status) return { skipped: true, reason: "no_status_change" };
+
+    await this.db.remediationItem.update({
+      where: { id: item.id },
+      data: { status: newStatus, ...(newStatus === "completed" ? { completedAt: new Date() } : {}) },
+    });
+
+    await this.eventBus.publish("sentinel.notifications", {
+      id: `evt-${item.id}-sync`,
+      orgId,
+      topic: "remediation.synced",
+      payload: { remediationId: item.id, source: "jira", externalRef, newStatus },
+      timestamp: new Date().toISOString(),
+    });
+
+    return { skipped: false, itemId: item.id, newStatus };
+  }
+
+  async handleGitHubWebhook(payload: any, orgId: string) {
+    const repo = payload.repository?.full_name;
+    const issueNumber = payload.issue?.number;
+    const externalRef = `github:${repo}#${issueNumber}`;
+
+    const item = await this.db.remediationItem.findFirst({ where: { orgId, externalRef } });
+    if (!item) return { skipped: true, reason: "no_matching_item" };
+
+    const newStatus = GITHUB_STATE_MAP[payload.issue?.state];
+    if (!newStatus || newStatus === item.status) return { skipped: true, reason: "no_status_change" };
+
+    await this.db.remediationItem.update({
+      where: { id: item.id },
+      data: { status: newStatus, ...(newStatus === "completed" ? { completedAt: new Date() } : {}) },
+    });
+
+    await this.eventBus.publish("sentinel.notifications", {
+      id: `evt-${item.id}-sync`,
+      orgId,
+      topic: "remediation.synced",
+      payload: { remediationId: item.id, source: "github", externalRef, newStatus },
+      timestamp: new Date().toISOString(),
+    });
+
+    return { skipped: false, itemId: item.id, newStatus };
+  }
+}
+```
+
+**Step 3: Create webhook routes**
+
+Create `apps/api/src/routes/integration-webhooks.ts`:
+
+```typescript
+// POST /webhooks/jira — HMAC verification using shared secret from IntegrationConfig
+// POST /webhooks/integration/github — HMAC verification using X-Hub-Signature-256
+// Both: parse raw body, verify signature, extract orgId from URL or config, call SyncHandler
+// Rate limiting disabled (matching existing webhook pattern)
+```
+
+Wire into server.ts alongside existing VCS webhook routes.
+
+**Step 4: Run tests, commit**
+
+```bash
+cd packages/compliance && npx vitest run src/__tests__/sync-handler.test.ts
+git commit -m "feat(compliance): add two-way sync handler for Jira/GitHub inbound webhooks"
+```
+
+---
+
+## Task 31: Score Refresh Cron Job
+
+**Files:**
+- Create: `apps/api/src/scheduler/jobs/remediation-score-refresh.ts`
+- Modify: `apps/api/src/scheduler/index.ts` (register job)
+
+**Step 1: Implement score refresh job**
+
+```typescript
+import type { SchedulerJob, JobContext } from "../types.js";
+import { computePriorityScore } from "@sentinel/compliance";
+
+export class RemediationScoreRefreshJob implements SchedulerJob {
+  name = "remediation-score-refresh" as const;
+  schedule = "*/15 * * * *"; // every 15 minutes
+  tier = "non-critical" as const;
+  dependencies = ["postgres"] as const;
+
+  async execute(ctx: JobContext): Promise<void> {
+    const { db, logger } = ctx;
+
+    const activeItems = await db.remediationItem.findMany({
+      where: { status: { notIn: ["completed", "accepted_risk"] } },
+      select: { id: true, priority: true, dueDate: true, linkedFindingIds: true, findingId: true, priorityScore: true },
+    });
+
+    let updated = 0;
+    for (const item of activeItems) {
+      const newScore = computePriorityScore({
+        priority: item.priority,
+        dueDate: item.dueDate,
+        linkedFindingIds: item.linkedFindingIds,
+        findingId: item.findingId,
+      });
+
+      if (newScore !== item.priorityScore) {
+        await db.remediationItem.update({ where: { id: item.id }, data: { priorityScore: newScore } });
+        updated++;
+      }
+    }
+
+    logger.info({ total: activeItems.length, updated }, "Priority score refresh complete");
+  }
+}
+```
+
+**Step 2: Register in scheduler, commit**
+
+```bash
+git commit -m "feat(scheduler): add 15-min priority score refresh cron job"
+```
+
+---
+
+## Task 32: Dashboard — Evidence Upload Component
+
+**Files:**
+- Create: `apps/dashboard/components/remediations/evidence-upload.tsx`
+- Modify: `apps/dashboard/components/remediations/remediation-detail-panel.tsx` (integrate)
+- Modify: `apps/dashboard/app/(dashboard)/remediations/actions.ts` (add server actions)
+- Modify: `apps/dashboard/lib/api.ts` (add API functions)
+
+**Step 1: Add API functions and server actions for evidence**
+
+Add to `lib/api.ts`:
+```typescript
+export async function requestEvidenceUpload(remediationId: string, fileName: string, fileSize: number, mimeType: string) { ... }
+export async function confirmEvidenceUpload(remediationId: string, s3Key: string, fileName: string, fileSize: number, mimeType: string) { ... }
+export async function listEvidence(remediationId: string) { ... }
+export async function getEvidenceDownloadUrl(remediationId: string, evidenceId: string) { ... }
+export async function deleteEvidence(remediationId: string, evidenceId: string) { ... }
+```
+
+**Step 2: Create evidence-upload component**
+
+Drag-drop file zone, file list with download links, delete buttons. Uses presigned URL flow:
+1. Call `requestEvidenceUpload` -> get presigned URL
+2. `fetch(presignedUrl, { method: "PUT", body: file })` direct to S3
+3. Call `confirmEvidenceUpload` -> create DB record
+4. Show progress bar during upload
+
+**Step 3: Integrate into detail panel**
+
+Add evidence section to `remediation-detail-panel.tsx` below the evidence notes field.
+
+**Commit:**
+```bash
+git commit -m "feat(dashboard): add evidence upload component with S3 presigned URLs"
+```
+
+---
+
+## Task 33: Dashboard — Burndown/Velocity Charts Page
+
+**Files:**
+- Create: `apps/dashboard/app/(dashboard)/remediations/charts/page.tsx`
+- Create: `apps/dashboard/components/remediations/burndown-chart.tsx`
+- Create: `apps/dashboard/components/remediations/velocity-chart.tsx`
+- Create: `apps/dashboard/components/remediations/aging-chart.tsx`
+- Create: `apps/dashboard/components/remediations/sla-chart.tsx`
+
+**Step 1: Install Recharts**
+
+```bash
+cd apps/dashboard && pnpm add recharts
+```
+
+**Step 2: Create chart components**
+
+Each chart component takes typed data props and renders using Recharts:
+- `burndown-chart.tsx` — AreaChart with stacked open/inProgress areas
+- `velocity-chart.tsx` — BarChart with weekly completed counts
+- `aging-chart.tsx` — BarChart with stacked age buckets
+- `sla-chart.tsx` — LineChart with SLA compliance % over time
+
+All charts include scope selector dropdown (org/framework/assignee/project) and date range preset buttons (30d/60d/90d).
+
+**Step 3: Create charts page**
+
+Server component that fetches chart data for all 4 endpoints, renders in a 2x2 grid.
+
+**Step 4: Add navigation link**
+
+Add "Charts" sub-link under Remediations in sidebar.
+
+**Commit:**
+```bash
+git commit -m "feat(dashboard): add burndown/velocity/aging/SLA chart components and page"
+```
+
+---
+
+## Task 34: Dashboard — Workflow Config Editor + Auto-Fix Button
+
+**Files:**
+- Create: `apps/dashboard/app/(dashboard)/settings/workflow/page.tsx`
+- Create: `apps/dashboard/components/remediations/workflow-config-editor.tsx`
+- Create: `apps/dashboard/components/remediations/auto-fix-button.tsx`
+- Modify: `apps/dashboard/components/remediations/remediation-detail-panel.tsx`
+
+**Step 1: Create workflow config editor**
+
+Toggle switches for each skippable stage (assigned, in_progress, in_review, awaiting_deployment). Shows preview of active workflow pipeline. Save button calls `PUT /v1/compliance/workflow-config`.
+
+**Step 2: Create auto-fix button**
+
+Button in detail panel that:
+- Shows only when item has a linked finding
+- Calls `POST /:id/auto-fix`
+- Shows loading state, then PR link on success
+- Disabled if item already has an external ref
+
+**Step 3: Integrate into detail panel and settings**
+
+**Commit:**
+```bash
+git commit -m "feat(dashboard): add workflow config editor and auto-fix button"
+```
+
+---
+
+## Task 35: Extended Dashboard Tests
+
+**Files:**
+- Create: `apps/dashboard/__tests__/evidence-upload.test.tsx`
+- Create: `apps/dashboard/__tests__/burndown-chart.test.tsx`
+- Create: `apps/dashboard/__tests__/workflow-config-editor.test.tsx`
+- Create: `apps/dashboard/__tests__/auto-fix-button.test.tsx`
+- Create: `apps/dashboard/__tests__/sync-handler.test.tsx`
+
+**Tests:**
+- Evidence upload: renders file zone, validates file size/type, shows progress, calls presign/confirm
+- Burndown chart: renders with mock data, handles empty data, scope selector changes refetch
+- Workflow config: renders stage toggles, prevents skipping required stages, saves config
+- Auto-fix button: renders when finding linked, disabled when already linked, shows PR link on success
+- Sync handler (integration test): Jira webhook maps status correctly, GitHub webhook maps state
+
+```bash
+cd apps/dashboard && npx vitest run __tests__/evidence-upload.test.tsx __tests__/burndown-chart.test.tsx __tests__/workflow-config-editor.test.tsx __tests__/auto-fix-button.test.tsx
+git commit -m "test(dashboard): add tests for evidence, charts, workflow config, auto-fix"
+```
+
+---
+
+## Task 36: Final Integration Test — Run All Tests
+
+**Run:**
+```bash
+npx turbo test --filter=@sentinel/api --filter=@sentinel/security --filter=@sentinel/compliance
+cd apps/dashboard && npx vitest run
+```
+
+Expected: All tests pass across all packages.
+
+**Final commit (if any fixes needed):**
+```bash
+git commit -m "fix: address integration test issues for expanded remediation dashboard"
+```
+
+---
+
 ## Task Summary
 
 | # | Task | Files | Tests |
@@ -1810,4 +3163,21 @@ git commit -m "fix: address integration test issues for remediation dashboard"
 | 17 | Create modal | remediation-create-modal.tsx | — |
 | 18 | Dashboard tests | 4 test files | ~25 |
 | 19 | Navigation link | sidebar | — |
-| 20 | Final integration test | — | all |
+| 20 | Final integration test (core) | — | all |
+| 21 | Custom workflow FSM + schema | workflow-fsm.ts, schema.prisma | 10 |
+| 22 | Update service for workflow | service.ts | 3 |
+| 23 | Workflow config API routes | routes, rbac.ts | — |
+| 24 | Evidence schema + service | evidence-service.ts, schema.prisma | 6 |
+| 25 | Evidence upload API routes | routes, rbac.ts, s3-presigner.ts | — |
+| 26 | Snapshot schema + cron job | remediation-snapshot.ts, schema.prisma | 3 |
+| 27 | Charts API endpoints | charts-service.ts, routes | — |
+| 28 | Auto-remediation service | auto-fix-service.ts | 4 |
+| 29 | Auto-fix API routes | routes, rbac.ts | — |
+| 30 | Two-way sync handler + webhooks | sync-handler.ts, integration-webhooks.ts | 5 |
+| 31 | Score refresh cron job | remediation-score-refresh.ts | — |
+| 32 | Evidence upload component | evidence-upload.tsx | — |
+| 33 | Charts page + components | 5 chart files | — |
+| 34 | Workflow config + auto-fix UI | 3 components | — |
+| 35 | Extended dashboard tests | 5 test files | ~12 |
+| 36 | Final integration test (all) | — | all |
+| **Total** | | | **~92** |
