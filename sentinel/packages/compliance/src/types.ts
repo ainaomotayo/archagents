@@ -10,6 +10,11 @@ export interface ControlDefinition {
   name: string;
   weight: number;
   matchRules: MatchRule[];
+  parentCode?: string;
+  requirementType?: "automated" | "attestation" | "hybrid";
+  attestationCadence?: number;
+  regulatoryStatus?: "required" | "addressable";
+  description?: string;
 }
 
 export interface FrameworkDefinition {
@@ -49,7 +54,7 @@ export interface FindingInput {
   suppressed: boolean;
 }
 
-export const VALID_REPORT_TYPES = ["compliance_summary", "audit_evidence", "executive"] as const;
+export const VALID_REPORT_TYPES = ["compliance_summary", "audit_evidence", "executive", "nist_profile", "hipaa_assessment"] as const;
 export type ReportType = (typeof VALID_REPORT_TYPES)[number];
 
 export const EVIDENCE_EVENT_TYPES = [

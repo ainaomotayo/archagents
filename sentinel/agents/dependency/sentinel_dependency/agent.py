@@ -6,6 +6,11 @@ from typing import Any
 from sentinel_agents.base import BaseAgent
 from sentinel_agents.types import DiffEvent, Finding
 
+from sentinel_dependency.compliance_checks import (
+    check_ai_supply_chain,
+    check_hipaa_cves,
+    check_phi_license_risk,
+)
 from sentinel_dependency.cross_manifest import detect_cross_manifest_issues
 from sentinel_dependency.drift_detector import detect_drift, extract_imports
 from sentinel_dependency.manifest_parser import parse_manifests_from_diff
@@ -60,6 +65,11 @@ class DependencyAgent(BaseAgent):
 
         # Tier 4: Cross-file manifest analysis
         findings.extend(self._run_cross_manifest(deps))
+
+        # Tier 5: NIST/HIPAA compliance checks
+        findings.extend(check_hipaa_cves(findings))
+        findings.extend(check_ai_supply_chain(event.files))
+        findings.extend(check_phi_license_risk(event.files))
 
         return findings
 

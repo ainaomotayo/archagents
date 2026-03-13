@@ -7,6 +7,7 @@
     "build": "tsc",
     "dev": "tsx watch src/server.ts",
     "start": "node dist/server.js",
+    "start:vcs-bridge": "node dist/vcs-bridge.js",
     "test": "vitest run",
     "lint": "echo 'lint placeholder'"
   },
@@ -25,6 +26,7 @@
     "@sentinel/security": "workspace:*",
     "@sentinel/shared": "workspace:*",
     "@sentinel/telemetry": "workspace:*",
+    "@sentinel/vcs": "workspace:*",
     "@types/node-cron": "^3.0.11",
     "cron-parser": "^5.5.0",
     "fastify": "^5.2",

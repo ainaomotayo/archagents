@@ -205,6 +205,8 @@ vi.mock("@sentinel/db", () => {
   const complianceSnapshotModel = makeModel(complianceSnapshots);
   const evidenceRecordModel = makeModel(evidenceRecords);
   const reportModel = makeModel(reports);
+  const controlAttestationModel = makeModel([] as any[]);
+  const attestationHistoryModel = makeModel([] as any[]);
 
   const tenant = {
     scan: scanModel,
@@ -221,6 +223,8 @@ vi.mock("@sentinel/db", () => {
     complianceSnapshot: complianceSnapshotModel,
     evidenceRecord: evidenceRecordModel,
     report: reportModel,
+    controlAttestation: controlAttestationModel,
+    attestationHistory: attestationHistoryModel,
   };
 
   return {
@@ -328,11 +332,11 @@ describe("Compliance API integration", () => {
     expect(res.statusCode).toBe(200);
     const body = JSON.parse(res.payload);
     expect(Array.isArray(body)).toBe(true);
-    // 7 built-in + custom frameworks from mock
-    expect(body.length).toBeGreaterThanOrEqual(7);
+    // 9 built-in + custom frameworks from mock
+    expect(body.length).toBeGreaterThanOrEqual(9);
     // Built-in frameworks have orgId: null
     const builtIn = body.filter((f: any) => f.orgId === null);
-    expect(builtIn.length).toBe(7);
+    expect(builtIn.length).toBe(9);
   });
 
   // ── 2. GET /v1/compliance/frameworks/soc2 — returns built-in (200) ────
@@ -565,6 +569,32 @@ describe("Compliance API integration", () => {
     expect(body.id).toBe("rpt-1");
     expect(body).toHaveProperty("type");
     expect(body).toHaveProperty("frameworkId");
+  });
+
+  it("POST /v1/reports accepts nist_profile type (202)", async () => {
+    const bodyObj = { type: "nist_profile", frameworkId: "nist-ai-rmf", parameters: {} };
+    const payload = JSON.stringify(bodyObj);
+    const res = await app.inject({
+      method: "POST",
+      url: "/v1/reports",
+      headers: { ...signedHeaders(payload, "admin"), "content-type": "application/json" },
+      payload,
+    });
+    expect(res.statusCode).toBe(202);
+    expect(JSON.parse(res.payload)).toHaveProperty("type", "nist_profile");
+  });
+
+  it("POST /v1/reports accepts hipaa_assessment type (202)", async () => {
+    const bodyObj = { type: "hipaa_assessment", frameworkId: "hipaa", parameters: {} };
+    const payload = JSON.stringify(bodyObj);
+    const res = await app.inject({
+      method: "POST",
+      url: "/v1/reports",
+      headers: { ...signedHeaders(payload, "admin"), "content-type": "application/json" },
+      payload,
+    });
+    expect(res.statusCode).toBe(202);
+    expect(JSON.parse(res.payload)).toHaveProperty("type", "hipaa_assessment");
   });
 
   // ── 15. GET /v1/reports — returns paginated reports (200) ─────────────

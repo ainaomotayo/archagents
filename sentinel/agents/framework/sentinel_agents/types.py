@@ -172,3 +172,16 @@ class AgentHealth:
     version: str
     status: str  # "healthy" | "degraded" | "unhealthy"
     detail: str = ""
+
+
+def extract_added_code(diff_file: DiffFile) -> str:
+    """Reconstruct added code from diff hunks."""
+    lines: list[str] = []
+    for hunk in diff_file.hunks:
+        for line in hunk.content.split("\n"):
+            if line.startswith("+") and not line.startswith("+++"):
+                lines.append(line[1:])
+            elif not line.startswith("-") and not line.startswith("---"):
+                if not line.startswith("@@"):
+                    lines.append(line)
+    return "\n".join(lines)
