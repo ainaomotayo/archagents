@@ -102,6 +102,87 @@ async function finalizeScan(scanId: string, hasTimeouts: boolean) {
 
     await assessor.persist(store, assessment, scanId, scan.orgId);
 
+    // --- Approval gate check ---
+    const { shouldCreateApprovalGate } = await import("./approval-gate.js");
+    const requirement = await shouldCreateApprovalGate({
+      orgId: scan.orgId,
+      scanId,
+      projectId: scan.projectId,
+      riskScore: assessment.riskScore,
+      findings: assessment.findings,
+      branch: scan.branch ?? "",
+      db,
+    });
+
+    if (requirement) {
+      const now = new Date();
+      const expiresAt = new Date(now.getTime() + requirement.slaHours * 60 * 60 * 1000);
+      const escalatesAt = new Date(now.getTime() + requirement.escalateAfterHours * 60 * 60 * 1000);
+
+      await db.approvalGate.create({
+        data: {
+          orgId: scan.orgId,
+          scanId,
+          projectId: scan.projectId,
+          policyId: requirement.policyId,
+          status: requirement.autoBlock ? "rejected" : "pending",
+          gateType: requirement.gateType,
+          triggerCriteria: requirement.triggerCriteria as any,
+          priority: requirement.priority,
+          assignedRole: requirement.assigneeRole,
+          requestedBy: "system",
+          expiresAt,
+          escalatesAt,
+          expiryAction: requirement.expiryAction,
+        },
+      });
+
+      await db.scan.update({
+        where: { id: scanId },
+        data: {
+          approvalStatus: requirement.autoBlock ? "rejected" : "pending_approval",
+          status: "completed",
+          completedAt: new Date(),
+        },
+      });
+
+      await eventBus.publish("sentinel.approvals", {
+        type: requirement.autoBlock ? "gate.auto_blocked" : "gate.created",
+        scanId,
+        orgId: scan.orgId,
+        gateType: requirement.gateType,
+        priority: requirement.priority,
+        assignedRole: requirement.assigneeRole,
+        policyName: requirement.policyName,
+      });
+
+      await eventBus.publish("sentinel.notifications", {
+        id: `evt-${scanId}-approval-requested`,
+        orgId: scan.orgId,
+        topic: requirement.autoBlock ? "approval.rejected" : "approval.requested",
+        payload: {
+          scanId,
+          gateType: requirement.gateType,
+          riskScore: assessment.riskScore,
+          assignedRole: requirement.assigneeRole,
+          policyName: requirement.policyName,
+        },
+        timestamp: new Date().toISOString(),
+      });
+
+      const durationSec = (performance.now() - pending.startedAt) / 1000;
+      scanDuration.observe({ status: requirement.autoBlock ? "rejected" : "pending_approval" }, durationSec);
+      logger.info({
+        scanId,
+        gateType: requirement.gateType,
+        autoBlock: requirement.autoBlock,
+        riskScore: assessment.riskScore,
+      }, "Approval gate created — certificate issuance deferred");
+
+      return; // Skip certificate issuance — approval-worker will handle it
+    }
+    // --- End approval gate check ---
+
     if (isArchiveEnabled() && assessment.certificate) {
       try {
         await archiveToS3(
