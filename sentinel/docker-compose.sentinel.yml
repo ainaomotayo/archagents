@@ -182,11 +182,16 @@ services:
     depends_on:
       redis:
         condition: service_healthy
+      postgres:
+        condition: service_healthy
     networks:
       - sentinel-internal
     environment:
+      DATABASE_URL: ${DATABASE_URL}
       REDIS_URL: ${REDIS_URL}
       SELF_SCAN_ENABLED: ${SELF_SCAN_ENABLED:-true}
+      SCHEDULER_LEASE_TTL: ${SCHEDULER_LEASE_TTL:-15000}
+      SCAN_TIMEOUT_MS: ${SCAN_TIMEOUT_MS:-300000}
       SCHEDULER_PORT: "9091"
       NODE_ENV: production
     command: ["node", "apps/api/dist/scheduler.js"]
@@ -225,6 +230,31 @@ services:
       timeout: 5s
       retries: 3
       start_period: 15s
+
+  approval-worker:
+    build:
+      context: .
+      dockerfile: docker/api.Dockerfile
+    restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    networks:
+      - sentinel-internal
+    environment:
+      REDIS_URL: ${REDIS_URL}
+      DATABASE_URL: ${DATABASE_URL}
+      SENTINEL_SECRET: ${SENTINEL_SECRET}
+      APPROVAL_WORKER_PORT: "9095"
+    command: ["node", "apps/api/dist/approval-worker.js"]
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9095/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
 
   saml-jackson:
     image: boxyhq/jackson:latest

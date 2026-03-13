@@ -13,6 +13,11 @@ from typing import Any
 from sentinel_agents.base import BaseAgent
 from sentinel_agents.types import Confidence, DiffEvent, DiffFile, Finding, Severity
 
+from sentinel_aidetector.compliance_checks import (
+    check_bias_indicators,
+    check_model_provenance,
+    check_oversight_gaps,
+)
 from sentinel_aidetector.markers import detect_markers
 from sentinel_aidetector.stylometric import (
     analyze_ast_entropy,
@@ -181,5 +186,10 @@ class AIDetectorAgent(BaseAgent):
                     pass
 
             findings.append(finding)
+
+        # NIST/HIPAA compliance checks
+        findings.extend(check_model_provenance(event.files))
+        findings.extend(check_bias_indicators(event.files))
+        findings.extend(check_oversight_gaps(event.files))
 
         return findings

@@ -20,6 +20,11 @@ import { createAuthHook } from "./middleware/auth.js";
 import { buildScanRoutes } from "./routes/scans.js";
 import { registerWebhookRoutes } from "./routes/webhooks.js";
 import { buildWebhookRoutes } from "./routes/notification-endpoints.js";
+import { buildApprovalRoutes } from "./routes/approvals.js";
+import { buildGapAnalysisRoutes } from "./routes/gap-analysis.js";
+import { buildRemediationRoutes } from "./routes/remediations.js";
+import { buildBAARoutes } from "./routes/baa.js";
+import { buildAttestationRoutes } from "./routes/attestations.js";
 import { buildNotificationRuleRoutes } from "./routes/notification-rules.js";
 import { HttpWebhookAdapter, SseManager } from "@sentinel/notifications";
 import { randomUUID } from "node:crypto";
@@ -101,6 +106,13 @@ const webhookRoutes = buildWebhookRoutes({ db });
 
 // --- Notification rule route handlers ---
 const ruleRoutes = buildNotificationRuleRoutes({ db });
+
+// --- Approval route handlers ---
+const approvalRoutes = buildApprovalRoutes({ db });
+const gapRoutes = buildGapAnalysisRoutes({ db });
+const remediationRoutes = buildRemediationRoutes({ db });
+const baaRoutes = buildBAARoutes({ db });
+const attestationRoutes = buildAttestationRoutes({ db });
 
 const sseManager = new SseManager();
 
@@ -679,6 +691,135 @@ app.get("/v1/audit", { preHandler: authHook }, async (request) => {
   });
 });
 
+// --- Approval Policies ---
+app.post("/v1/approval-policies", { preHandler: authHook }, async (request, reply) => {
+  const orgId = (request as any).orgId ?? "default";
+  try {
+    const result = await withTenant(db, orgId, () => approvalRoutes.createPolicy(orgId, request.body));
+    reply.code(201).send(result);
+  } catch (err: any) {
+    reply.code(400).send({ error: err.message });
+  }
+});
+
+app.get("/v1/approval-policies", { preHandler: authHook }, async (request) => {
+  const orgId = (request as any).orgId ?? "default";
+  return withTenant(db, orgId, () => approvalRoutes.listPolicies(orgId));
+});
+
+app.patch("/v1/approval-policies/:id", { preHandler: authHook }, async (request, reply) => {
+  const orgId = (request as any).orgId ?? "default";
+  const { id } = request.params as { id: string };
+  try {
+    return await withTenant(db, orgId, () => approvalRoutes.updatePolicy(orgId, id, request.body));
+  } catch (err: any) {
+    reply.code(400).send({ error: err.message });
+  }
+});
+
+app.delete("/v1/approval-policies/:id", { preHandler: authHook }, async (request, reply) => {
+  const orgId = (request as any).orgId ?? "default";
+  const { id } = request.params as { id: string };
+  try {
+    return await withTenant(db, orgId, () => approvalRoutes.deletePolicy(orgId, id));
+  } catch (err: any) {
+    reply.code(400).send({ error: err.message });
+  }
+});
+
+// --- Approval Gates ---
+app.get("/v1/approvals", { preHandler: authHook }, async (request) => {
+  const orgId = (request as any).orgId ?? "default";
+  const { limit = "50", offset = "0" } = request.query as any;
+  return withTenant(db, orgId, () =>
+    approvalRoutes.listPendingGates(orgId, { limit: Number(limit), offset: Number(offset) }),
+  );
+});
+
+app.get("/v1/approvals/stats", { preHandler: authHook }, async (request) => {
+  const orgId = (request as any).orgId ?? "default";
+  return withTenant(db, orgId, () => approvalRoutes.getStats(orgId));
+});
+
+app.get("/v1/approvals/:id", { preHandler: authHook }, async (request, reply) => {
+  const orgId = (request as any).orgId ?? "default";
+  const { id } = request.params as { id: string };
+  return withTenant(db, orgId, async () => {
+    const gate = await approvalRoutes.getGate(orgId, id);
+    if (!gate) { reply.code(404).send({ error: "Approval gate not found" }); return; }
+    return gate;
+  });
+});
+
+app.post("/v1/approvals/:id/decide", { preHandler: authHook }, async (request, reply) => {
+  const orgId = (request as any).orgId ?? "default";
+  const { id } = request.params as { id: string };
+  const { decision, justification } = request.body as any;
+  const decidedBy = (request as any).userId ?? "unknown";
+  try {
+    const result = await withTenant(db, orgId, () =>
+      approvalRoutes.submitDecision(orgId, id, { decision, justification, decidedBy }),
+    );
+    await eventBus.publish("sentinel.approvals", { type: "gate.decided", gateId: id, decision, scanId: result.scanId, orgId });
+    await eventBus.publish("sentinel.notifications", {
+      id: `evt-${id}-${decision}`,
+      orgId,
+      topic: `approval.${decision === "approve" ? "approved" : "rejected"}`,
+      payload: { gateId: id, decision, scanId: result.scanId, decidedBy },
+      timestamp: new Date().toISOString(),
+    });
+
+    await auditLog.append(orgId, {
+      actor: { type: "user", id: decidedBy, name: decidedBy },
+      action: `approval.${decision}`,
+      resource: { type: "approval_gate", id },
+      detail: { scanId: result.scanId, justification, gateType: result.gateType },
+    });
+
+    await eventBus.publish("sentinel.evidence", {
+      orgId,
+      type: "approval_decision",
+      scanId: result.scanId,
+      eventData: { gateId: id, decision, decidedBy, justification },
+    });
+
+    return result;
+  } catch (err: any) {
+    reply.code(400).send({ error: err.message });
+  }
+});
+
+app.post("/v1/approvals/:id/reassign", { preHandler: authHook }, async (request, reply) => {
+  const orgId = (request as any).orgId ?? "default";
+  const { id } = request.params as { id: string };
+  const decidedBy = (request as any).userId ?? "unknown";
+  try {
+    const result = await withTenant(db, orgId, () =>
+      approvalRoutes.reassignGate(orgId, id, request.body as any),
+    );
+
+    const { assignedTo, assignedRole } = request.body as any;
+    await auditLog.append(orgId, {
+      actor: { type: "user", id: decidedBy, name: decidedBy },
+      action: "approval.reassign",
+      resource: { type: "approval_gate", id },
+      detail: { assignedTo, assignedRole },
+    });
+
+    await eventBus.publish("sentinel.notifications", {
+      id: `evt-${id}-reassigned`,
+      orgId,
+      topic: "approval.reassigned",
+      payload: { gateId: id, assignedTo, assignedRole, reassignedBy: decidedBy },
+      timestamp: new Date().toISOString(),
+    });
+
+    return result;
+  } catch (err: any) {
+    reply.code(400).send({ error: err.message });
+  }
+});
+
 // --- DLQ monitoring ---
 app.get("/v1/admin/dlq", { preHandler: authHook }, async () => {
   const depth = await getDlqDepth(redis, "sentinel.findings.dlq");
@@ -770,7 +911,15 @@ app.get("/v1/compliance/assess/:frameworkId", { preHandler: authHook }, async (r
   const inputs: FindingInput[] = findings.map((f: any) => ({
     id: f.id, agentName: f.agentName, severity: f.severity, category: f.category, suppressed: f.suppressed,
   }));
-  const result = scoreFramework(fw.controls, inputs);
+  // Fetch attestations for attestation-aware scoring (NIST/HIPAA hybrid controls)
+  const attestationsRaw = await withTenant(db, orgId, async (tx) => {
+    return tx.controlAttestation.findMany({
+      where: { orgId, frameworkSlug: frameworkId, revokedAt: null, expiresAt: { gt: new Date() } },
+    });
+  });
+  const attestations: Record<string, any> = {};
+  for (const a of attestationsRaw) attestations[a.controlCode] = a;
+  const result = scoreFramework(fw.controls, inputs, attestations);
   return { frameworkSlug: frameworkId, ...result };
 });
 
@@ -793,6 +942,160 @@ app.get("/v1/compliance/trends/:frameworkId", { preHandler: authHook }, async (r
     });
   });
   return snapshots;
+});
+
+// --- Gap Analysis ---
+app.get("/v1/compliance/gaps/:frameworkSlug/export", { preHandler: authHook }, async (request, reply) => {
+  const orgId = (request as any).orgId ?? "default";
+  const { frameworkSlug } = request.params as { frameworkSlug: string };
+  const { format } = request.query as { format?: string };
+  try {
+    const result = await withTenant(db, orgId, () =>
+      gapRoutes.exportGaps(orgId, frameworkSlug, (format === "csv" ? "csv" : "json") as any),
+    );
+    if (result.contentType === "text/csv") {
+      reply.header("Content-Type", "text/csv");
+      reply.header("Content-Disposition", `attachment; filename="${frameworkSlug}-gaps.csv"`);
+      return result.data;
+    }
+    return result.data;
+  } catch (err: any) { reply.code(400).send({ error: err.message }); }
+});
+
+app.get("/v1/compliance/gaps/:frameworkSlug", { preHandler: authHook }, async (request) => {
+  const orgId = (request as any).orgId ?? "default";
+  const { frameworkSlug } = request.params as { frameworkSlug: string };
+  return withTenant(db, orgId, () => gapRoutes.computeGaps(orgId, frameworkSlug));
+});
+
+app.get("/v1/compliance/dashboard", { preHandler: authHook }, async (request) => {
+  const orgId = (request as any).orgId ?? "default";
+  return withTenant(db, orgId, () => gapRoutes.getDashboard(orgId));
+});
+
+// --- Remediations ---
+app.post("/v1/compliance/remediations", { preHandler: authHook }, async (request, reply) => {
+  const orgId = (request as any).orgId ?? "default";
+  try {
+    const result = await withTenant(db, orgId, () => remediationRoutes.create(orgId, request.body));
+    reply.code(201).send(result);
+  } catch (err: any) { reply.code(400).send({ error: err.message }); }
+});
+
+app.get("/v1/compliance/remediations", { preHandler: authHook }, async (request) => {
+  const orgId = (request as any).orgId ?? "default";
+  const { framework, status } = request.query as { framework?: string; status?: string };
+  return withTenant(db, orgId, () => remediationRoutes.list(orgId, { frameworkSlug: framework, status }));
+});
+
+app.get("/v1/compliance/remediations/overdue", { preHandler: authHook }, async (request) => {
+  const orgId = (request as any).orgId ?? "default";
+  return withTenant(db, orgId, () => remediationRoutes.getOverdue(orgId));
+});
+
+app.patch("/v1/compliance/remediations/:id", { preHandler: authHook }, async (request, reply) => {
+  const orgId = (request as any).orgId ?? "default";
+  const { id } = request.params as { id: string };
+  try {
+    const result = await withTenant(db, orgId, () => remediationRoutes.update(orgId, id, request.body));
+    return result;
+  } catch (err: any) { reply.code(400).send({ error: err.message }); }
+});
+
+// --- BAA ---
+app.post("/v1/compliance/baa", { preHandler: authHook }, async (request, reply) => {
+  const orgId = (request as any).orgId ?? "default";
+  try {
+    const result = await withTenant(db, orgId, () => baaRoutes.register(orgId, request.body));
+    reply.code(201).send(result);
+  } catch (err: any) { reply.code(400).send({ error: err.message }); }
+});
+
+app.get("/v1/compliance/baa", { preHandler: authHook }, async (request) => {
+  const orgId = (request as any).orgId ?? "default";
+  return withTenant(db, orgId, () => baaRoutes.list(orgId));
+});
+
+app.get("/v1/compliance/baa/expiring", { preHandler: authHook }, async (request) => {
+  const orgId = (request as any).orgId ?? "default";
+  const { days } = request.query as { days?: string };
+  return withTenant(db, orgId, () => baaRoutes.getExpiring(orgId, days ? parseInt(days) : 30));
+});
+
+app.patch("/v1/compliance/baa/:id", { preHandler: authHook }, async (request, reply) => {
+  const orgId = (request as any).orgId ?? "default";
+  const { id } = request.params as { id: string };
+  try {
+    const result = await withTenant(db, orgId, () => baaRoutes.update(orgId, id, request.body));
+    return result;
+  } catch (err: any) { reply.code(400).send({ error: err.message }); }
+});
+
+app.delete("/v1/compliance/baa/:id", { preHandler: authHook }, async (request, reply) => {
+  const orgId = (request as any).orgId ?? "default";
+  const { id } = request.params as { id: string };
+  try {
+    const result = await withTenant(db, orgId, () => baaRoutes.terminate(orgId, id));
+    return result;
+  } catch (err: any) { reply.code(400).send({ error: err.message }); }
+});
+
+// --- Attestation routes ---
+app.post("/v1/compliance/attestations", { preHandler: authHook }, async (request, reply) => {
+  const orgId = (request as any).orgId ?? "default";
+  try {
+    const result = await withTenant(db, orgId, () => attestationRoutes.createAttestation(orgId, request.body));
+    reply.code(201).send(result);
+  } catch (err: any) {
+    reply.code(400).send({ error: err.message });
+  }
+});
+
+app.get("/v1/compliance/attestations", { preHandler: authHook }, async (request) => {
+  const orgId = (request as any).orgId ?? "default";
+  const { framework } = request.query as { framework?: string };
+  return withTenant(db, orgId, () => attestationRoutes.listAttestations(orgId, framework));
+});
+
+app.get("/v1/compliance/attestations/expiring", { preHandler: authHook }, async (request) => {
+  const orgId = (request as any).orgId ?? "default";
+  const { days } = request.query as { days?: string };
+  return withTenant(db, orgId, () => attestationRoutes.getExpiringAttestations(orgId, days ? parseInt(days) : 14));
+});
+
+app.get("/v1/compliance/attestations/:id", { preHandler: authHook }, async (request, reply) => {
+  const orgId = (request as any).orgId ?? "default";
+  const { id } = request.params as { id: string };
+  return withTenant(db, orgId, async () => {
+    const att = await attestationRoutes.getAttestation(orgId, id);
+    if (!att) { reply.code(404).send({ error: "Attestation not found" }); return; }
+    return att;
+  });
+});
+
+app.delete("/v1/compliance/attestations/:id", { preHandler: authHook }, async (request, reply) => {
+  const orgId = (request as any).orgId ?? "default";
+  const { id } = request.params as { id: string };
+  const userId = (request as any).userId ?? "unknown";
+  const { reason } = request.body as { reason: string };
+  try {
+    const result = await withTenant(db, orgId, () => attestationRoutes.revokeAttestation(orgId, id, reason, userId));
+    return result;
+  } catch (err: any) {
+    reply.code(400).send({ error: err.message });
+  }
+});
+
+app.post("/v1/compliance/attestations/:id/renew", { preHandler: authHook }, async (request, reply) => {
+  const orgId = (request as any).orgId ?? "default";
+  const { id } = request.params as { id: string };
+  const userId = (request as any).userId ?? "unknown";
+  try {
+    const result = await withTenant(db, orgId, () => attestationRoutes.renewAttestation(orgId, id, userId));
+    return result;
+  } catch (err: any) {
+    reply.code(400).send({ error: err.message });
+  }
 });
 
 // --- Evidence ---

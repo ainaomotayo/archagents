@@ -1,0 +1,26 @@
+{
+  "name": "@sentinel/vcs",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run",
+    "lint": "echo 'lint placeholder'"
+  },
+  "dependencies": {
+    "@gitbeaker/rest": "^40.5.0",
+    "@sentinel/github": "workspace:*",
+    "@sentinel/shared": "workspace:*"
+  },
+  "peerDependencies": {
+    "ioredis": "^5.6"
+  },
+  "devDependencies": {
+    "ioredis": "^5.6",
+    "typescript": "^5.7",
+    "vitest": "^3.0"
+  }
+}

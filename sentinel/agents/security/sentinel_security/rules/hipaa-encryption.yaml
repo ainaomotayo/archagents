@@ -1,0 +1,35 @@
+rules:
+  - id: hipaa-weak-encryption
+    patterns:
+      - pattern-either:
+          - pattern: crypto.createCipher("des", ...)
+          - pattern: crypto.createCipher("rc4", ...)
+          - pattern: crypto.createCipher("blowfish", ...)
+          - pattern: hashlib.md5(...)
+          - pattern: hashlib.sha1(...)
+    message: >-
+      Weak encryption algorithm detected. HIPAA requires strong encryption
+      (AES-128+)
+    severity: ERROR
+    languages: [python, javascript, typescript]
+    metadata:
+      category: vulnerability/encryption-missing
+      hipaa: "§164.312(a)(2)(iv)"
+      cwe:
+        - "CWE-327: Use of a Broken or Risky Cryptographic Algorithm"
+
+  - id: hipaa-unencrypted-storage
+    patterns:
+      - pattern-either:
+          - pattern: fs.writeFileSync($PATH, $DATA)
+          - pattern: open($PATH, "w").write($DATA)
+      - metavariable-regex:
+          metavariable: $PATH
+          regex: .*(patient|phi|health|medical|hipaa).*
+    message: >-
+      PHI-related data written to disk without encryption
+    severity: WARNING
+    languages: [python, javascript, typescript]
+    metadata:
+      category: vulnerability/encryption-missing
+      hipaa: "§164.312(a)(2)(iv)"
