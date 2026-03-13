@@ -39,3 +39,4 @@ export { computePriorityScore, type PriorityScoreInput } from "./remediation/pri
 export { BAARegistryService, type RegisterBAAInput, type UpdateBAAInput } from "./baa/service.js";
 export { AttestationService, type CreateAttestationInput } from "./attestation/service.js";
 export { WorkflowFSM, WORKFLOW_STAGES, TERMINAL_STAGES, SPECIAL_STAGES } from "./remediation/workflow-fsm.js";
+export { EvidenceService, type S3Presigner } from "./remediation/evidence-service.js";

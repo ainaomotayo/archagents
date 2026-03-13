@@ -14,6 +14,7 @@ import {
   computeEvidenceHash,
   verifyEvidenceChain,
   VALID_REPORT_TYPES,
+  EvidenceService,
   type FindingInput,
 } from "@sentinel/compliance";
 import { createAuthHook } from "./middleware/auth.js";
@@ -115,6 +116,17 @@ const gapRoutes = buildGapAnalysisRoutes({ db });
 const remediationRoutes = buildRemediationRoutes({ db });
 const baaRoutes = buildBAARoutes({ db });
 const attestationRoutes = buildAttestationRoutes({ db });
+
+// --- Evidence upload service (stub S3 presigner until real provider is configured) ---
+const stubS3Presigner = {
+  getPresignedUploadUrl: async (key: string, _contentType: string) => ({
+    url: `${process.env.S3_ENDPOINT ?? "https://s3.amazonaws.com"}/${key}?presigned=true`,
+    key,
+  }),
+  getPresignedDownloadUrl: async (key: string) =>
+    `${process.env.S3_ENDPOINT ?? "https://s3.amazonaws.com"}/${key}?presigned=true`,
+};
+const evidenceService = new EvidenceService(db, stubS3Presigner);
 
 const sseManager = new SseManager();
 
@@ -1238,6 +1250,75 @@ app.post("/v1/compliance/remediations/:id/link-external", { preHandler: authHook
     if (msg.includes("not found")) { reply.code(404).send({ error: msg }); }
     else if (msg.includes("already linked")) { reply.code(409).send({ error: msg }); }
     else { reply.code(400).send({ error: msg }); }
+  }
+});
+
+// --- Evidence Upload ---
+app.post("/v1/compliance/remediations/:id/evidence/presign", { preHandler: authHook }, async (request, reply) => {
+  const orgId = (request as any).orgId ?? "default";
+  const { id } = request.params as { id: string };
+  const userId = (request as any).userId ?? "unknown";
+  const { fileName, fileSize, mimeType } = request.body as { fileName: string; fileSize: number; mimeType: string };
+  try {
+    const result = await withTenant(db, orgId, () => evidenceService.requestUpload(orgId, id, fileName, fileSize, mimeType, userId));
+    return result;
+  } catch (err: any) {
+    const msg = err.message ?? "";
+    if (msg.includes("not found")) { reply.code(404).send({ error: msg }); }
+    else if (msg.includes("25MB")) { reply.code(413).send({ error: msg }); }
+    else if (msg.includes("not allowed")) { reply.code(415).send({ error: msg }); }
+    else { reply.code(400).send({ error: msg }); }
+  }
+});
+
+app.post("/v1/compliance/remediations/:id/evidence/confirm", { preHandler: authHook }, async (request, reply) => {
+  const orgId = (request as any).orgId ?? "default";
+  const { id } = request.params as { id: string };
+  const userId = (request as any).userId ?? "unknown";
+  const { s3Key, fileName, fileSize, mimeType } = request.body as any;
+  const result = await withTenant(db, orgId, () => evidenceService.confirmUpload(orgId, id, s3Key, fileName, fileSize, mimeType, userId)) as any;
+  await eventBus.publish("sentinel.notifications", {
+    id: `evt-${result.id}-evidence`,
+    orgId,
+    topic: "remediation.evidence",
+    payload: { remediationId: id, evidenceId: result.id, fileName, action: "uploaded" },
+    timestamp: new Date().toISOString(),
+  });
+  reply.code(201).send(result);
+});
+
+app.get("/v1/compliance/remediations/:id/evidence", { preHandler: authHook }, async (request) => {
+  const orgId = (request as any).orgId ?? "default";
+  const { id } = request.params as { id: string };
+  return withTenant(db, orgId, () => evidenceService.list(orgId, id));
+});
+
+app.get("/v1/compliance/remediations/:id/evidence/:eid/url", { preHandler: authHook }, async (request, reply) => {
+  const orgId = (request as any).orgId ?? "default";
+  const { eid } = request.params as { eid: string };
+  try {
+    const url = await withTenant(db, orgId, () => evidenceService.getDownloadUrl(orgId, eid));
+    return { url };
+  } catch (err: any) {
+    reply.code(404).send({ error: err.message });
+  }
+});
+
+app.delete("/v1/compliance/remediations/:id/evidence/:eid", { preHandler: authHook }, async (request, reply) => {
+  const orgId = (request as any).orgId ?? "default";
+  const { id, eid } = request.params as { id: string; eid: string };
+  const userId = (request as any).userId ?? "unknown";
+  try {
+    await withTenant(db, orgId, () => evidenceService.delete(orgId, eid));
+    await auditLog.append(orgId, {
+      actor: { type: "user", id: userId, name: userId },
+      action: "remediation.evidence_deleted",
+      resource: { type: "evidence_attachment", id: eid },
+      detail: { remediationId: id },
+    });
+    reply.code(204).send();
+  } catch (err: any) {
+    reply.code(404).send({ error: err.message });
   }
 });
 

@@ -62,6 +62,12 @@ export const API_PERMISSIONS: EndpointPermission[] = [
   { method: "PATCH", path: "/v1/compliance/remediations/:id", roles: ["admin", "manager"] },
   { method: "POST", path: "/v1/compliance/remediations/:id/link-external", roles: ["admin", "manager"] },
   { method: "GET", path: "/v1/compliance/remediations/stream", roles: ["admin", "manager", "developer", "viewer"] },
+  // Evidence Attachments
+  { method: "POST", path: "/v1/compliance/remediations/:id/evidence/presign", roles: ["admin", "manager"] },
+  { method: "POST", path: "/v1/compliance/remediations/:id/evidence/confirm", roles: ["admin", "manager"] },
+  { method: "GET", path: "/v1/compliance/remediations/:id/evidence", roles: ["admin", "manager", "developer"] },
+  { method: "GET", path: "/v1/compliance/remediations/:id/evidence/:eid/url", roles: ["admin", "manager", "developer"] },
+  { method: "DELETE", path: "/v1/compliance/remediations/:id/evidence/:eid", roles: ["admin", "manager"] },
   // Workflow Config
   { method: "GET", path: "/v1/compliance/workflow-config", roles: ["admin", "manager"] },
   { method: "PUT", path: "/v1/compliance/workflow-config", roles: ["admin"] },

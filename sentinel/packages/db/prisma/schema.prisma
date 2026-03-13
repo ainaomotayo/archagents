@@ -30,6 +30,7 @@ model Organization {
   approvalDecisions  ApprovalDecision[]
   controlAttestations        ControlAttestation[]
   remediationItems           RemediationItem[]
+  evidenceAttachments        EvidenceAttachment[]
   businessAssociateAgreements BusinessAssociateAgreement[]
   vcsInstallations            VcsInstallation[]
   integrationConfigs          IntegrationConfig[]
@@ -640,10 +641,11 @@ model RemediationItem {
   priorityScore    Int       @default(0) @map("priority_score")
   externalRef      String?   @map("external_ref")
 
-  parent           RemediationItem?  @relation("RemediationTree", fields: [parentId], references: [id])
-  children         RemediationItem[] @relation("RemediationTree")
-  finding          Finding?          @relation(fields: [findingId], references: [id])
-  organization     Organization      @relation(fields: [orgId], references: [id])
+  parent              RemediationItem?    @relation("RemediationTree", fields: [parentId], references: [id])
+  children            RemediationItem[]   @relation("RemediationTree")
+  finding             Finding?            @relation(fields: [findingId], references: [id])
+  organization        Organization        @relation(fields: [orgId], references: [id])
+  evidenceAttachments EvidenceAttachment[]
 
   @@index([orgId, status, priorityScore], map: "idx_remediation_queue")
   @@index([orgId, dueDate], map: "idx_remediation_due")
@@ -777,4 +779,25 @@ model VcsInstallationAzureDevOps {
   vcsInstallation VcsInstallation @relation(fields: [vcsInstallationId], references: [id], onDelete: Cascade)
 
   @@map("vcs_installation_azure_devops")
+}
+
+// --- Evidence Attachments ---
+
+model EvidenceAttachment {
+  id            String   @id @default(uuid()) @db.Uuid
+  orgId         String   @map("org_id") @db.Uuid
+  remediationId String   @map("remediation_id") @db.Uuid
+  fileName      String   @map("file_name")
+  fileSize      Int      @map("file_size")
+  mimeType      String   @map("mime_type")
+  s3Key         String   @map("s3_key")
+  uploadedBy    String   @map("uploaded_by")
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  remediation  RemediationItem @relation(fields: [remediationId], references: [id], onDelete: Cascade)
+  organization Organization    @relation(fields: [orgId], references: [id])
+
+  @@index([remediationId])
+  @@index([orgId])
+  @@map("evidence_attachments")
 }
