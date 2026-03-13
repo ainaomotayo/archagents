@@ -24,6 +24,7 @@ import { ComplianceSnapshotJob } from "./jobs/compliance-snapshot.js";
 import { TrendsRefreshJob } from "./jobs/trends-refresh.js";
 import { EvidenceCheckJob } from "./jobs/evidence-check.js";
 import { HealthCheckJob } from "./jobs/health-check.js";
+import { ApprovalExpiryJob } from "./jobs/approval-expiry.js";
 
 import { createAuditEventStore } from "../stores.js";
 
@@ -228,6 +229,7 @@ export async function startScheduler(): Promise<void> {
     new TrendsRefreshJob(),
     new EvidenceCheckJob(),
     new HealthCheckJob(),
+    new ApprovalExpiryJob(),
   ];
   if (config.cveRescanEnabled) {
     allJobs.push(new CVERescanJob());

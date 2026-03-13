@@ -40,8 +40,9 @@ model Project {
   createdAt     DateTime @default(now()) @map("created_at")
   updatedAt     DateTime @updatedAt @map("updated_at")
 
-  organization Organization @relation(fields: [orgId], references: [id])
-  scans        Scan[]
+  organization  Organization   @relation(fields: [orgId], references: [id])
+  scans         Scan[]
+  approvalGates ApprovalGate[]
 
   @@index([orgId])
   @@map("projects")
@@ -63,10 +64,11 @@ model Scan {
   startedAt   DateTime  @default(now()) @map("started_at")
   completedAt DateTime? @map("completed_at")
 
-  project      Project       @relation(fields: [projectId], references: [id])
-  findings     Finding[]
-  agentResults AgentResult[]
-  certificate  Certificate?
+  project       Project        @relation(fields: [projectId], references: [id])
+  findings      Finding[]
+  agentResults  AgentResult[]
+  certificate   Certificate?
+  approvalGates ApprovalGate[]
 
   @@index([projectId, startedAt(sort: Desc)])
   @@index([commitHash])
@@ -483,4 +485,48 @@ model NotificationRule {
 
   @@index([orgId, enabled])
   @@map("notification_rules")
+}
+
+// --- Approval Gates ---
+
+model ApprovalGate {
+  id              String    @id @default(uuid()) @db.Uuid
+  scanId          String    @map("scan_id") @db.Uuid
+  projectId       String    @map("project_id") @db.Uuid
+  orgId           String    @map("org_id") @db.Uuid
+  status          String    @default("pending")
+  gateType        String    @map("gate_type")
+  triggerCriteria Json      @default("{}") @map("trigger_criteria")
+  priority        Int       @default(0)
+  assignedRole    String?   @map("assigned_role")
+  assignedTo      String?   @map("assigned_to") @db.Uuid
+  requestedAt     DateTime  @default(now()) @map("requested_at")
+  requestedBy     String    @map("requested_by")
+  expiresAt       DateTime  @map("expires_at")
+  escalatesAt     DateTime? @map("escalates_at")
+  expiryAction    String    @default("reject") @map("expiry_action")
+  decidedAt       DateTime? @map("decided_at")
+
+  scan      Scan               @relation(fields: [scanId], references: [id])
+  project   Project            @relation(fields: [projectId], references: [id])
+  decisions ApprovalDecision[]
+
+  @@index([orgId, status])
+  @@index([scanId])
+  @@index([expiresAt])
+  @@map("approval_gates")
+}
+
+model ApprovalDecision {
+  id            String   @id @default(uuid()) @db.Uuid
+  gateId        String   @map("gate_id") @db.Uuid
+  decidedBy     String   @map("decided_by")
+  decision      String
+  justification String
+  decidedAt     DateTime @default(now()) @map("decided_at")
+
+  gate ApprovalGate @relation(fields: [gateId], references: [id])
+
+  @@index([gateId])
+  @@map("approval_decisions")
 }

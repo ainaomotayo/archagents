@@ -18,6 +18,7 @@ import {
 } from "@sentinel/compliance";
 import { createAuthHook } from "./middleware/auth.js";
 import { buildScanRoutes } from "./routes/scans.js";
+import { buildApprovalRoutes } from "./approvals/routes.js";
 import { registerWebhookRoutes } from "./routes/webhooks.js";
 import { buildWebhookRoutes } from "./routes/notification-endpoints.js";
 import { buildNotificationRuleRoutes } from "./routes/notification-rules.js";
@@ -95,6 +96,9 @@ const scanRoutes = buildScanRoutes({
   eventBus,
   auditLog,
 });
+
+// --- Approval route handlers ---
+const approvalRoutes = buildApprovalRoutes({ db, eventBus, auditLog });
 
 // --- Webhook endpoint route handlers ---
 const webhookRoutes = buildWebhookRoutes({ db });
@@ -677,6 +681,144 @@ app.get("/v1/audit", { preHandler: authHook }, async (request) => {
     ]);
     return { events, total, limit: Number(limit), offset: Number(offset) };
   });
+});
+
+// --- Approvals ---
+app.get("/v1/approvals", { preHandler: authHook }, async (request) => {
+  const orgId = (request as any).orgId ?? "default";
+  const { limit = "50", offset = "0", status } = request.query as any;
+  return withTenant(db, orgId, async () => {
+    return approvalRoutes.listGates({
+      orgId,
+      limit: Number(limit),
+      offset: Number(offset),
+      status: status && status !== "all" ? status : undefined,
+    });
+  });
+});
+
+app.get("/v1/approvals/stats", { preHandler: authHook }, async (request) => {
+  const orgId = (request as any).orgId ?? "default";
+  return withTenant(db, orgId, async () => {
+    return approvalRoutes.getStats(orgId);
+  });
+});
+
+app.get("/v1/approvals/stream", { preHandler: authHook }, async (request, reply) => {
+  const orgId = (request as any).orgId ?? "default";
+
+  reply.raw.writeHead(200, {
+    "Content-Type": "text/event-stream",
+    "Cache-Control": "no-cache",
+    Connection: "keep-alive",
+    "X-Accel-Buffering": "no",
+  });
+
+  const clientId = randomUUID();
+  const client = {
+    id: clientId,
+    orgId,
+    topics: ["gate.created", "gate.decided", "gate.escalated", "gate.expired", "gate.reassigned"],
+    write: (data: string) => {
+      try { reply.raw.write(data); return true; } catch { return false; }
+    },
+    close: () => {
+      try { reply.raw.end(); } catch {}
+    },
+  };
+
+  sseManager.register(client);
+  sseConnectionsGauge.inc({ org_id: orgId });
+
+  const heartbeat = setInterval(() => {
+    try { reply.raw.write(": heartbeat\n\n"); } catch { clearInterval(heartbeat); }
+  }, 30_000);
+
+  request.raw.on("close", () => {
+    clearInterval(heartbeat);
+    sseManager.unregister(clientId, orgId);
+    sseConnectionsGauge.dec({ org_id: orgId });
+  });
+});
+
+app.get("/v1/approvals/:id", { preHandler: authHook }, async (request, reply) => {
+  const orgId = (request as any).orgId ?? "default";
+  const { id } = request.params as { id: string };
+  return withTenant(db, orgId, async () => {
+    const gate = await approvalRoutes.getGate(id);
+    if (!gate) {
+      reply.code(404).send({ error: "Approval gate not found" });
+      return;
+    }
+    return gate;
+  });
+});
+
+app.post("/v1/approvals", { preHandler: authHook }, async (request, reply) => {
+  const orgId = (request as any).orgId ?? "default";
+  const body = request.body as any;
+  const gate = await approvalRoutes.createGate({
+    orgId,
+    scanId: body.scanId,
+    projectId: body.projectId,
+    gateType: body.gateType,
+    triggerCriteria: body.triggerCriteria,
+    priority: body.priority,
+    assignedRole: body.assignedRole,
+    requestedBy: body.requestedBy ?? "system",
+    expiresInHours: body.expiresInHours,
+    escalatesInHours: body.escalatesInHours,
+    expiryAction: body.expiryAction,
+  });
+  reply.code(201).send(gate);
+});
+
+app.post("/v1/approvals/:id/decide", { preHandler: authHook }, async (request, reply) => {
+  const orgId = (request as any).orgId ?? "default";
+  const { id } = request.params as { id: string };
+  const { decision, justification } = request.body as any;
+  const decidedBy = (request as any).userId ?? (request as any).role ?? "unknown";
+
+  if (!decision || !["approve", "reject"].includes(decision)) {
+    reply.code(400).send({ error: "decision must be 'approve' or 'reject'" });
+    return;
+  }
+  if (!justification || typeof justification !== "string" || justification.trim().length < 10) {
+    reply.code(400).send({ error: "justification must be at least 10 characters" });
+    return;
+  }
+
+  const result = await approvalRoutes.decideGate({
+    gateId: id,
+    orgId,
+    decidedBy,
+    decision,
+    justification: justification.trim(),
+  });
+
+  if (result.error) {
+    reply.code(result.status ?? 500).send({ error: result.error });
+    return;
+  }
+  return result.gate;
+});
+
+app.patch("/v1/approvals/:id/assign", { preHandler: authHook }, async (request, reply) => {
+  const orgId = (request as any).orgId ?? "default";
+  const { id } = request.params as { id: string };
+  const { assignTo } = request.body as any;
+
+  if (!assignTo || typeof assignTo !== "string") {
+    reply.code(400).send({ error: "assignTo is required" });
+    return;
+  }
+
+  const result = await approvalRoutes.reassignGate({ gateId: id, orgId, assignTo });
+  if (result.error) {
+    reply.code(result.status ?? 500).send({ error: result.error });
+    return;
+  }
+  return result.gate;
 });
 
 // --- DLQ monitoring ---
