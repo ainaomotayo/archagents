@@ -40,6 +40,7 @@ export interface NavItem {
   label: string;
   href: string;
   icon: string;
+  badge?: number;
 }
 
 export const NAV_ITEMS: NavItem[] = [

@@ -33,6 +33,7 @@ export function ApprovalQueue({ initialGates, initialStats }: ApprovalQueueProps
   const [filter, setFilter] = useState<StatusFilter>("all");
   const [search, setSearch] = useState("");
   const [submittingId, setSubmittingId] = useState<string | null>(null);
+  const cardRefs = useRef(new Map<string, HTMLButtonElement>());
 
   // Index for O(1) SSE reconciliation
   const indexRef = useRef(new Map<string, number>());
@@ -126,7 +127,13 @@ export function ApprovalQueue({ initialGates, initialStats }: ApprovalQueueProps
         const nextPending = next.find(
           (g) => g.id !== gateId && (g.status === "pending" || g.status === "escalated"),
         );
-        if (nextPending) setSelectedId(nextPending.id);
+        if (nextPending) {
+          setSelectedId(nextPending.id);
+          // Focus the next card after React re-renders
+          requestAnimationFrame(() => {
+            cardRefs.current.get(nextPending.id)?.focus();
+          });
+        }
 
         return next;
       });
@@ -217,6 +224,10 @@ export function ApprovalQueue({ initialGates, initialStats }: ApprovalQueueProps
             {filteredGates.map((gate) => (
               <ApprovalCard
                 key={gate.id}
+                ref={(el) => {
+                  if (el) cardRefs.current.set(gate.id, el);
+                  else cardRefs.current.delete(gate.id);
+                }}
                 gate={gate}
                 selected={gate.id === selectedId}
                 onClick={() => setSelectedId(gate.id)}

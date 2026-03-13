@@ -1,3 +1,4 @@
+import { forwardRef } from "react";
 import type { ApprovalGate, ApprovalStatus } from "@/lib/types";
 
 const STATUS_STYLES: Record<ApprovalStatus, { bg: string; text: string; dot: string; border: string }> = {
@@ -66,13 +67,15 @@ interface ApprovalCardProps {
   onClick: () => void;
 }
 
-export function ApprovalCard({ gate, selected, onClick }: ApprovalCardProps) {
+export const ApprovalCard = forwardRef<HTMLButtonElement, ApprovalCardProps>(
+  function ApprovalCard({ gate, selected, onClick }, ref) {
   const style = STATUS_STYLES[gate.status];
   const sla = formatTimeRemaining(gate.expiresAt);
   const isActionable = gate.status === "pending" || gate.status === "escalated";
 
   return (
     <button
+      ref={ref}
       onClick={onClick}
       className={`w-full text-left rounded-lg border border-l-[3px] p-4 transition-all duration-150 ${
         selected
@@ -115,6 +118,6 @@ export function ApprovalCard({ gate, selected, onClick }: ApprovalCardProps) {
       </div>
     </button>
   );
-}
+});
 
 export { formatTimeRemaining, GATE_TYPE_LABEL, STATUS_STYLES };

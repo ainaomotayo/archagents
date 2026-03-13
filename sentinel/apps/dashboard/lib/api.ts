@@ -318,6 +318,13 @@ export async function getApprovalStats(): Promise<ApprovalStats> {
   }, MOCK_APPROVAL_STATS);
 }
 
+export async function reassignApprovalGate(gateId: string, assignTo: string): Promise<void> {
+  return tryApi(async (headers) => {
+    const { apiPatch } = await import("./api-client");
+    await apiPatch(`/v1/approvals/${gateId}/assign`, { assignTo }, headers);
+  }, undefined);
+}
+
 function mapGate(g: any): ApprovalGate {
   return {
     id: g.id,

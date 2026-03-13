@@ -113,7 +113,12 @@ export function ApprovalDetailPanel({ gate, onDecision, isSubmitting }: Approval
           <h2 className="mb-3 text-sm font-semibold text-text-primary">SLA</h2>
           <div className="rounded-xl border border-border bg-surface-1 p-5">
             <div className="flex items-center justify-between text-[12px]">
-              <span className={`font-semibold ${sla.urgency === "critical" ? "text-status-fail" : sla.urgency === "warn" ? "text-status-warn" : "text-status-pass"}`}>
+              <span
+                role="timer"
+                aria-live="polite"
+                aria-label={`Time remaining: ${sla.text}`}
+                className={`font-semibold ${sla.urgency === "critical" ? "text-status-fail" : sla.urgency === "warn" ? "text-status-warn" : "text-status-pass"}`}
+              >
                 {sla.text}
               </span>
               <span className="text-text-tertiary">{Math.round(progress)}% elapsed</span>
