@@ -13,6 +13,8 @@ import type {
   FindingCountByCategory,
   OverviewStats,
   Project,
+  RemediationItem,
+  RemediationStats,
   Scan,
 } from "./types";
 
@@ -28,6 +30,10 @@ import {
   MOCK_PROJECTS,
   MOCK_SCANS,
 } from "./mock-data";
+import {
+  MOCK_ITEMS as MOCK_REMEDIATION_ITEMS,
+  MOCK_STATS as MOCK_REMEDIATION_STATS,
+} from "./remediation-mock-data";
 
 const USE_MOCK = !process.env.SENTINEL_API_URL;
 
@@ -323,6 +329,102 @@ export async function reassignApprovalGate(gateId: string, assignTo: string): Pr
     const { apiPost } = await import("./api-client");
     await apiPost(`/v1/approvals/${gateId}/reassign`, { assignedTo: assignTo }, headers);
   }, undefined);
+}
+
+// ── Remediation ──────────────────────────────────────────────────────
+
+export async function getRemediations(filters?: {
+  framework?: string;
+  status?: string;
+  itemType?: string;
+}): Promise<RemediationItem[]> {
+  return tryApi(async (headers) => {
+    const { apiGet } = await import("./api-client");
+    const query: Record<string, string> = { limit: "100" };
+    if (filters?.framework) query.framework = filters.framework;
+    if (filters?.status) query.status = filters.status;
+    if (filters?.itemType) query.itemType = filters.itemType;
+    const data = await apiGet<{ items: RemediationItem[]; total: number }>(
+      "/v1/remediations",
+      query,
+      headers,
+    );
+    return data.items ?? [];
+  }, filterMockRemediations(filters));
+}
+
+export async function getRemediationStats(): Promise<RemediationStats> {
+  return tryApi(async (headers) => {
+    const { apiGet } = await import("./api-client");
+    return apiGet<RemediationStats>("/v1/remediations/stats", undefined, headers);
+  }, MOCK_REMEDIATION_STATS);
+}
+
+export async function getRemediationById(id: string): Promise<RemediationItem | null> {
+  return tryApi(async (headers) => {
+    const { apiGet } = await import("./api-client");
+    return apiGet<RemediationItem>(`/v1/remediations/${id}`, undefined, headers);
+  }, MOCK_REMEDIATION_ITEMS.find((r) => r.id === id) ?? null);
+}
+
+export async function createRemediationItem(data: {
+  title: string;
+  description: string;
+  priority?: string;
+  frameworkSlug?: string;
+  controlCode?: string;
+  assignedTo?: string;
+  dueDate?: string;
+  itemType?: string;
+  parentId?: string;
+  findingId?: string;
+}): Promise<RemediationItem> {
+  const { apiPost } = await import("./api-client");
+  const headers = await getSessionHeaders();
+  return apiPost<RemediationItem>("/v1/remediations", data, headers);
+}
+
+export async function updateRemediation(
+  id: string,
+  data: {
+    status?: string;
+    priority?: string;
+    assignedTo?: string;
+    dueDate?: string;
+    evidenceNotes?: string;
+  },
+): Promise<RemediationItem> {
+  const { apiPatch } = await import("./api-client");
+  const headers = await getSessionHeaders();
+  return apiPatch<RemediationItem>(`/v1/remediations/${id}`, data, headers);
+}
+
+export async function linkRemediationExternal(
+  id: string,
+  provider: string,
+  externalRef: string,
+): Promise<RemediationItem> {
+  const { apiPost } = await import("./api-client");
+  const headers = await getSessionHeaders();
+  return apiPost<RemediationItem>(`/v1/remediations/${id}/link`, { provider, externalRef }, headers);
+}
+
+function filterMockRemediations(filters?: {
+  framework?: string;
+  status?: string;
+  itemType?: string;
+}): RemediationItem[] {
+  let items = MOCK_REMEDIATION_ITEMS;
+  if (filters?.framework) {
+    items = items.filter((i) => i.frameworkSlug === filters.framework);
+  }
+  if (filters?.status) {
+    items = items.filter((i) => i.status === filters.status);
+  }
+  if (filters?.itemType) {
+    items = items.filter((i) => i.itemType === filters.itemType);
+  }
+  return items;
 }
 
 function mapGate(g: any): ApprovalGate {

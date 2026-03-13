@@ -122,3 +122,41 @@ export interface ApprovalStats {
   avgDecisionTimeHours: number;
   expiringSoon: number;
 }
+
+// ── Remediation ──────────────────────────────────────────────────────
+
+export interface RemediationItem {
+  id: string;
+  orgId: string;
+  frameworkSlug: string | null;
+  controlCode: string | null;
+  title: string;
+  description: string;
+  status: string;
+  priority: string;
+  assignedTo: string | null;
+  dueDate: string | null;
+  completedAt: string | null;
+  completedBy: string | null;
+  evidenceNotes: string | null;
+  linkedFindingIds: string[];
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+  parentId: string | null;
+  findingId: string | null;
+  itemType: string;
+  priorityScore: number;
+  externalRef: string | null;
+  children?: RemediationItem[];
+}
+
+export interface RemediationStats {
+  open: number;
+  inProgress: number;
+  overdue: number;
+  completed: number;
+  acceptedRisk: number;
+  avgResolutionDays: number;
+  slaCompliance: number;
+}
