@@ -35,5 +35,6 @@ export {
 
 export { computeGapAnalysis, type GapAnalysis, type GapItem } from "./gap-analysis/service.js";
 export { RemediationService, type CreateRemediationInput, type UpdateRemediationInput } from "./remediation/service.js";
+export { computePriorityScore, type PriorityScoreInput } from "./remediation/priority-score.js";
 export { BAARegistryService, type RegisterBAAInput, type UpdateBAAInput } from "./baa/service.js";
 export { AttestationService, type CreateAttestationInput } from "./attestation/service.js";
