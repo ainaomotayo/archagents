@@ -26,13 +26,9 @@ export async function GET(request: NextRequest) {
   // Polling mode: return current state as JSON
   if (isPoll) {
     try {
-      const { signRequest } = await import("@sentinel/auth");
-      const secret = process.env.SENTINEL_SECRET ?? "";
-      const signature = signRequest("", secret);
       const res = await fetch(`${API_URL}/v1/approvals?limit=50`, {
         headers: {
-          "X-Sentinel-Signature": signature,
-          "X-Sentinel-API-Key": "dashboard",
+          Accept: "application/json",
         },
       });
       if (res.ok) {

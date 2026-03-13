@@ -4,6 +4,7 @@ import { useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import type { ApprovalGate } from "@/lib/types";
 import { ApprovalDetailPanel } from "@/components/approvals/approval-detail-panel";
+import { submitDecision } from "@/app/(dashboard)/approvals/actions";
 
 interface ApprovalDetailClientProps {
   gate: ApprovalGate;
@@ -36,8 +37,7 @@ export function ApprovalDetailClient({ gate: initialGate }: ApprovalDetailClient
       }));
 
       try {
-        const { apiPost } = await import("@/lib/api-client");
-        await apiPost(`/v1/approvals/${gateId}/decide`, { decision, justification });
+        await submitDecision(gateId, decision, justification);
         router.refresh();
       } catch (err) {
         setGate(initialGate);

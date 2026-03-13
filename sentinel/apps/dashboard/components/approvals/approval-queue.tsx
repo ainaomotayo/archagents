@@ -6,6 +6,7 @@ import { ApprovalCard } from "./approval-card";
 import { ApprovalStatsBar } from "./approval-stats-bar";
 import { ApprovalDetailPanel } from "./approval-detail-panel";
 import { useApprovalStream } from "@/lib/use-approval-stream";
+import { submitDecision } from "@/app/(dashboard)/approvals/actions";
 
 interface ApprovalQueueProps {
   initialGates: ApprovalGate[];
@@ -125,8 +126,7 @@ export function ApprovalQueue({ initialGates, initialStats }: ApprovalQueueProps
       if (nextPending) setSelectedId(nextPending.id);
 
       try {
-        const { apiPost } = await import("@/lib/api-client");
-        await apiPost(`/v1/approvals/${gateId}/decide`, { decision, justification });
+        await submitDecision(gateId, decision, justification);
       } catch (err) {
         // Revert optimistic update
         setGates((prev) =>
