@@ -110,7 +110,10 @@ export class GitLabProvider extends VcsProviderBase {
 
   async fetchDiff(trigger: VcsScanTrigger): Promise<VcsDiffResult> {
     try {
-      const projectId = trigger.projectId!;
+      if (!trigger.projectId) {
+        throw new VcsApiError("gitlab", 400, "Missing projectId on trigger", "fetchDiff");
+      }
+      const projectId = trigger.projectId;
 
       if (trigger.type === "merge_request" && trigger.prNumber) {
         const diffs = await this.client.MergeRequests.allDiffs(projectId, trigger.prNumber);
@@ -134,7 +137,10 @@ export class GitLabProvider extends VcsProviderBase {
 
   async reportStatus(trigger: VcsScanTrigger, report: VcsStatusReport): Promise<void> {
     try {
-      const projectId = trigger.projectId!;
+      if (!trigger.projectId) {
+        throw new VcsApiError("gitlab", 400, "Missing projectId on trigger", "reportStatus");
+      }
+      const projectId = trigger.projectId;
 
       const state = this.mapStatus(report.status);
 
