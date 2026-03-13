@@ -17,7 +17,6 @@ export interface ApprovalStreamEvent {
 }
 
 export interface ApprovalStreamState {
-  events: ApprovalStreamEvent[];
   connected: boolean;
   error: string | null;
 }
@@ -30,7 +29,6 @@ export function useApprovalStream(
   onGateUpdate: (gate: ApprovalGate) => void,
 ): ApprovalStreamState {
   const [state, setState] = useState<ApprovalStreamState>({
-    events: [],
     connected: false,
     error: null,
   });
@@ -81,10 +79,6 @@ export function useApprovalStream(
               const gate = JSON.parse(e.data) as ApprovalGate;
               const id = e.lastEventId ?? "";
               if (id) lastEventId.current = id;
-              setState((prev) => ({
-                ...prev,
-                events: [...prev.events, { type: eventType, gate, id }],
-              }));
               onGateUpdateRef.current(gate);
             } catch {
               // Ignore malformed events

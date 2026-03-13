@@ -96,9 +96,13 @@ export function ApprovalQueue({ initialGates, initialStats }: ApprovalQueueProps
     async (gateId: string, decision: "approve" | "reject", justification: string) => {
       setSubmittingId(gateId);
 
-      // Optimistic update
-      setGates((prev) =>
-        prev.map((g) =>
+      // Capture pre-mutation snapshot for revert
+      let snapshot: ApprovalGate | undefined;
+
+      // Optimistic update + auto-advance using functional state
+      setGates((prev) => {
+        snapshot = prev.find((g) => g.id === gateId);
+        const next = prev.map((g) =>
           g.id === gateId
             ? {
                 ...g,
@@ -116,35 +120,33 @@ export function ApprovalQueue({ initialGates, initialStats }: ApprovalQueueProps
                 ],
               }
             : g,
-        ),
-      );
+        );
 
-      // Auto-advance to next pending
-      const nextPending = gates.find(
-        (g) => g.id !== gateId && (g.status === "pending" || g.status === "escalated"),
-      );
-      if (nextPending) setSelectedId(nextPending.id);
+        // Auto-advance to next pending (uses fresh state)
+        const nextPending = next.find(
+          (g) => g.id !== gateId && (g.status === "pending" || g.status === "escalated"),
+        );
+        if (nextPending) setSelectedId(nextPending.id);
+
+        return next;
+      });
 
       try {
         await submitDecision(gateId, decision, justification);
       } catch (err) {
-        // Revert optimistic update
-        setGates((prev) =>
-          prev.map((g) =>
-            g.id === gateId
-              ? {
-                  ...initialGates.find((og) => og.id === gateId) ?? g,
-                }
-              : g,
-          ),
-        );
+        // Revert to pre-mutation snapshot
+        if (snapshot) {
+          setGates((prev) =>
+            prev.map((g) => (g.id === gateId ? snapshot! : g)),
+          );
+        }
         setSelectedId(gateId);
         throw err;
       } finally {
         setSubmittingId(null);
       }
     },
-    [gates, initialGates],
+    [],
   );
 
   return (
@@ -161,6 +163,8 @@ export function ApprovalQueue({ initialGates, initialStats }: ApprovalQueueProps
             <button
               key={value}
               onClick={() => setFilter(value)}
+              aria-label={`Filter by ${label}`}
+              aria-pressed={filter === value}
               className={`rounded-lg px-3 py-1.5 text-[12px] font-medium transition-colors ${
                 filter === value
                   ? "bg-accent-subtle text-accent border border-accent/30"
@@ -180,6 +184,7 @@ export function ApprovalQueue({ initialGates, initialStats }: ApprovalQueueProps
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search project, branch, commit..."
+            aria-label="Search approval gates by project, branch, or commit"
             className="w-64 rounded-lg border border-border bg-surface-2 px-3 py-1.5 text-[12px] text-text-primary placeholder:text-text-tertiary focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
           />
           {!connected && (
