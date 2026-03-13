@@ -27,6 +27,8 @@ import { HealthCheckJob } from "./jobs/health-check.js";
 import { AttestationExpiryJob } from "./jobs/attestation-expiry.js";
 import { RemediationOverdueJob } from "./jobs/remediation-overdue.js";
 import { ApprovalExpiryJob } from "./jobs/approval-expiry.js";
+import { RemediationSnapshotJob } from "./jobs/remediation-snapshot.js";
+import { RemediationScoreRefreshJob } from "./jobs/remediation-score-refresh.js";
 
 import { createAuditEventStore } from "../stores.js";
 
@@ -234,6 +236,8 @@ export async function startScheduler(): Promise<void> {
     new AttestationExpiryJob(),
     new RemediationOverdueJob(),
     new ApprovalExpiryJob(),
+    new RemediationSnapshotJob(),
+    new RemediationScoreRefreshJob(),
   ];
   if (config.cveRescanEnabled) {
     allJobs.push(new CVERescanJob());

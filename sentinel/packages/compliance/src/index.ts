@@ -40,3 +40,6 @@ export { BAARegistryService, type RegisterBAAInput, type UpdateBAAInput } from "
 export { AttestationService, type CreateAttestationInput } from "./attestation/service.js";
 export { WorkflowFSM, WORKFLOW_STAGES, TERMINAL_STAGES, SPECIAL_STAGES } from "./remediation/workflow-fsm.js";
 export { EvidenceService, type S3Presigner } from "./remediation/evidence-service.js";
+export { ChartsService } from "./remediation/charts-service.js";
+export { AutoFixService, type GitHubPRClient } from "./remediation/auto-fix-service.js";
+export { SyncHandler } from "./remediation/sync-handler.js";

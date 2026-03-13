@@ -68,6 +68,14 @@ export const API_PERMISSIONS: EndpointPermission[] = [
   { method: "GET", path: "/v1/compliance/remediations/:id/evidence", roles: ["admin", "manager", "developer"] },
   { method: "GET", path: "/v1/compliance/remediations/:id/evidence/:eid/url", roles: ["admin", "manager", "developer"] },
   { method: "DELETE", path: "/v1/compliance/remediations/:id/evidence/:eid", roles: ["admin", "manager"] },
+  // Auto-Fix
+  { method: "POST", path: "/v1/compliance/remediations/:id/auto-fix", roles: ["admin", "manager"] },
+  { method: "GET", path: "/v1/compliance/remediations/:id/auto-fix/status", roles: ["admin", "manager", "developer"] },
+  // Charts
+  { method: "GET", path: "/v1/compliance/remediations/charts/burndown", roles: ["admin", "manager", "developer"] },
+  { method: "GET", path: "/v1/compliance/remediations/charts/velocity", roles: ["admin", "manager", "developer"] },
+  { method: "GET", path: "/v1/compliance/remediations/charts/aging", roles: ["admin", "manager", "developer"] },
+  { method: "GET", path: "/v1/compliance/remediations/charts/sla", roles: ["admin", "manager", "developer"] },
   // Workflow Config
   { method: "GET", path: "/v1/compliance/workflow-config", roles: ["admin", "manager"] },
   { method: "PUT", path: "/v1/compliance/workflow-config", roles: ["admin"] },

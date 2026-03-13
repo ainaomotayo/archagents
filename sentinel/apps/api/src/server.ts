@@ -1187,6 +1187,33 @@ app.get("/v1/compliance/remediations/stream", { preHandler: authHook }, async (r
   });
 });
 
+// --- Charts ---
+const { ChartsService } = await import("@sentinel/compliance");
+const chartsService = new ChartsService(db);
+
+app.get("/v1/compliance/remediations/charts/burndown", { preHandler: authHook }, async (request) => {
+  const orgId = (request as any).orgId ?? "default";
+  const { scope, scopeValue, days } = request.query as any;
+  return withTenant(db, orgId, () => chartsService.getBurndown(orgId, { scope, scopeValue, days: days ? parseInt(days) : undefined }));
+});
+
+app.get("/v1/compliance/remediations/charts/velocity", { preHandler: authHook }, async (request) => {
+  const orgId = (request as any).orgId ?? "default";
+  const { days } = request.query as any;
+  return withTenant(db, orgId, () => chartsService.getVelocity(orgId, { days: days ? parseInt(days) : undefined }));
+});
+
+app.get("/v1/compliance/remediations/charts/aging", { preHandler: authHook }, async (request) => {
+  const orgId = (request as any).orgId ?? "default";
+  return withTenant(db, orgId, () => chartsService.getAging(orgId));
+});
+
+app.get("/v1/compliance/remediations/charts/sla", { preHandler: authHook }, async (request) => {
+  const orgId = (request as any).orgId ?? "default";
+  const { days } = request.query as any;
+  return withTenant(db, orgId, () => chartsService.getSlaCompliance(orgId, { days: days ? parseInt(days) : undefined }));
+});
+
 app.get("/v1/compliance/remediations/:id", { preHandler: authHook }, async (request, reply) => {
   const orgId = (request as any).orgId ?? "default";
   const { id } = request.params as { id: string };
@@ -1319,6 +1346,62 @@ app.delete("/v1/compliance/remediations/:id/evidence/:eid", { preHandler: authHo
     reply.code(204).send();
   } catch (err: any) {
     reply.code(404).send({ error: err.message });
+  }
+});
+
+// --- Auto-Fix ---
+app.post("/v1/compliance/remediations/:id/auto-fix", { preHandler: authHook }, async (request, reply) => {
+  const orgId = (request as any).orgId ?? "default";
+  const { id } = request.params as { id: string };
+  const userId = (request as any).userId ?? "unknown";
+  try {
+    const { AutoFixService } = await import("@sentinel/compliance");
+    const stubGitHub = {
+      createBranch: async () => "branch",
+      commitFile: async () => "sha",
+      createPullRequest: async () => ({ html_url: "https://github.com/stub", number: 0 }),
+    };
+    const autoFixService = new AutoFixService(db, stubGitHub, eventBus);
+    const result = await withTenant(db, orgId, () => autoFixService.triggerAutoFix(orgId, id, userId));
+    return result;
+  } catch (err: any) {
+    const msg = err.message ?? "";
+    if (msg.includes("not found")) { reply.code(404).send({ error: msg }); }
+    else if (msg.includes("No linked finding") || msg.includes("No auto-fix")) { reply.code(422).send({ error: msg }); }
+    else { reply.code(400).send({ error: msg }); }
+  }
+});
+
+app.get("/v1/compliance/remediations/:id/auto-fix/status", { preHandler: authHook }, async (request, reply) => {
+  const orgId = (request as any).orgId ?? "default";
+  const { id } = request.params as { id: string };
+  const item = await withTenant(db, orgId, () => db.remediationItem.findUnique({ where: { id } }));
+  if (!item || item.orgId !== orgId) { reply.code(404).send({ error: "Remediation item not found" }); return; }
+  return { externalRef: item.externalRef, hasAutoFix: !!item.externalRef?.startsWith("github:") };
+});
+
+// --- Integration Webhooks (Two-Way Sync) ---
+app.post("/webhooks/jira", { config: { rateLimit: false } }, async (request, reply) => {
+  const { SyncHandler } = await import("@sentinel/compliance");
+  const syncHandler = new SyncHandler(db, eventBus);
+  const orgId = (request.query as any).orgId ?? "default";
+  try {
+    const result = await syncHandler.handleJiraWebhook(request.body, orgId);
+    return result;
+  } catch (err: any) {
+    reply.code(400).send({ error: err.message });
+  }
+});
+
+app.post("/webhooks/integration/github", { config: { rateLimit: false } }, async (request, reply) => {
+  const { SyncHandler } = await import("@sentinel/compliance");
+  const syncHandler = new SyncHandler(db, eventBus);
+  const orgId = (request.query as any).orgId ?? "default";
+  try {
+    const result = await syncHandler.handleGitHubWebhook(request.body, orgId);
+    return result;
+  } catch (err: any) {
+    reply.code(400).send({ error: err.message });
   }
 });
 
