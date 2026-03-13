@@ -26,7 +26,8 @@ model Organization {
   apiKeys          ApiKey[]
   scimSyncState    ScimSyncState?
   approvalPolicies ApprovalPolicy[]
-  approvalGates    ApprovalGate[]
+  approvalGates      ApprovalGate[]
+  approvalDecisions  ApprovalDecision[]
   controlAttestations        ControlAttestation[]
   remediationItems           RemediationItem[]
   businessAssociateAgreements BusinessAssociateAgreement[]
@@ -500,7 +501,8 @@ model ApprovalDecision {
   justification String
   decidedAt     DateTime @default(now()) @map("decided_at")
 
-  gate ApprovalGate @relation(fields: [gateId], references: [id])
+  gate         ApprovalGate @relation(fields: [gateId], references: [id])
+  organization Organization @relation(fields: [orgId], references: [id])
 
   @@index([gateId])
   @@index([orgId, decidedAt])

@@ -99,3 +99,6 @@ ALTER TABLE "approval_gates" ADD CONSTRAINT "approval_gates_policy_id_fkey" FORE
 
 -- AddForeignKey
 ALTER TABLE "approval_decisions" ADD CONSTRAINT "approval_decisions_gate_id_fkey" FOREIGN KEY ("gate_id") REFERENCES "approval_gates"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "approval_decisions" ADD CONSTRAINT "approval_decisions_org_id_fkey" FOREIGN KEY ("org_id") REFERENCES "organizations"("id") ON DELETE RESTRICT ON UPDATE CASCADE;

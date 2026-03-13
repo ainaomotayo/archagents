@@ -913,7 +913,14 @@ app.post("/v1/approvals/:id/decide", { preHandler: authHook }, async (request, r
 
     return result;
   } catch (err: any) {
-    reply.code(400).send({ error: err.message });
+    const msg = err.message ?? "";
+    if (msg.includes("not found")) {
+      reply.code(404).send({ error: msg });
+    } else if (msg.includes("Cannot decide") || msg.includes("Cannot ")) {
+      reply.code(409).send({ error: msg });
+    } else {
+      reply.code(400).send({ error: msg });
+    }
   }
 });
 
@@ -944,7 +951,14 @@ app.post("/v1/approvals/:id/reassign", { preHandler: authHook }, async (request,
 
     return result;
   } catch (err: any) {
-    reply.code(400).send({ error: err.message });
+    const msg = err.message ?? "";
+    if (msg.includes("not found")) {
+      reply.code(404).send({ error: msg });
+    } else if (msg.includes("terminal")) {
+      reply.code(409).send({ error: msg });
+    } else {
+      reply.code(400).send({ error: msg });
+    }
   }
 });
 
