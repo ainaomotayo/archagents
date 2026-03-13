@@ -74,3 +74,51 @@ export interface FindingCountByCategory {
   category: string;
   count: number;
 }
+
+// ── Approvals ─────────────────────────────────────────────────────────
+
+export type ApprovalStatus = "pending" | "escalated" | "approved" | "rejected" | "expired";
+export type GateType = "risk_threshold" | "category_block" | "license_review" | "always_review";
+export type ExpiryAction = "reject" | "approve";
+
+export interface ApprovalDecision {
+  id: string;
+  decidedBy: string;
+  decision: "approve" | "reject";
+  justification: string;
+  decidedAt: string;
+}
+
+export interface ApprovalGate {
+  id: string;
+  scanId: string;
+  projectId: string;
+  projectName: string;
+  status: ApprovalStatus;
+  gateType: GateType;
+  triggerCriteria: Record<string, unknown>;
+  priority: number;
+  assignedRole: string | null;
+  assignedTo: string | null;
+  requestedAt: string;
+  requestedBy: string;
+  expiresAt: string;
+  escalatesAt: string | null;
+  expiryAction: ExpiryAction;
+  decidedAt: string | null;
+  scan: {
+    commitHash: string;
+    branch: string;
+    riskScore: number;
+    findingCount: number;
+  };
+  decisions: ApprovalDecision[];
+}
+
+export interface ApprovalStats {
+  pending: number;
+  escalated: number;
+  decidedToday: number;
+  avgDecisionTimeHours: number;
+  expiringSoon: number;
+}

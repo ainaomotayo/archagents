@@ -761,6 +761,44 @@ app.get("/v1/approvals/stats", { preHandler: authHook }, async (request) => {
   return withTenant(db, orgId, () => approvalRoutes.getStats(orgId));
 });
 
+app.get("/v1/approvals/stream", { preHandler: authHook }, async (request, reply) => {
+  const orgId = (request as any).orgId ?? "default";
+
+  reply.raw.writeHead(200, {
+    "Content-Type": "text/event-stream",
+    "Cache-Control": "no-cache",
+    Connection: "keep-alive",
+    "X-Accel-Buffering": "no",
+  });
+
+  const clientId = randomUUID();
+  const client = {
+    id: clientId,
+    orgId,
+    topics: ["gate.created", "gate.decided", "gate.escalated", "gate.expired", "gate.reassigned",
+             "approval.approved", "approval.rejected", "approval.reassigned"],
+    write: (data: string) => {
+      try { reply.raw.write(data); return true; } catch { return false; }
+    },
+    close: () => {
+      try { reply.raw.end(); } catch {}
+    },
+  };
+
+  sseManager.register(client);
+  sseConnectionsGauge.inc({ org_id: orgId });
+
+  const heartbeat = setInterval(() => {
+    try { reply.raw.write(": heartbeat\n\n"); } catch { clearInterval(heartbeat); }
+  }, 30_000);
+
+  request.raw.on("close", () => {
+    clearInterval(heartbeat);
+    sseManager.unregister(clientId, orgId);
+    sseConnectionsGauge.dec({ org_id: orgId });
+  });
+});
+
 app.get("/v1/approvals/:id", { preHandler: authHook }, async (request, reply) => {
   const orgId = (request as any).orgId ?? "default";
   const { id } = request.params as { id: string };
@@ -776,6 +814,16 @@ app.post("/v1/approvals/:id/decide", { preHandler: authHook }, async (request, r
   const { id } = request.params as { id: string };
   const { decision, justification } = request.body as any;
   const decidedBy = (request as any).userId ?? "unknown";
+
+  if (!decision || !["approve", "reject"].includes(decision)) {
+    reply.code(400).send({ error: "decision must be 'approve' or 'reject'" });
+    return;
+  }
+  if (!justification || typeof justification !== "string" || justification.trim().length < 10) {
+    reply.code(400).send({ error: "justification must be at least 10 characters" });
+    return;
+  }
+
   try {
     const result = await withTenant(db, orgId, () =>
       approvalRoutes.submitDecision(orgId, id, { decision, justification, decidedBy }),

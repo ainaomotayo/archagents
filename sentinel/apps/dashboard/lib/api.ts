@@ -6,6 +6,8 @@
  */
 
 import type {
+  ApprovalGate,
+  ApprovalStats,
   Certificate,
   Finding,
   FindingCountByCategory,
@@ -15,6 +17,8 @@ import type {
 } from "./types";
 
 import {
+  MOCK_APPROVAL_GATES,
+  MOCK_APPROVAL_STATS,
   MOCK_AUDIT_LOG,
   MOCK_CERTIFICATES,
   MOCK_FINDING_COUNTS_BY_CATEGORY,
@@ -283,4 +287,74 @@ export async function getAuditLog(limit = 50) {
     const data = await apiGet<{ events: any[] }>("/v1/audit", { limit: String(limit) }, headers);
     return data.events ?? [];
   }, MOCK_AUDIT_LOG);
+}
+
+// ── Approvals ─────────────────────────────────────────────────────────
+
+export async function getApprovalGates(status?: string): Promise<ApprovalGate[]> {
+  return tryApi(async (headers) => {
+    const { apiGet } = await import("./api-client");
+    const query: Record<string, string> = { limit: "50" };
+    if (status && status !== "all") query.status = status;
+    const data = await apiGet<{ gates: any[]; total: number }>("/v1/approvals", query, headers);
+    return (data.gates ?? []).map(mapGate);
+  }, status && status !== "all"
+    ? MOCK_APPROVAL_GATES.filter((g) => g.status === status)
+    : MOCK_APPROVAL_GATES);
+}
+
+export async function getApprovalGateById(id: string): Promise<ApprovalGate | null> {
+  return tryApi(async (headers) => {
+    const { apiGet } = await import("./api-client");
+    const data = await apiGet<any>(`/v1/approvals/${id}`, undefined, headers);
+    return mapGate(data);
+  }, MOCK_APPROVAL_GATES.find((g) => g.id === id) ?? null);
+}
+
+export async function getApprovalStats(): Promise<ApprovalStats> {
+  return tryApi(async (headers) => {
+    const { apiGet } = await import("./api-client");
+    return apiGet<ApprovalStats>("/v1/approvals/stats", undefined, headers);
+  }, MOCK_APPROVAL_STATS);
+}
+
+export async function reassignApprovalGate(gateId: string, assignTo: string): Promise<void> {
+  return tryApi(async (headers) => {
+    const { apiPatch } = await import("./api-client");
+    await apiPatch(`/v1/approvals/${gateId}/assign`, { assignTo }, headers);
+  }, undefined);
+}
+
+function mapGate(g: any): ApprovalGate {
+  return {
+    id: g.id,
+    scanId: g.scanId,
+    projectId: g.projectId,
+    projectName: g.project?.name ?? g.projectName ?? "Unknown",
+    status: g.status,
+    gateType: g.gateType,
+    triggerCriteria: g.triggerCriteria ?? {},
+    priority: g.priority ?? 0,
+    assignedRole: g.assignedRole ?? null,
+    assignedTo: g.assignedTo ?? null,
+    requestedAt: g.requestedAt,
+    requestedBy: g.requestedBy ?? "system",
+    expiresAt: g.expiresAt,
+    escalatesAt: g.escalatesAt ?? null,
+    expiryAction: g.expiryAction ?? "reject",
+    decidedAt: g.decidedAt ?? null,
+    scan: {
+      commitHash: g.scan?.commitHash ?? "",
+      branch: g.scan?.branch ?? "",
+      riskScore: g.scan?.riskScore ?? 0,
+      findingCount: g.scan?._count?.findings ?? g.scan?.findingCount ?? 0,
+    },
+    decisions: (g.decisions ?? []).map((d: any) => ({
+      id: d.id,
+      decidedBy: d.decidedBy,
+      decision: d.decision,
+      justification: d.justification,
+      decidedAt: d.decidedAt,
+    })),
+  };
 }

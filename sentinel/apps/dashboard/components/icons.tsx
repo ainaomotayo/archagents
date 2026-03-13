@@ -221,4 +221,5 @@ export const ICON_MAP: Record<string, React.ComponentType<React.SVGProps<SVGSVGE
   "trending-up": IconTrendingUp,
   clock: IconClock,
   settings: IconSettings,
+  "check-circle": IconCheckCircle,
 };
