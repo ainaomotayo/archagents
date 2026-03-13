@@ -745,7 +745,7 @@ app.get("/v1/approvals/:id", { preHandler: authHook }, async (request, reply) =>
   const orgId = (request as any).orgId ?? "default";
   const { id } = request.params as { id: string };
   return withTenant(db, orgId, async () => {
-    const gate = await approvalRoutes.getGate(id);
+    const gate = await approvalRoutes.getGate(id, orgId);
     if (!gate) {
       reply.code(404).send({ error: "Approval gate not found" });
       return;
@@ -757,6 +757,20 @@ app.get("/v1/approvals/:id", { preHandler: authHook }, async (request, reply) =>
 app.post("/v1/approvals", { preHandler: authHook }, async (request, reply) => {
   const orgId = (request as any).orgId ?? "default";
   const body = request.body as any;
+
+  if (!body.scanId || typeof body.scanId !== "string") {
+    reply.code(400).send({ error: "scanId is required" });
+    return;
+  }
+  if (!body.projectId || typeof body.projectId !== "string") {
+    reply.code(400).send({ error: "projectId is required" });
+    return;
+  }
+  if (!body.gateType || typeof body.gateType !== "string") {
+    reply.code(400).send({ error: "gateType is required" });
+    return;
+  }
+
   const gate = await approvalRoutes.createGate({
     orgId,
     scanId: body.scanId,

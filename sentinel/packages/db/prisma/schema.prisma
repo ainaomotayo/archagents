@@ -24,6 +24,7 @@ model Organization {
   memberships    OrgMembership[]
   encryptionKeys EncryptionKey[]
   apiKeys        ApiKey[]
+  approvalGates  ApprovalGate[]
   scimSyncState  ScimSyncState?
 
   @@map("organizations")
@@ -507,9 +508,10 @@ model ApprovalGate {
   expiryAction    String    @default("reject") @map("expiry_action")
   decidedAt       DateTime? @map("decided_at")
 
-  scan      Scan               @relation(fields: [scanId], references: [id])
-  project   Project            @relation(fields: [projectId], references: [id])
-  decisions ApprovalDecision[]
+  organization Organization      @relation(fields: [orgId], references: [id])
+  scan         Scan               @relation(fields: [scanId], references: [id])
+  project      Project            @relation(fields: [projectId], references: [id])
+  decisions    ApprovalDecision[]
 
   @@index([orgId, status])
   @@index([scanId])
@@ -520,6 +522,7 @@ model ApprovalGate {
 model ApprovalDecision {
   id            String   @id @default(uuid()) @db.Uuid
   gateId        String   @map("gate_id") @db.Uuid
+  orgId         String   @map("org_id") @db.Uuid
   decidedBy     String   @map("decided_by")
   decision      String
   justification String
@@ -528,5 +531,6 @@ model ApprovalDecision {
   gate ApprovalGate @relation(fields: [gateId], references: [id])
 
   @@index([gateId])
+  @@index([orgId, decidedAt])
   @@map("approval_decisions")
 }

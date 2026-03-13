@@ -9,11 +9,22 @@ function createMockDb() {
     approvalGate: {
       findMany: vi.fn(async (args: any) => {
         let result = [...gates];
-        if (args?.where?.status) result = result.filter((g: any) => g.status === args.where.status);
+        if (args?.where?.status) {
+          if (typeof args.where.status === "string") {
+            result = result.filter((g: any) => g.status === args.where.status);
+          } else if (args.where.status?.in) {
+            result = result.filter((g: any) => args.where.status.in.includes(g.status));
+          }
+        }
         if (args?.where?.orgId) result = result.filter((g: any) => g.orgId === args.where.orgId);
         return result;
       }),
       findUnique: vi.fn(async (args: any) => gates.find((g: any) => g.id === args.where.id) ?? null),
+      findFirst: vi.fn(async (args: any) => {
+        let result = gates.find((g: any) => g.id === args.where.id);
+        if (result && args.where.orgId && result.orgId !== args.where.orgId) return null;
+        return result ?? null;
+      }),
       count: vi.fn(async (args: any) => {
         let result = [...gates];
         if (args?.where?.status) {
@@ -87,15 +98,21 @@ describe("buildApprovalRoutes", () => {
 
   describe("getGate", () => {
     it("returns null for missing gate", async () => {
-      const result = await routes.getGate("nonexistent");
+      const result = await routes.getGate("nonexistent", "org-1");
       expect(result).toBeNull();
     });
 
     it("returns gate when found", async () => {
-      db._gates.push({ id: "g1", status: "pending" });
-      const result = await routes.getGate("g1");
+      db._gates.push({ id: "g1", status: "pending", orgId: "org-1" });
+      const result = await routes.getGate("g1", "org-1");
       expect(result).toBeTruthy();
       expect(result!.id).toBe("g1");
+    });
+
+    it("returns null for gate in different org", async () => {
+      db._gates.push({ id: "g1", status: "pending", orgId: "org-2" });
+      const result = await routes.getGate("g1", "org-1");
+      expect(result).toBeNull();
     });
   });
 
@@ -130,14 +147,49 @@ describe("buildApprovalRoutes", () => {
       expect(db.approvalDecision.create).toHaveBeenCalled();
     });
 
-    it("publishes event and audit log on decision", async () => {
+    it("publishes event with correct payload and logs audit", async () => {
       db._gates.push({ id: "g1", status: "pending", orgId: "org-1", scanId: "s1" });
       await routes.decideGate({
         gateId: "g1", orgId: "org-1", decidedBy: "user-1",
         decision: "approve", justification: "looks good to me",
       });
-      expect(eventBus.publish).toHaveBeenCalled();
-      expect(auditLog.append).toHaveBeenCalled();
+      expect(eventBus.publish).toHaveBeenCalledWith(
+        "sentinel.notifications",
+        expect.objectContaining({
+          orgId: "org-1",
+          topic: "gate.decided",
+          timestamp: expect.any(String),
+        }),
+      );
+      expect(auditLog.append).toHaveBeenCalledWith(
+        "org-1",
+        expect.objectContaining({
+          actor: expect.objectContaining({ id: "user-1" }),
+          action: "approval.approved",
+          resource: expect.objectContaining({ type: "approval_gate", id: "g1" }),
+          detail: expect.objectContaining({ decision: "approve", justification: "looks good to me" }),
+        }),
+      );
+    });
+
+    it("returns 404 for gate in different org (cross-org isolation)", async () => {
+      db._gates.push({ id: "g1", status: "pending", orgId: "org-2", scanId: "s1" });
+      const result = await routes.decideGate({
+        gateId: "g1", orgId: "org-1", decidedBy: "user-1",
+        decision: "approve", justification: "looks good to me",
+      });
+      expect(result.status).toBe(404);
+      expect(db.approvalGate.update).not.toHaveBeenCalled();
+    });
+
+    it("stores orgId in decision record", async () => {
+      db._gates.push({ id: "g1", status: "pending", orgId: "org-1", scanId: "s1" });
+      await routes.decideGate({
+        gateId: "g1", orgId: "org-1", decidedBy: "user-1",
+        decision: "approve", justification: "looks good to me",
+      });
+      const decisionData = db.approvalDecision.create.mock.calls[0][0].data;
+      expect(decisionData.orgId).toBe("org-1");
     });
 
     it("rejects an escalated gate", async () => {
@@ -186,7 +238,17 @@ describe("buildApprovalRoutes", () => {
     it("publishes event on reassign", async () => {
       db._gates.push({ id: "g1", status: "pending", orgId: "org-1" });
       await routes.reassignGate({ gateId: "g1", orgId: "org-1", assignTo: "user-2" });
-      expect(eventBus.publish).toHaveBeenCalled();
+      expect(eventBus.publish).toHaveBeenCalledWith(
+        "sentinel.notifications",
+        expect.objectContaining({ orgId: "org-1", topic: "gate.reassigned" }),
+      );
+    });
+
+    it("returns 404 for gate in different org (cross-org isolation)", async () => {
+      db._gates.push({ id: "g1", status: "pending", orgId: "org-2" });
+      const result = await routes.reassignGate({ gateId: "g1", orgId: "org-1", assignTo: "user-2" });
+      expect(result.status).toBe(404);
+      expect(db.approvalGate.update).not.toHaveBeenCalled();
     });
   });
 

@@ -18,20 +18,26 @@ export class ApprovalExpiryJob implements SchedulerJob {
     });
 
     for (const gate of expiredGates) {
+      // expiryAction determines the terminal status: "approve" → approved, "reject" → rejected, else expired
+      const finalStatus =
+        gate.expiryAction === "approve" ? "approved" :
+        gate.expiryAction === "reject" ? "rejected" :
+        "expired";
+
       await ctx.db.approvalGate.update({
         where: { id: gate.id },
-        data: { status: "expired", decidedAt: now },
+        data: { status: finalStatus, decidedAt: now },
       });
 
       await ctx.eventBus.publish("sentinel.notifications", {
         id: `evt-${gate.id}-expired`,
         orgId: gate.orgId,
         topic: "gate.expired",
-        payload: { ...gate, status: "expired" },
+        payload: { ...gate, status: finalStatus, expiryAction: gate.expiryAction },
         timestamp: now.toISOString(),
       });
 
-      ctx.logger.info({ gateId: gate.id, expiryAction: gate.expiryAction }, "Approval gate expired");
+      ctx.logger.info({ gateId: gate.id, expiryAction: gate.expiryAction, finalStatus }, "Approval gate expired");
     }
 
     // 2. Escalate gates past escalation deadline

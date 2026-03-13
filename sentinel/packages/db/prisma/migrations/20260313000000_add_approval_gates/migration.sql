@@ -24,6 +24,7 @@ CREATE TABLE "approval_gates" (
 CREATE TABLE "approval_decisions" (
     "id" UUID NOT NULL DEFAULT gen_random_uuid(),
     "gate_id" UUID NOT NULL,
+    "org_id" UUID NOT NULL,
     "decided_by" TEXT NOT NULL,
     "decision" TEXT NOT NULL,
     "justification" TEXT NOT NULL,
@@ -37,8 +38,10 @@ CREATE INDEX "approval_gates_org_id_status_idx" ON "approval_gates"("org_id", "s
 CREATE INDEX "approval_gates_scan_id_idx" ON "approval_gates"("scan_id");
 CREATE INDEX "approval_gates_expires_at_idx" ON "approval_gates"("expires_at");
 CREATE INDEX "approval_decisions_gate_id_idx" ON "approval_decisions"("gate_id");
+CREATE INDEX "approval_decisions_org_id_decided_at_idx" ON "approval_decisions"("org_id", "decided_at");
 
 -- AddForeignKey
+ALTER TABLE "approval_gates" ADD CONSTRAINT "approval_gates_org_id_fkey" FOREIGN KEY ("org_id") REFERENCES "organizations"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 ALTER TABLE "approval_gates" ADD CONSTRAINT "approval_gates_scan_id_fkey" FOREIGN KEY ("scan_id") REFERENCES "scans"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 ALTER TABLE "approval_gates" ADD CONSTRAINT "approval_gates_project_id_fkey" FOREIGN KEY ("project_id") REFERENCES "projects"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 ALTER TABLE "approval_decisions" ADD CONSTRAINT "approval_decisions_gate_id_fkey" FOREIGN KEY ("gate_id") REFERENCES "approval_gates"("id") ON DELETE RESTRICT ON UPDATE CASCADE;

@@ -32,7 +32,7 @@ describe("ApprovalExpiryJob", () => {
     expect(job.dependencies).toContain("postgres");
   });
 
-  it("expires overdue gates", async () => {
+  it("expires overdue gates using expiryAction", async () => {
     const expired = [
       { id: "g1", status: "pending", orgId: "org-1", expiryAction: "reject" },
       { id: "g2", status: "escalated", orgId: "org-1", expiryAction: "approve" },
@@ -42,8 +42,13 @@ describe("ApprovalExpiryJob", () => {
     await job.execute(ctx as any);
 
     expect(ctx.db.approvalGate.update).toHaveBeenCalledTimes(2);
+    // expiryAction "reject" → status "rejected"
     expect(ctx.db.approvalGate.update).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { id: "g1" }, data: expect.objectContaining({ status: "expired" }) }),
+      expect.objectContaining({ where: { id: "g1" }, data: expect.objectContaining({ status: "rejected" }) }),
+    );
+    // expiryAction "approve" → status "approved"
+    expect(ctx.db.approvalGate.update).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: "g2" }, data: expect.objectContaining({ status: "approved" }) }),
     );
   });
 
@@ -89,5 +94,36 @@ describe("ApprovalExpiryJob", () => {
 
     expect(ctx.db.approvalGate.update).not.toHaveBeenCalled();
     expect(ctx.eventBus.publish).not.toHaveBeenCalled();
+  });
+
+  it("defaults to expired status for unknown expiryAction", async () => {
+    const expired = [{ id: "g1", status: "pending", orgId: "org-1", expiryAction: "unknown" }];
+    const ctx = createMockCtx(expired);
+    const job = new ApprovalExpiryJob();
+    await job.execute(ctx as any);
+
+    expect(ctx.db.approvalGate.update).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: "g1" }, data: expect.objectContaining({ status: "expired" }) }),
+    );
+  });
+
+  it("sets decidedAt on expired gates", async () => {
+    const expired = [{ id: "g1", status: "pending", orgId: "org-1", expiryAction: "reject" }];
+    const ctx = createMockCtx(expired);
+    const job = new ApprovalExpiryJob();
+    await job.execute(ctx as any);
+
+    const updateCall = ctx.db.approvalGate.update.mock.calls[0][0];
+    expect(updateCall.data.decidedAt).toBeInstanceOf(Date);
+  });
+
+  it("propagates errors from gate update", async () => {
+    const expired = [
+      { id: "g1", status: "pending", orgId: "org-1", expiryAction: "reject" },
+    ];
+    const ctx = createMockCtx(expired);
+    ctx.db.approvalGate.update = vi.fn(async () => { throw new Error("DB error"); });
+    const job = new ApprovalExpiryJob();
+    await expect(job.execute(ctx as any)).rejects.toThrow("DB error");
   });
 });

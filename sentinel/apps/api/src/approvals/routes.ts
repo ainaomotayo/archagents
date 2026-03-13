@@ -25,7 +25,12 @@ export function buildApprovalRoutes(deps: ApprovalDeps) {
         where,
         take: opts.limit,
         skip: opts.offset,
-        orderBy: { requestedAt: "desc" },
+        orderBy: [
+          { status: "asc" },        // escalated (alphabetically first) before pending
+          { priority: "desc" },     // higher priority first
+          { expiresAt: "asc" },     // soonest expiry first (SLA urgency)
+          { requestedAt: "asc" },   // oldest first as tiebreaker
+        ],
         include: {
           scan: { select: { commitHash: true, branch: true, riskScore: true, _count: { select: { findings: true } } } },
           project: { select: { name: true } },
@@ -38,9 +43,9 @@ export function buildApprovalRoutes(deps: ApprovalDeps) {
     return { gates, total, limit: opts.limit, offset: opts.offset };
   }
 
-  async function getGate(gateId: string) {
-    return db.approvalGate.findUnique({
-      where: { id: gateId },
+  async function getGate(gateId: string, orgId: string) {
+    return db.approvalGate.findFirst({
+      where: { id: gateId, orgId },
       include: {
         scan: { select: { commitHash: true, branch: true, riskScore: true, _count: { select: { findings: true } } } },
         project: { select: { name: true } },
@@ -56,7 +61,7 @@ export function buildApprovalRoutes(deps: ApprovalDeps) {
     decision: "approve" | "reject";
     justification: string;
   }): Promise<{ error?: string; status?: number; gate?: any }> {
-    const gate = await db.approvalGate.findUnique({ where: { id: opts.gateId } });
+    const gate = await db.approvalGate.findFirst({ where: { id: opts.gateId, orgId: opts.orgId } });
     if (!gate) return { error: "Gate not found", status: 404 };
 
     const targetStatus: ApprovalStatus = opts.decision === "approve" ? "approved" : "rejected";
@@ -72,6 +77,7 @@ export function buildApprovalRoutes(deps: ApprovalDeps) {
     await db.approvalDecision.create({
       data: {
         gateId: opts.gateId,
+        orgId: opts.orgId,
         decidedBy: opts.decidedBy,
         decision: opts.decision,
         justification: opts.justification,
@@ -127,7 +133,26 @@ export function buildApprovalRoutes(deps: ApprovalDeps) {
       }),
     ]);
 
-    const avgDecisionTimeHours = 2.4; // Simplified for now
+    // Compute average decision time from today's decided gates
+    const todayStart = new Date(new Date().setHours(0, 0, 0, 0));
+    const decidedGates = await db.approvalGate.findMany({
+      where: {
+        orgId,
+        status: { in: ["approved", "rejected"] },
+        decidedAt: { gte: todayStart },
+      },
+      select: { requestedAt: true, decidedAt: true },
+    });
+
+    let avgDecisionTimeHours = 0;
+    if (decidedGates.length > 0) {
+      const totalMs = decidedGates.reduce((sum: number, g: any) => {
+        const req = new Date(g.requestedAt).getTime();
+        const dec = new Date(g.decidedAt).getTime();
+        return sum + (dec - req);
+      }, 0);
+      avgDecisionTimeHours = Math.round((totalMs / decidedGates.length / 3_600_000) * 10) / 10;
+    }
 
     return { pending, escalated, decidedToday, avgDecisionTimeHours, expiringSoon };
   }
@@ -137,7 +162,7 @@ export function buildApprovalRoutes(deps: ApprovalDeps) {
     orgId: string;
     assignTo: string;
   }): Promise<{ error?: string; status?: number; gate?: any }> {
-    const gate = await db.approvalGate.findUnique({ where: { id: opts.gateId } });
+    const gate = await db.approvalGate.findFirst({ where: { id: opts.gateId, orgId: opts.orgId } });
     if (!gate) return { error: "Gate not found", status: 404 };
 
     if (TERMINAL_STATUSES.includes(gate.status as ApprovalStatus)) {

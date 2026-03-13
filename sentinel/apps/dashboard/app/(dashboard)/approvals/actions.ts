@@ -12,8 +12,14 @@ export async function submitDecision(
     await apiPost(`/v1/approvals/${gateId}/decide`, { decision, justification });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
+    if (msg.includes("400")) {
+      throw new Error("Validation error: please ensure your justification is at least 10 characters.");
+    }
     if (msg.includes("403")) {
       throw new Error("You do not have permission to decide on this gate.");
+    }
+    if (msg.includes("404")) {
+      throw new Error("This approval gate no longer exists. It may have been deleted.");
     }
     if (msg.includes("409")) {
       throw new Error("This gate has already been decided. Refresh to see the latest state.");
