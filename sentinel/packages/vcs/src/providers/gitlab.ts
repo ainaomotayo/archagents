@@ -1,6 +1,6 @@
 import { timingSafeEqual } from "node:crypto";
 import { Gitlab } from "@gitbeaker/rest";
-import { VcsProviderBase } from "../base.js";
+import { VcsProviderBase, VcsApiError } from "../base.js";
 import type {
   VcsCapabilities,
   VcsScanTrigger,
@@ -10,7 +10,7 @@ import type {
   VcsProviderType,
 } from "../types.js";
 
-interface GitLabProviderOptions {
+export interface GitLabProviderOptions {
   host?: string;
   token: string;
 }
@@ -107,38 +107,48 @@ export class GitLabProvider extends VcsProviderBase {
   }
 
   async fetchDiff(trigger: VcsScanTrigger): Promise<VcsDiffResult> {
-    const projectId = trigger.projectId!;
+    try {
+      const projectId = trigger.projectId!;
 
-    if (trigger.type === "merge_request" && trigger.prNumber) {
-      const diffs = await this.client.MergeRequests.allDiffs(projectId, trigger.prNumber);
+      if (trigger.type === "merge_request" && trigger.prNumber) {
+        const diffs = await this.client.MergeRequests.allDiffs(projectId, trigger.prNumber);
 
-      return this.buildDiffResult(diffs as GitLabDiff[]);
+        return this.buildDiffResult(diffs as GitLabDiff[]);
+      }
+
+      // Push: compare parent commit to current
+      const comparison = await this.client.Repositories.compare(
+        projectId,
+        `${trigger.commitHash}~1`,
+        trigger.commitHash,
+      );
+
+      return this.buildDiffResult((comparison as any).diffs ?? []);
+    } catch (err: any) {
+      if (err instanceof VcsApiError) throw err;
+      throw new VcsApiError("gitlab", err.cause?.response?.status ?? 500, err.message ?? "Unknown error", "fetchDiff");
     }
-
-    // Push: compare parent commit to current
-    const comparison = await this.client.Repositories.compare(
-      projectId,
-      `${trigger.commitHash}~1`,
-      trigger.commitHash,
-    );
-
-    return this.buildDiffResult((comparison as any).diffs ?? []);
   }
 
   async reportStatus(trigger: VcsScanTrigger, report: VcsStatusReport): Promise<void> {
-    const projectId = trigger.projectId!;
+    try {
+      const projectId = trigger.projectId!;
 
-    const state = this.mapStatus(report.status);
+      const state = this.mapStatus(report.status);
 
-    await this.client.Commits.editStatus(projectId, report.commitHash, state, {
-      name: "Sentinel Security",
-      description: report.summary.slice(0, 255),
-      targetUrl: report.detailsUrl,
-    });
+      await this.client.Commits.editStatus(projectId, report.commitHash, state, {
+        name: "Sentinel Security",
+        description: report.summary.slice(0, 255),
+        targetUrl: report.detailsUrl,
+      });
 
-    if (trigger.prNumber && report.annotations.length > 0) {
-      const body = this.formatPrComment(report);
-      await this.client.MergeRequestNotes.create(projectId, trigger.prNumber, body);
+      if (trigger.prNumber && report.annotations.length > 0) {
+        const body = this.formatPrComment(report);
+        await this.client.MergeRequestNotes.create(projectId, trigger.prNumber, body);
+      }
+    } catch (err: any) {
+      if (err instanceof VcsApiError) throw err;
+      throw new VcsApiError("gitlab", err.cause?.response?.status ?? 500, err.message ?? "Unknown error", "reportStatus");
     }
   }
 

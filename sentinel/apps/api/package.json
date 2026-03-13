@@ -7,6 +7,7 @@
     "build": "tsc",
     "dev": "tsx watch src/server.ts",
     "start": "node dist/server.js",
+    "start:vcs-bridge": "node dist/vcs-bridge.js",
     "test": "vitest run",
     "lint": "echo 'lint placeholder'"
   },

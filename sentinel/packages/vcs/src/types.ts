@@ -6,6 +6,7 @@ export type VcsProviderType =
   | "bitbucket"
   | "azure_devops";
 
+/** GitLab uses "merge_request" instead of "pull_request" — kept as alias for correct webhook parsing. */
 export type VcsTriggerType =
   | "push"
   | "pull_request"
@@ -93,12 +94,3 @@ export interface VcsProvider {
   getInstallationToken(installationId: string): Promise<string>;
 }
 
-export interface VcsProviderFactory {
-  create(config: VcsProviderConfig): VcsProvider;
-}
-
-export interface VcsProviderConfig {
-  type: VcsProviderType;
-  credentials: Record<string, string>;
-  options?: Record<string, unknown>;
-}

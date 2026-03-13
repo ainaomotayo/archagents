@@ -335,9 +335,33 @@ describe("GitHubProvider", () => {
   });
 
   describe("getInstallationToken", () => {
-    it("returns installation-prefixed token", async () => {
+    it("returns token from Octokit createInstallationAccessToken", async () => {
+      const mockCreateToken = vi.fn().mockResolvedValue({
+        data: { token: "ghs_abc123" },
+      });
+      mockedGetInstallationOctokit.mockReturnValue({
+        rest: {
+          apps: { createInstallationAccessToken: mockCreateToken },
+        },
+      } as any);
+
       const token = await provider.getInstallationToken("12345");
-      expect(token).toBe("github-installation-12345");
+      expect(token).toBe("ghs_abc123");
+      expect(mockCreateToken).toHaveBeenCalledWith({ installation_id: 12345 });
+    });
+
+    it("wraps Octokit errors in VcsApiError", async () => {
+      mockedGetInstallationOctokit.mockReturnValue({
+        rest: {
+          apps: {
+            createInstallationAccessToken: vi.fn().mockRejectedValue(
+              Object.assign(new Error("Bad credentials"), { status: 401 }),
+            ),
+          },
+        },
+      } as any);
+
+      await expect(provider.getInstallationToken("12345")).rejects.toThrow("github getInstallationToken failed");
     });
   });
 });

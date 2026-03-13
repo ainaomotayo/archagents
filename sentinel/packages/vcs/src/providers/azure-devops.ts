@@ -9,7 +9,7 @@ import type {
   VcsProviderType,
 } from "../types.js";
 
-interface AzureDevOpsProviderOptions {
+export interface AzureDevOpsProviderOptions {
   organizationUrl: string;
   project: string;
   pat: string;
@@ -161,9 +161,8 @@ export class AzureDevOpsProvider extends VcsProviderBase {
       status: this.mapChangeType(c.changeType),
     }));
 
-    const rawDiff = files
-      .map((f) => `diff --git a/${f.path} b/${f.path}`)
-      .join("\n");
+    // Fetch file content at target version to build diffs with actual content
+    const rawDiff = await this.buildRawDiffFromFiles(baseUrl, files, "pull_request");
 
     return { rawDiff, files };
   }
@@ -198,13 +197,48 @@ export class AzureDevOpsProvider extends VcsProviderBase {
       status: this.mapChangeType(c.changeType),
     }));
 
-    // Azure DevOps commit diff API returns file-level changes only,
-    // not unified diff content. Build headers for downstream processing.
-    const rawDiff = files
-      .map((f) => `diff --git a/${f.path} b/${f.path}`)
-      .join("\n");
+    // Fetch file content at target version to build diffs with actual content
+    const rawDiff = await this.buildRawDiffFromFiles(baseUrl, files, commitHash);
 
     return { rawDiff, files };
+  }
+
+  private async buildRawDiffFromFiles(
+    baseUrl: string,
+    files: Array<{ path: string; status: "added" | "modified" | "deleted" | "renamed" }>,
+    versionOrType: string,
+  ): Promise<string> {
+    const parts: string[] = [];
+    // Fetch content for up to 50 files to keep API calls reasonable
+    const fetchable = files.filter((f) => f.status !== "deleted").slice(0, 50);
+
+    for (const file of fetchable) {
+      const header = `diff --git a/${file.path} b/${file.path}`;
+      try {
+        const itemUrl = `${baseUrl}/items?path=${encodeURIComponent("/" + file.path)}&api-version=7.0`;
+        const resp = await fetch(itemUrl, {
+          headers: { Authorization: this.authHeader },
+        });
+        if (resp.ok) {
+          const content = await resp.text();
+          const lines = content.split("\n");
+          const hunk = lines.map((l) => `+${l}`).join("\n");
+          parts.push(`${header}\n--- ${file.status === "added" ? "/dev/null" : `a/${file.path}`}\n+++ b/${file.path}\n@@ -0,0 +1,${lines.length} @@\n${hunk}`);
+        } else {
+          parts.push(header);
+        }
+      } catch {
+        // If individual file fetch fails, include header only
+        parts.push(header);
+      }
+    }
+
+    // Include deleted files as headers only
+    for (const file of files.filter((f) => f.status === "deleted")) {
+      parts.push(`diff --git a/${file.path} b/${file.path}\ndeleted file mode 100644`);
+    }
+
+    return parts.join("\n");
   }
 
   async reportStatus(trigger: VcsScanTrigger, report: VcsStatusReport): Promise<void> {

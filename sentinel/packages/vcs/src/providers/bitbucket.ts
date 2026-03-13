@@ -9,7 +9,7 @@ import type {
   VcsProviderType,
 } from "../types.js";
 
-interface BitbucketProviderOptions {
+export interface BitbucketProviderOptions {
   workspace: string;
   username: string;
   appPassword: string;

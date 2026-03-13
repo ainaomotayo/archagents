@@ -38,6 +38,8 @@ import { registerOrgMembershipRoutes } from "./routes/org-memberships.js";
 import { registerScimRoutes } from "./routes/scim.js";
 import { registerEncryptionAdminRoutes } from "./routes/encryption-admin.js";
 import { registerDomainRoutes } from "./routes/domain-verification.js";
+import { registerVcsWebhookRoutes } from "./routes/vcs-webhooks.js";
+import { VcsProviderRegistry, GitHubProvider, GitLabProvider, BitbucketProvider, AzureDevOpsProvider } from "@sentinel/vcs";
 import { DekCache, EnvelopeEncryption, LocalKmsProvider } from "@sentinel/security";
 
 // Module-level DEK cache for encryption — shared with crypto-shred handler for eviction
@@ -131,6 +133,24 @@ if (process.env.GITHUB_APP_ID && process.env.GITHUB_PRIVATE_KEY) {
 const webhookSecret = process.env.GITHUB_WEBHOOK_SECRET ?? "";
 if (webhookSecret) {
   registerWebhookRoutes(app, { eventBus, webhookSecret, db });
+}
+
+// --- Multi-VCS webhook routes ---
+const vcsRegistry = new VcsProviderRegistry();
+if (process.env.VCS_GITHUB_ENABLED === "true" && process.env.GITHUB_APP_ID && process.env.GITHUB_PRIVATE_KEY) {
+  vcsRegistry.register(new GitHubProvider({ appId: process.env.GITHUB_APP_ID, privateKey: process.env.GITHUB_PRIVATE_KEY }));
+}
+if (process.env.VCS_GITLAB_ENABLED === "true" && process.env.GITLAB_TOKEN) {
+  vcsRegistry.register(new GitLabProvider({ token: process.env.GITLAB_TOKEN, host: process.env.GITLAB_URL }));
+}
+if (process.env.VCS_BITBUCKET_ENABLED === "true" && process.env.BITBUCKET_WORKSPACE && process.env.BITBUCKET_USERNAME && process.env.BITBUCKET_APP_PASSWORD) {
+  vcsRegistry.register(new BitbucketProvider({ workspace: process.env.BITBUCKET_WORKSPACE, username: process.env.BITBUCKET_USERNAME, appPassword: process.env.BITBUCKET_APP_PASSWORD }));
+}
+if (process.env.VCS_AZURE_DEVOPS_ENABLED === "true" && process.env.AZURE_DEVOPS_ORG_URL && process.env.AZURE_DEVOPS_PROJECT && process.env.AZURE_DEVOPS_PAT) {
+  vcsRegistry.register(new AzureDevOpsProvider({ organizationUrl: process.env.AZURE_DEVOPS_ORG_URL, project: process.env.AZURE_DEVOPS_PROJECT, pat: process.env.AZURE_DEVOPS_PAT }));
+}
+if (vcsRegistry.list().length > 0) {
+  registerVcsWebhookRoutes(app, { registry: vcsRegistry, eventBus, db });
 }
 
 // --- Observability hooks ---

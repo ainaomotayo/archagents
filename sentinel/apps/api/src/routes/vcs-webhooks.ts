@@ -23,7 +23,19 @@ export function registerVcsWebhookRoutes(
   app: FastifyInstance,
   opts: VcsWebhookOpts,
 ): void {
-  app.post<{ Params: { provider: string } }>(
+  // Use Fastify encapsulation to scope the raw body parser to webhook routes only,
+  // so the main app's JSON parser is unaffected.
+  app.register(async (scope) => {
+    // Parse JSON as raw string so we preserve the original wire bytes for HMAC verification.
+    scope.addContentTypeParser(
+      "application/json",
+      { parseAs: "string" },
+      (_req, body, done) => {
+        done(null, body);
+      },
+    );
+
+    scope.post<{ Params: { provider: string } }>(
     "/webhooks/:provider",
     { config: { rateLimit: false } },
     async (request, reply) => {
@@ -34,6 +46,7 @@ export function registerVcsWebhookRoutes(
       }
 
       const provider = opts.registry.get(providerType)!;
+      // request.body is the raw string from our content type parser above
       const rawBody = typeof request.body === "string"
         ? request.body
         : JSON.stringify(request.body);
@@ -79,5 +92,6 @@ export function registerVcsWebhookRoutes(
         commit: trigger.commitHash,
       });
     },
-  );
+    );
+  });
 }

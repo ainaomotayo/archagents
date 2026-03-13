@@ -6,7 +6,7 @@ import {
   findingsToAnnotations,
   configureGitHubApp,
 } from "@sentinel/github";
-import { VcsProviderBase } from "../base.js";
+import { VcsProviderBase, VcsApiError } from "../base.js";
 import type {
   VcsCapabilities,
   VcsScanTrigger,
@@ -16,7 +16,7 @@ import type {
   VcsProviderType,
 } from "../types.js";
 
-interface GitHubProviderOpts {
+export interface GitHubProviderOpts {
   appId: string;
   privateKey: string;
 }
@@ -64,41 +64,47 @@ export class GitHubProvider extends VcsProviderBase {
   }
 
   async fetchDiff(trigger: VcsScanTrigger): Promise<VcsDiffResult> {
-    const octokit = getInstallationOctokit(Number(trigger.installationId));
-    const repoName = trigger.repo.includes("/") ? trigger.repo.split("/")[1] : trigger.repo;
+    try {
+      const octokit = getInstallationOctokit(Number(trigger.installationId));
+      const repoName = trigger.repo.includes("/") ? trigger.repo.split("/")[1] : trigger.repo;
 
-    if (trigger.type === "pull_request" && trigger.prNumber) {
-      const res = await octokit.rest.pulls.get({
+      if (trigger.type === "pull_request" && trigger.prNumber) {
+        const res = await octokit.rest.pulls.get({
+          owner: trigger.owner,
+          repo: repoName,
+          pull_number: trigger.prNumber,
+          mediaType: { format: "diff" },
+        });
+        const rawDiff = res.data as unknown as string;
+        return { rawDiff, files: this.parseDiffFiles(rawDiff) };
+      }
+
+      const res = await octokit.rest.repos.compareCommitsWithBasehead({
         owner: trigger.owner,
         repo: repoName,
-        pull_number: trigger.prNumber,
-        mediaType: { format: "diff" },
+        basehead: `${trigger.commitHash}~1...${trigger.commitHash}`,
       });
-      const rawDiff = res.data as unknown as string;
-      return { rawDiff, files: this.parseDiffFiles(rawDiff) };
-    }
-
-    const res = await octokit.rest.repos.compareCommitsWithBasehead({
-      owner: trigger.owner,
-      repo: repoName,
-      basehead: `${trigger.commitHash}~1...${trigger.commitHash}`,
-    });
-    const ghFiles = (res.data as any).files ?? [];
-    const parts: string[] = [];
-    const files: Array<{ path: string; status: "added" | "modified" | "deleted" | "renamed" }> = [];
-    for (const file of ghFiles) {
-      files.push({
-        path: file.filename,
-        status: this.mapGitHubStatus(file.status),
-      });
-      if (file.patch) {
-        parts.push(`diff --git a/${file.filename} b/${file.filename}\n${file.patch}`);
+      const ghFiles = (res.data as any).files ?? [];
+      const parts: string[] = [];
+      const files: Array<{ path: string; status: "added" | "modified" | "deleted" | "renamed" }> = [];
+      for (const file of ghFiles) {
+        files.push({
+          path: file.filename,
+          status: this.mapGitHubStatus(file.status),
+        });
+        if (file.patch) {
+          parts.push(`diff --git a/${file.filename} b/${file.filename}\n${file.patch}`);
+        }
       }
+      return { rawDiff: parts.join("\n"), files };
+    } catch (err: any) {
+      if (err instanceof VcsApiError) throw err;
+      throw new VcsApiError("github", err.status ?? 500, err.message ?? "Unknown error", "fetchDiff");
     }
-    return { rawDiff: parts.join("\n"), files };
   }
 
   async reportStatus(trigger: VcsScanTrigger, report: VcsStatusReport): Promise<void> {
+    try {
     const octokit = getInstallationOctokit(Number(trigger.installationId));
     const repoName = trigger.repo.includes("/") ? trigger.repo.split("/")[1] : trigger.repo;
 
@@ -143,11 +149,33 @@ export class GitHubProvider extends VcsProviderBase {
         output: checkRunPayload.output,
       });
     }
+
+    // Post PR comment for visibility (like other providers)
+    if (trigger.prNumber && report.annotations.length > 0) {
+      const commentBody = this.formatPrComment(report);
+      await octokit.rest.issues.createComment({
+        owner: trigger.owner,
+        repo: repoName,
+        issue_number: trigger.prNumber,
+        body: commentBody,
+      });
+    }
+    } catch (err: any) {
+      if (err instanceof VcsApiError) throw err;
+      throw new VcsApiError("github", err.status ?? 500, err.message ?? "Unknown error", "reportStatus");
+    }
   }
 
   async getInstallationToken(installationId: string): Promise<string> {
-    // GitHub App generates tokens per-installation via Octokit
-    return `github-installation-${installationId}`;
+    try {
+      const octokit = getInstallationOctokit(Number(installationId));
+      const { data } = await octokit.rest.apps.createInstallationAccessToken({
+        installation_id: Number(installationId),
+      });
+      return data.token;
+    } catch (err: any) {
+      throw new VcsApiError("github", err.status ?? 500, err.message ?? "Unknown error", "getInstallationToken");
+    }
   }
 
   private mapGitHubStatus(status: string): "added" | "modified" | "deleted" | "renamed" {
