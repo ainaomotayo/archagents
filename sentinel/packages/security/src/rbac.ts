@@ -113,7 +113,7 @@ export const API_PERMISSIONS: EndpointPermission[] = [
   { method: "GET", path: "/v1/approvals/stream", roles: ["admin", "manager", "developer", "viewer"] },
   { method: "GET", path: "/v1/approvals/:id", roles: ["admin", "manager", "developer", "viewer"] },
   { method: "POST", path: "/v1/approvals/:id/decide", roles: ["admin", "manager"] },
-  { method: "POST", path: "/v1/approvals/:id/reassign", roles: ["admin"] },
+  { method: "POST", path: "/v1/approvals/:id/reassign", roles: ["admin", "manager"] },
   // Domains
   { method: "GET", path: "/v1/domains", roles: ["admin", "manager"] },
   { method: "POST", path: "/v1/domains", roles: ["admin"] },
