@@ -24,5 +24,17 @@ export function buildRemediationRoutes(deps: RemediationRouteDeps) {
     return service.getOverdue(orgId);
   }
 
-  return { create, list, update, getOverdue };
+  async function getById(orgId: string, id: string) {
+    return service.getById(orgId, id);
+  }
+
+  async function getStats(orgId: string) {
+    return service.getStats(orgId);
+  }
+
+  async function linkExternal(orgId: string, id: string, externalRef: string) {
+    return service.linkExternal(orgId, id, externalRef);
+  }
+
+  return { create, list, update, getOverdue, getById, getStats, linkExternal };
 }

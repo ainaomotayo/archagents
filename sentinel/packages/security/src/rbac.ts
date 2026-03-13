@@ -56,8 +56,12 @@ export const API_PERMISSIONS: EndpointPermission[] = [
   // Remediations
   { method: "POST", path: "/v1/compliance/remediations", roles: ["admin", "manager"] },
   { method: "GET", path: "/v1/compliance/remediations", roles: ["admin", "manager", "developer"] },
+  { method: "GET", path: "/v1/compliance/remediations/stats", roles: ["admin", "manager", "developer"] },
   { method: "GET", path: "/v1/compliance/remediations/overdue", roles: ["admin", "manager"] },
+  { method: "GET", path: "/v1/compliance/remediations/:id", roles: ["admin", "manager", "developer"] },
   { method: "PATCH", path: "/v1/compliance/remediations/:id", roles: ["admin", "manager"] },
+  { method: "POST", path: "/v1/compliance/remediations/:id/link-external", roles: ["admin", "manager"] },
+  { method: "GET", path: "/v1/compliance/remediations/stream", roles: ["admin", "manager", "developer", "viewer"] },
   // Business Associate Agreements
   { method: "POST", path: "/v1/compliance/baa", roles: ["admin"] },
   { method: "GET", path: "/v1/compliance/baa", roles: ["admin", "manager"] },

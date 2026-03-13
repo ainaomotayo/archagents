@@ -1118,10 +1118,29 @@ app.get("/v1/compliance/dashboard", { preHandler: authHook }, async (request) =>
 // --- Remediations ---
 app.post("/v1/compliance/remediations", { preHandler: authHook }, async (request, reply) => {
   const orgId = (request as any).orgId ?? "default";
+  const userId = (request as any).userId ?? "unknown";
   try {
-    const result = await withTenant(db, orgId, () => remediationRoutes.create(orgId, request.body));
+    const result = await withTenant(db, orgId, () => remediationRoutes.create(orgId, { ...request.body as any, createdBy: userId }));
+    await eventBus.publish("sentinel.notifications", {
+      id: `evt-${result.id}-created`,
+      orgId,
+      topic: "remediation.created",
+      payload: { remediationId: result.id, title: result.title, status: result.status },
+      timestamp: new Date().toISOString(),
+    });
+    await auditLog.append(orgId, {
+      actor: { type: "user", id: userId, name: userId },
+      action: "remediation.create",
+      resource: { type: "remediation_item", id: result.id },
+      detail: { title: result.title, itemType: result.itemType },
+    });
     reply.code(201).send(result);
-  } catch (err: any) { reply.code(400).send({ error: err.message }); }
+  } catch (err: any) {
+    const msg = err.message ?? "";
+    if (msg.includes("not found")) { reply.code(404).send({ error: msg }); }
+    else if (msg.includes("depth") || msg.includes("compliance-type")) { reply.code(400).send({ error: msg }); }
+    else { reply.code(400).send({ error: msg }); }
+  }
 });
 
 app.get("/v1/compliance/remediations", { preHandler: authHook }, async (request) => {
@@ -1130,18 +1149,96 @@ app.get("/v1/compliance/remediations", { preHandler: authHook }, async (request)
   return withTenant(db, orgId, () => remediationRoutes.list(orgId, { frameworkSlug: framework, status }));
 });
 
+app.get("/v1/compliance/remediations/stats", { preHandler: authHook }, async (request) => {
+  const orgId = (request as any).orgId ?? "default";
+  return withTenant(db, orgId, () => remediationRoutes.getStats(orgId));
+});
+
 app.get("/v1/compliance/remediations/overdue", { preHandler: authHook }, async (request) => {
   const orgId = (request as any).orgId ?? "default";
   return withTenant(db, orgId, () => remediationRoutes.getOverdue(orgId));
 });
 
+app.get("/v1/compliance/remediations/stream", { preHandler: authHook }, async (request, reply) => {
+  reply.raw.writeHead(200, {
+    "Content-Type": "text/event-stream",
+    "Cache-Control": "no-cache",
+    Connection: "keep-alive",
+  });
+  reply.raw.write("data: {\"type\":\"connected\"}\n\n");
+  const interval = setInterval(() => {
+    reply.raw.write(": heartbeat\n\n");
+  }, 30000);
+  request.raw.on("close", () => {
+    clearInterval(interval);
+    reply.raw.end();
+  });
+});
+
+app.get("/v1/compliance/remediations/:id", { preHandler: authHook }, async (request, reply) => {
+  const orgId = (request as any).orgId ?? "default";
+  const { id } = request.params as { id: string };
+  const result = await withTenant(db, orgId, () => remediationRoutes.getById(orgId, id));
+  if (!result) { reply.code(404).send({ error: "Remediation item not found" }); return; }
+  return result;
+});
+
 app.patch("/v1/compliance/remediations/:id", { preHandler: authHook }, async (request, reply) => {
   const orgId = (request as any).orgId ?? "default";
   const { id } = request.params as { id: string };
+  const userId = (request as any).userId ?? "unknown";
   try {
-    const result = await withTenant(db, orgId, () => remediationRoutes.update(orgId, id, request.body));
+    const result = await withTenant(db, orgId, () => remediationRoutes.update(orgId, id, { ...request.body as any, completedBy: userId }));
+    const topic = result.status === "completed" || result.status === "accepted_risk" ? "remediation.completed" : "remediation.updated";
+    await eventBus.publish("sentinel.notifications", {
+      id: `evt-${id}-${topic}`,
+      orgId,
+      topic,
+      payload: { remediationId: id, status: result.status },
+      timestamp: new Date().toISOString(),
+    });
+    await auditLog.append(orgId, {
+      actor: { type: "user", id: userId, name: userId },
+      action: "remediation.update",
+      resource: { type: "remediation_item", id },
+      detail: { status: result.status },
+    });
     return result;
-  } catch (err: any) { reply.code(400).send({ error: err.message }); }
+  } catch (err: any) {
+    const msg = err.message ?? "";
+    if (msg.includes("not found")) { reply.code(404).send({ error: msg }); }
+    else if (msg.includes("transition")) { reply.code(409).send({ error: msg }); }
+    else { reply.code(400).send({ error: msg }); }
+  }
+});
+
+app.post("/v1/compliance/remediations/:id/link-external", { preHandler: authHook }, async (request, reply) => {
+  const orgId = (request as any).orgId ?? "default";
+  const { id } = request.params as { id: string };
+  const { provider, externalRef } = request.body as { provider: string; externalRef: string };
+  const userId = (request as any).userId ?? "unknown";
+  try {
+    const result = await withTenant(db, orgId, () => remediationRoutes.linkExternal(orgId, id, externalRef));
+    await eventBus.publish("sentinel.notifications", {
+      id: `evt-${id}-linked`,
+      orgId,
+      topic: "remediation.linked",
+      payload: { remediationId: id, externalRef, linkedBy: userId },
+      timestamp: new Date().toISOString(),
+    });
+    await auditLog.append(orgId, {
+      actor: { type: "user", id: userId, name: userId },
+      action: "remediation.link_external",
+      resource: { type: "remediation_item", id },
+      detail: { externalRef, provider },
+    });
+    return result;
+  } catch (err: any) {
+    const msg = err.message ?? "";
+    if (msg.includes("not found")) { reply.code(404).send({ error: msg }); }
+    else if (msg.includes("already linked")) { reply.code(409).send({ error: msg }); }
+    else { reply.code(400).send({ error: msg }); }
+  }
 });
 
 // --- BAA ---
