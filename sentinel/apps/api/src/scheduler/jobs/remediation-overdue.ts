@@ -2,7 +2,7 @@ import type { SchedulerJob, JobContext } from "../types.js";
 
 export class RemediationOverdueJob implements SchedulerJob {
   name = "remediation-overdue" as const;
-  schedule = "30 6 * * *";
+  schedule = "0 * * * *";
   tier = "non-critical" as const;
   dependencies = ["postgres"] as const;
 

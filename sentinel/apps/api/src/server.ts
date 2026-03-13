@@ -1131,6 +1131,16 @@ app.get("/v1/compliance/dashboard", { preHandler: authHook }, async (request) =>
 app.post("/v1/compliance/remediations", { preHandler: authHook }, async (request, reply) => {
   const orgId = (request as any).orgId ?? "default";
   const userId = (request as any).userId ?? "unknown";
+  const body = request.body as any;
+  if (!body.title || typeof body.title !== "string" || body.title.length > 500) {
+    return reply.status(400).send({ error: "Title is required and must be at most 500 characters" });
+  }
+  if (!body.description || typeof body.description !== "string" || body.description.length > 5000) {
+    return reply.status(400).send({ error: "Description is required and must be at most 5000 characters" });
+  }
+  if (body.evidenceNotes && typeof body.evidenceNotes === "string" && body.evidenceNotes.length > 10000) {
+    return reply.status(400).send({ error: "Evidence notes must be at most 10000 characters" });
+  }
   try {
     const result = await withTenant(db, orgId, () => remediationRoutes.create(orgId, { ...request.body as any, createdBy: userId }));
     await eventBus.publish("sentinel.notifications", {
@@ -1226,6 +1236,10 @@ app.patch("/v1/compliance/remediations/:id", { preHandler: authHook }, async (re
   const orgId = (request as any).orgId ?? "default";
   const { id } = request.params as { id: string };
   const userId = (request as any).userId ?? "unknown";
+  const body = request.body as any;
+  if (body.evidenceNotes && typeof body.evidenceNotes === "string" && body.evidenceNotes.length > 10000) {
+    return reply.status(400).send({ error: "Evidence notes must be at most 10000 characters" });
+  }
   try {
     const result = await withTenant(db, orgId, () => remediationRoutes.update(orgId, id, { ...request.body as any, completedBy: userId }));
     const topic = result.status === "completed" || result.status === "accepted_risk" ? "remediation.completed" : "remediation.updated";
@@ -1363,6 +1377,7 @@ app.post("/v1/compliance/remediations/:id/auto-fix", { preHandler: authHook }, a
     };
     const autoFixService = new AutoFixService(db, stubGitHub, eventBus);
     const result = await withTenant(db, orgId, () => autoFixService.triggerAutoFix(orgId, id, userId));
+    await eventBus.publish("sentinel.notifications", { type: "remediation.auto_fix", orgId, itemId: id, prUrl: result.prUrl });
     return result;
   } catch (err: any) {
     const msg = err.message ?? "";
@@ -1387,6 +1402,9 @@ app.post("/webhooks/jira", { config: { rateLimit: false } }, async (request, rep
   const orgId = (request.query as any).orgId ?? "default";
   try {
     const result = await syncHandler.handleJiraWebhook(request.body, orgId);
+    if (result?.itemId) {
+      await eventBus.publish("sentinel.notifications", { type: "remediation.synced", orgId, itemId: result.itemId, source: "jira" });
+    }
     return result;
   } catch (err: any) {
     reply.code(400).send({ error: err.message });
@@ -1399,6 +1417,9 @@ app.post("/webhooks/integration/github", { config: { rateLimit: false } }, async
   const orgId = (request.query as any).orgId ?? "default";
   try {
     const result = await syncHandler.handleGitHubWebhook(request.body, orgId);
+    if (result?.itemId) {
+      await eventBus.publish("sentinel.notifications", { type: "remediation.synced", orgId, itemId: result.itemId, source: "github" });
+    }
     return result;
   } catch (err: any) {
     reply.code(400).send({ error: err.message });

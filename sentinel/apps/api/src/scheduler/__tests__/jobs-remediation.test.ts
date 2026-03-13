@@ -21,7 +21,7 @@ describe("RemediationOverdueJob", () => {
   test("has correct metadata", () => {
     const job = new RemediationOverdueJob();
     expect(job.name).toBe("remediation-overdue");
-    expect(job.schedule).toBe("30 6 * * *");
+    expect(job.schedule).toBe("0 * * * *");
     expect(job.tier).toBe("non-critical");
     expect(job.dependencies).toContain("postgres");
   });

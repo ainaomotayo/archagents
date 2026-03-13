@@ -168,6 +168,14 @@ export default async function FindingDetailPage({
             {finding.remediation}
           </p>
         </div>
+        <div className="mt-4">
+          <Link
+            href={`/remediations?create=true&findingId=${finding.id}&title=${encodeURIComponent(finding.title)}`}
+            className="inline-flex items-center gap-2 rounded-lg border border-accent/30 bg-accent/10 px-4 py-2 text-[13px] font-semibold text-accent transition-colors hover:bg-accent/20"
+          >
+            Create Remediation
+          </Link>
+        </div>
       </section>
 
       {/* Actions */}

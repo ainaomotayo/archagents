@@ -231,4 +231,5 @@ export const ICON_MAP: Record<string, React.ComponentType<React.SVGProps<SVGSVGE
   settings: IconSettings,
   "check-circle": IconCheckCircle,
   wrench: IconWrench,
+  chart: IconBarChart,
 };

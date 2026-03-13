@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState, useCallback } from "react";
 import type { RemediationItem } from "@/lib/types";
 import { RemediationCard } from "./remediation-card";
 
@@ -8,6 +8,7 @@ interface RemediationKanbanProps {
   items: RemediationItem[];
   selectedId: string | null;
   onSelect: (id: string) => void;
+  onStatusChange?: (itemId: string, newStatus: string) => void;
 }
 
 const COLUMNS: { key: string; label: string; dotColor: string }[] = [
@@ -17,7 +18,9 @@ const COLUMNS: { key: string; label: string; dotColor: string }[] = [
   { key: "accepted_risk", label: "Accepted Risk", dotColor: "bg-text-tertiary" },
 ];
 
-export function RemediationKanban({ items, selectedId, onSelect }: RemediationKanbanProps) {
+export function RemediationKanban({ items, selectedId, onSelect, onStatusChange }: RemediationKanbanProps) {
+  const [dragOverColumn, setDragOverColumn] = useState<string | null>(null);
+
   // Top-level items only, grouped by status
   const columns = useMemo(() => {
     const topLevel = items.filter((i) => !i.parentId);
@@ -30,10 +33,45 @@ export function RemediationKanban({ items, selectedId, onSelect }: RemediationKa
     return grouped;
   }, [items]);
 
+  const handleDragStart = useCallback((e: React.DragEvent<HTMLDivElement>, itemId: string) => {
+    e.dataTransfer.setData("text/plain", itemId);
+    e.dataTransfer.effectAllowed = "move";
+  }, []);
+
+  const handleDragOver = useCallback((e: React.DragEvent<HTMLDivElement>, columnKey: string) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    setDragOverColumn(columnKey);
+  }, []);
+
+  const handleDragLeave = useCallback(() => {
+    setDragOverColumn(null);
+  }, []);
+
+  const handleDrop = useCallback(
+    (e: React.DragEvent<HTMLDivElement>, columnKey: string) => {
+      e.preventDefault();
+      setDragOverColumn(null);
+      const itemId = e.dataTransfer.getData("text/plain");
+      if (itemId && onStatusChange) {
+        onStatusChange(itemId, columnKey);
+      }
+    },
+    [onStatusChange],
+  );
+
   return (
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
       {COLUMNS.map(({ key, label, dotColor }) => (
-        <div key={key} className="flex flex-col rounded-xl border border-border bg-surface-1">
+        <div
+          key={key}
+          className={`flex flex-col rounded-xl border border-border bg-surface-1 transition-shadow ${
+            dragOverColumn === key ? "ring-2 ring-accent/50" : ""
+          }`}
+          onDragOver={(e) => handleDragOver(e, key)}
+          onDragLeave={handleDragLeave}
+          onDrop={(e) => handleDrop(e, key)}
+        >
           {/* Column header */}
           <div className="flex items-center gap-2 border-b border-border px-3 py-2.5">
             <span className={`h-2 w-2 rounded-full ${dotColor}`} />
@@ -50,13 +88,19 @@ export function RemediationKanban({ items, selectedId, onSelect }: RemediationKa
               </div>
             ) : (
               (columns[key] ?? []).map((item) => (
-                <RemediationCard
+                <div
                   key={item.id}
-                  item={item}
-                  selected={selectedId === item.id}
-                  onClick={() => onSelect(item.id)}
-                  compact
-                />
+                  draggable="true"
+                  onDragStart={(e) => handleDragStart(e, item.id)}
+                  className="cursor-grab active:cursor-grabbing"
+                >
+                  <RemediationCard
+                    item={item}
+                    selected={selectedId === item.id}
+                    onClick={() => onSelect(item.id)}
+                    compact
+                  />
+                </div>
               ))
             )}
           </div>

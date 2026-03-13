@@ -382,6 +382,71 @@ export function RemediationDetailPanel({
         </div>
       )}
 
+      {/* Activity Timeline */}
+      <div>
+        <h2 className="mb-3 text-sm font-semibold text-text-primary">Activity</h2>
+        <div className="rounded-xl border border-border bg-surface-1 p-5">
+          <div className="space-y-3">
+            {/* Created event */}
+            <div className="flex items-start gap-3">
+              <div className="mt-1 h-2 w-2 flex-shrink-0 rounded-full bg-accent" />
+              <div>
+                <p className="text-[12px] text-text-secondary">
+                  Created by <span className="font-medium text-text-primary">{item.createdBy}</span>
+                </p>
+                <p className="text-[10px] text-text-tertiary">{formatDate(item.createdAt)}</p>
+              </div>
+            </div>
+            {/* Assigned event - if assigned */}
+            {item.assignedTo && (
+              <div className="flex items-start gap-3">
+                <div className="mt-1 h-2 w-2 flex-shrink-0 rounded-full bg-blue-400" />
+                <div>
+                  <p className="text-[12px] text-text-secondary">
+                    Assigned to <span className="font-medium text-text-primary">{item.assignedTo}</span>
+                  </p>
+                </div>
+              </div>
+            )}
+            {/* External link - if linked */}
+            {item.externalRef && (
+              <div className="flex items-start gap-3">
+                <div className="mt-1 h-2 w-2 flex-shrink-0 rounded-full bg-purple-400" />
+                <div>
+                  <p className="text-[12px] text-text-secondary">
+                    Linked to <span className="font-mono text-[12px] text-accent">{item.externalRef}</span>
+                  </p>
+                </div>
+              </div>
+            )}
+            {/* Completed - if completed */}
+            {item.completedAt && (
+              <div className="flex items-start gap-3">
+                <div className="mt-1 h-2 w-2 flex-shrink-0 rounded-full bg-status-pass" />
+                <div>
+                  <p className="text-[12px] text-text-secondary">
+                    Completed{item.completedBy ? ` by ${item.completedBy}` : ""}
+                  </p>
+                  <p className="text-[10px] text-text-tertiary">{formatDate(item.completedAt)}</p>
+                </div>
+              </div>
+            )}
+            {/* Current status */}
+            {item.status !== "open" && item.status !== "completed" && (
+              <div className="flex items-start gap-3">
+                <div className={`mt-1 h-2 w-2 flex-shrink-0 rounded-full ${statusStyle.dot}`} />
+                <div>
+                  <p className="text-[12px] text-text-secondary">
+                    Status changed to <span className="font-medium text-text-primary">{STATUS_LABELS[item.status] ?? item.status}</span>
+                  </p>
+                  <p className="text-[10px] text-text-tertiary">{formatRelativeTime(item.updatedAt)}</p>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
       {/* Metadata */}
       <div className="text-[11px] text-text-tertiary">
         <span>Created by {item.createdBy}</span>
