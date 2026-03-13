@@ -162,25 +162,49 @@ export function buildApprovalRoutes(deps: ApprovalRouteDeps) {
   }
 
   async function getStats(orgId: string) {
-    const [pending, escalated, approvedToday, rejectedToday] = await Promise.all([
+    const todayStart = new Date(new Date().setHours(0, 0, 0, 0));
+    const fourHoursFromNow = new Date(Date.now() + 4 * 60 * 60 * 1000);
+
+    const [pending, escalated, decidedToday, expiringSoon] = await Promise.all([
       db.approvalGate.count({ where: { orgId, status: "pending" } }),
       db.approvalGate.count({ where: { orgId, status: "escalated" } }),
       db.approvalGate.count({
         where: {
           orgId,
-          status: "approved",
-          decidedAt: { gte: new Date(new Date().setHours(0, 0, 0, 0)) },
+          status: { in: ["approved", "rejected"] },
+          decidedAt: { gte: todayStart },
         },
       }),
       db.approvalGate.count({
         where: {
           orgId,
-          status: "rejected",
-          decidedAt: { gte: new Date(new Date().setHours(0, 0, 0, 0)) },
+          status: { in: ["pending", "escalated"] },
+          expiresAt: { lte: fourHoursFromNow },
         },
       }),
     ]);
-    return { pending, escalated, approvedToday, rejectedToday, queueDepth: pending + escalated };
+
+    // Compute average decision time from today's decided gates
+    const decidedGates = await db.approvalGate.findMany({
+      where: {
+        orgId,
+        status: { in: ["approved", "rejected"] },
+        decidedAt: { gte: todayStart },
+      },
+      select: { requestedAt: true, decidedAt: true },
+    });
+
+    let avgDecisionTimeHours = 0;
+    if (decidedGates.length > 0) {
+      const totalMs = decidedGates.reduce((sum: number, g: any) => {
+        const req = new Date(g.requestedAt).getTime();
+        const dec = new Date(g.decidedAt).getTime();
+        return sum + (dec - req);
+      }, 0);
+      avgDecisionTimeHours = Math.round((totalMs / decidedGates.length / 3_600_000) * 10) / 10;
+    }
+
+    return { pending, escalated, decidedToday, avgDecisionTimeHours, expiringSoon };
   }
 
   return {

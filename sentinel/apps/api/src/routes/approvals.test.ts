@@ -287,21 +287,22 @@ describe("buildApprovalRoutes", () => {
   });
 
   describe("getStats", () => {
-    it("returns queue stats", async () => {
+    it("returns queue stats with correct shape", async () => {
       const routes = buildApprovalRoutes({ db: mockDb as any });
       mockDb.approvalGate.count
         .mockResolvedValueOnce(3)  // pending
         .mockResolvedValueOnce(1)  // escalated
-        .mockResolvedValueOnce(5)  // approvedToday
-        .mockResolvedValueOnce(2); // rejectedToday
+        .mockResolvedValueOnce(5)  // decidedToday
+        .mockResolvedValueOnce(2); // expiringSoon
+      mockDb.approvalGate.findMany.mockResolvedValue([]);
 
       const result = await routes.getStats("org-1");
       expect(result).toEqual({
         pending: 3,
         escalated: 1,
-        approvedToday: 5,
-        rejectedToday: 2,
-        queueDepth: 4,
+        decidedToday: 5,
+        avgDecisionTimeHours: 0,
+        expiringSoon: 2,
       });
     });
   });

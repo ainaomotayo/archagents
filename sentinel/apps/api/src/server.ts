@@ -858,11 +858,15 @@ app.get("/v1/approvals/stream", { preHandler: authHook }, async (request, reply)
 app.get("/v1/approvals/:id", { preHandler: authHook }, async (request, reply) => {
   const orgId = (request as any).orgId ?? "default";
   const { id } = request.params as { id: string };
-  return withTenant(db, orgId, async () => {
-    const gate = await approvalRoutes.getGate(orgId, id);
-    if (!gate) { reply.code(404).send({ error: "Approval gate not found" }); return; }
-    return gate;
-  });
+  try {
+    return await withTenant(db, orgId, async () => {
+      const gate = await approvalRoutes.getGate(orgId, id);
+      if (!gate) { reply.code(404).send({ error: "Approval gate not found" }); return; }
+      return gate;
+    });
+  } catch (err: any) {
+    reply.code(500).send({ error: "Failed to get approval gate" });
+  }
 });
 
 app.post("/v1/approvals/:id/decide", { preHandler: authHook }, async (request, reply) => {

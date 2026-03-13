@@ -30,7 +30,7 @@ CREATE TABLE "approval_gates" (
     "trigger_criteria" JSONB NOT NULL DEFAULT '{}',
     "priority" INTEGER NOT NULL DEFAULT 0,
     "assigned_role" TEXT,
-    "assigned_to" UUID,
+    "assigned_to" TEXT,
     "requested_at" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "requested_by" TEXT NOT NULL,
     "expires_at" TIMESTAMPTZ NOT NULL,
@@ -93,6 +93,9 @@ ALTER TABLE "approval_gates" ADD CONSTRAINT "approval_gates_scan_id_fkey" FOREIG
 
 -- AddForeignKey
 ALTER TABLE "approval_gates" ADD CONSTRAINT "approval_gates_project_id_fkey" FOREIGN KEY ("project_id") REFERENCES "projects"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "approval_gates" ADD CONSTRAINT "approval_gates_policy_id_fkey" FOREIGN KEY ("policy_id") REFERENCES "approval_policies"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "approval_decisions" ADD CONSTRAINT "approval_decisions_gate_id_fkey" FOREIGN KEY ("gate_id") REFERENCES "approval_gates"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
