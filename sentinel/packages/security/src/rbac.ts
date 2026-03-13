@@ -62,6 +62,9 @@ export const API_PERMISSIONS: EndpointPermission[] = [
   { method: "PATCH", path: "/v1/compliance/remediations/:id", roles: ["admin", "manager"] },
   { method: "POST", path: "/v1/compliance/remediations/:id/link-external", roles: ["admin", "manager"] },
   { method: "GET", path: "/v1/compliance/remediations/stream", roles: ["admin", "manager", "developer", "viewer"] },
+  // Workflow Config
+  { method: "GET", path: "/v1/compliance/workflow-config", roles: ["admin", "manager"] },
+  { method: "PUT", path: "/v1/compliance/workflow-config", roles: ["admin"] },
   // Business Associate Agreements
   { method: "POST", path: "/v1/compliance/baa", roles: ["admin"] },
   { method: "GET", path: "/v1/compliance/baa", roles: ["admin", "manager"] },

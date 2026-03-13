@@ -9,6 +9,9 @@ const mockDb = {
     update: vi.fn(),
     count: vi.fn().mockResolvedValue(0),
   },
+  workflowConfig: {
+    findUnique: vi.fn().mockResolvedValue(null),
+  },
 };
 
 describe("RemediationService", () => {
@@ -41,21 +44,21 @@ describe("RemediationService", () => {
     );
   });
 
-  it("updates status from open to in_progress", async () => {
+  it("updates status from open to assigned", async () => {
     mockDb.remediationItem.findUnique.mockResolvedValue({
       id: "rem-1", orgId: "org-1", status: "open",
     });
     mockDb.remediationItem.update.mockResolvedValue({
-      id: "rem-1", status: "in_progress",
+      id: "rem-1", status: "assigned",
     });
 
-    const result = await service.update("org-1", "rem-1", { status: "in_progress" });
-    expect(result.status).toBe("in_progress");
+    const result = await service.update("org-1", "rem-1", { status: "assigned" });
+    expect(result.status).toBe("assigned");
   });
 
   it("updates status to completed with completedBy", async () => {
     mockDb.remediationItem.findUnique.mockResolvedValue({
-      id: "rem-1", orgId: "org-1", status: "in_progress",
+      id: "rem-1", orgId: "org-1", status: "awaiting_deployment",
     });
     mockDb.remediationItem.update.mockResolvedValue({
       id: "rem-1", status: "completed",
@@ -200,12 +203,12 @@ describe("RemediationService", () => {
     mockDb.remediationItem.findUnique.mockResolvedValue({
       id: "child-1", orgId: "org-1", status: "open", parentId: "parent-1",
     });
-    mockDb.remediationItem.update.mockResolvedValue({ id: "child-1", status: "in_progress" });
+    mockDb.remediationItem.update.mockResolvedValue({ id: "child-1", status: "assigned" });
     mockDb.remediationItem.findMany.mockResolvedValue([
-      { id: "child-1", status: "in_progress", priority: "high", dueDate: null, linkedFindingIds: [], findingId: null, priorityScore: 30 },
+      { id: "child-1", status: "assigned", priority: "high", dueDate: null, linkedFindingIds: [], findingId: null, priorityScore: 30 },
     ]);
 
-    await service.update("org-1", "child-1", { status: "in_progress" });
+    await service.update("org-1", "child-1", { status: "assigned" });
 
     // Parent should be updated with max child score
     expect(mockDb.remediationItem.update).toHaveBeenCalledTimes(2); // child + parent
@@ -225,5 +228,39 @@ describe("RemediationService", () => {
     mockDb.remediationItem.findUnique.mockResolvedValue({ id: "rem-1", orgId: "org-1", externalRef: "jira:PROJ-100" });
 
     await expect(service.linkExternal("org-1", "rem-1", "jira:PROJ-123")).rejects.toThrow("already linked");
+  });
+
+  // --- Workflow FSM tests ---
+
+  it("validates status transitions against workflow FSM", async () => {
+    mockDb.remediationItem.findUnique.mockResolvedValue({
+      id: "rem-1", orgId: "org-1", status: "open", parentId: null,
+    });
+    mockDb.workflowConfig.findUnique.mockResolvedValue(null);
+
+    // open -> in_review should fail (must go through assigned, in_progress first)
+    await expect(service.update("org-1", "rem-1", { status: "in_review" })).rejects.toThrow();
+  });
+
+  it("respects org skip stages", async () => {
+    mockDb.remediationItem.findUnique.mockResolvedValue({
+      id: "rem-1", orgId: "org-1", status: "open", parentId: null,
+    });
+    mockDb.workflowConfig.findUnique.mockResolvedValue({ skipStages: ["assigned"] });
+    mockDb.remediationItem.update.mockResolvedValue({ id: "rem-1", status: "in_progress" });
+
+    const result = await service.update("org-1", "rem-1", { status: "in_progress" });
+    expect(result.status).toBe("in_progress");
+  });
+
+  it("allows accepted_risk from any non-terminal state", async () => {
+    mockDb.remediationItem.findUnique.mockResolvedValue({
+      id: "rem-1", orgId: "org-1", status: "in_review", parentId: null,
+    });
+    mockDb.workflowConfig.findUnique.mockResolvedValue(null);
+    mockDb.remediationItem.update.mockResolvedValue({ id: "rem-1", status: "accepted_risk" });
+
+    const result = await service.update("org-1", "rem-1", { status: "accepted_risk" });
+    expect(result.status).toBe("accepted_risk");
   });
 });

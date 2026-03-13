@@ -1241,6 +1241,47 @@ app.post("/v1/compliance/remediations/:id/link-external", { preHandler: authHook
   }
 });
 
+// --- Workflow Config ---
+app.get("/v1/compliance/workflow-config", { preHandler: authHook }, async (request) => {
+  const orgId = (request as any).orgId ?? "default";
+  return withTenant(db, orgId, async () => {
+    const config = await db.workflowConfig.findUnique({ where: { orgId } });
+    return config ?? { skipStages: [] };
+  });
+});
+
+app.put("/v1/compliance/workflow-config", { preHandler: authHook }, async (request, reply) => {
+  const orgId = (request as any).orgId ?? "default";
+  const userId = (request as any).userId ?? "unknown";
+  const { skipStages } = request.body as { skipStages: string[] };
+
+  // Validate skip stages
+  const { WorkflowFSM } = await import("@sentinel/compliance");
+  try {
+    new WorkflowFSM(skipStages); // validates
+  } catch (err: any) {
+    reply.code(400).send({ error: err.message });
+    return;
+  }
+
+  const config = await withTenant(db, orgId, () =>
+    db.workflowConfig.upsert({
+      where: { orgId },
+      create: { orgId, skipStages },
+      update: { skipStages },
+    })
+  );
+
+  await auditLog.append(orgId, {
+    actor: { type: "user", id: userId, name: userId },
+    action: "workflow.config_updated",
+    resource: { type: "workflow_config", id: config.id },
+    detail: { skipStages },
+  });
+
+  return config;
+});
+
 // --- BAA ---
 app.post("/v1/compliance/baa", { preHandler: authHook }, async (request, reply) => {
   const orgId = (request as any).orgId ?? "default";

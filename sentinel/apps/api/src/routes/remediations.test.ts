@@ -7,6 +7,9 @@ const mockDb = {
     findMany: vi.fn(),
     update: vi.fn(),
   },
+  workflowConfig: {
+    findUnique: vi.fn().mockResolvedValue(null),
+  },
 };
 
 vi.mock("@sentinel/db", () => ({
@@ -55,9 +58,9 @@ describe("buildRemediationRoutes", () => {
 
   it("updates a remediation", async () => {
     mockDb.remediationItem.findUnique.mockResolvedValue({ id: "rem-1", orgId: "org-1", status: "open" });
-    mockDb.remediationItem.update.mockResolvedValue({ id: "rem-1", status: "in_progress" });
-    const result = await routes.update("org-1", "rem-1", { status: "in_progress" });
-    expect(result.status).toBe("in_progress");
+    mockDb.remediationItem.update.mockResolvedValue({ id: "rem-1", status: "assigned" });
+    const result = await routes.update("org-1", "rem-1", { status: "assigned" });
+    expect(result.status).toBe("assigned");
   });
 
   it("rejects update for non-existent remediation", async () => {

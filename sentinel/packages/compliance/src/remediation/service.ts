@@ -1,11 +1,5 @@
 import { computePriorityScore } from "./priority-score.js";
-
-const VALID_TRANSITIONS: Record<string, string[]> = {
-  open: ["in_progress", "accepted_risk"],
-  in_progress: ["completed", "accepted_risk", "open"],
-  completed: [],
-  accepted_risk: [],
-};
+import { WorkflowFSM } from "./workflow-fsm.js";
 
 const VALID_PRIORITIES = ["critical", "high", "medium", "low"];
 const VALID_ITEM_TYPES = ["compliance", "finding"];
@@ -101,8 +95,9 @@ export class RemediationService {
     }
 
     if (input.status) {
-      const allowed = VALID_TRANSITIONS[existing.status] ?? [];
-      if (!allowed.includes(input.status)) {
+      const workflowConfig = await this.db.workflowConfig.findUnique({ where: { orgId } });
+      const fsm = new WorkflowFSM(workflowConfig?.skipStages ?? []);
+      if (!fsm.canTransition(existing.status, input.status)) {
         throw new Error(`Invalid status transition from ${existing.status} to ${input.status}`);
       }
     }

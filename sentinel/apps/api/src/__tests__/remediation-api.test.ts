@@ -147,6 +147,7 @@ vi.mock("@sentinel/db", () => {
 
   const tenant: Record<string, any> = {
     remediationItem: remediationItemModel,
+    workflowConfig: makeModel([]),
     // Stubs for models accessed during server boot
     scan: makeModel([]),
     finding: makeModel([]),
