@@ -38,3 +38,4 @@ export { RemediationService, type CreateRemediationInput, type UpdateRemediation
 export { computePriorityScore, type PriorityScoreInput } from "./remediation/priority-score.js";
 export { BAARegistryService, type RegisterBAAInput, type UpdateBAAInput } from "./baa/service.js";
 export { AttestationService, type CreateAttestationInput } from "./attestation/service.js";
+export { WorkflowFSM, WORKFLOW_STAGES, TERMINAL_STAGES, SPECIAL_STAGES } from "./remediation/workflow-fsm.js";
