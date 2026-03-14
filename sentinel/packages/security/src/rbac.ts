@@ -79,6 +79,16 @@ export const API_PERMISSIONS: EndpointPermission[] = [
   // Workflow Config
   { method: "GET", path: "/v1/compliance/workflow-config", roles: ["admin", "manager"] },
   { method: "PUT", path: "/v1/compliance/workflow-config", roles: ["admin"] },
+  // AI Metrics
+  { method: "GET", path: "/v1/ai-metrics/stats", roles: ["admin", "manager", "developer", "viewer"] },
+  { method: "GET", path: "/v1/ai-metrics/trend", roles: ["admin", "manager", "developer", "viewer"] },
+  { method: "GET", path: "/v1/ai-metrics/tools", roles: ["admin", "manager", "developer", "viewer"] },
+  { method: "GET", path: "/v1/ai-metrics/projects", roles: ["admin", "manager", "developer", "viewer"] },
+  { method: "GET", path: "/v1/ai-metrics/projects/compare", roles: ["admin", "manager", "developer", "viewer"] },
+  { method: "GET", path: "/v1/ai-metrics/compliance", roles: ["admin", "manager", "developer"] },
+  { method: "GET", path: "/v1/ai-metrics/alerts", roles: ["admin", "manager"] },
+  { method: "GET", path: "/v1/ai-metrics/config", roles: ["admin", "manager"] },
+  { method: "PUT", path: "/v1/ai-metrics/config", roles: ["admin"] },
   // Business Associate Agreements
   { method: "POST", path: "/v1/compliance/baa", roles: ["admin"] },
   { method: "GET", path: "/v1/compliance/baa", roles: ["admin", "manager"] },

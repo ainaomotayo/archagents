@@ -24,6 +24,7 @@ import { buildWebhookRoutes } from "./routes/notification-endpoints.js";
 import { buildApprovalRoutes } from "./routes/approvals.js";
 import { buildGapAnalysisRoutes } from "./routes/gap-analysis.js";
 import { buildRemediationRoutes } from "./routes/remediations.js";
+import { buildAIMetricsRoutes } from "./routes/ai-metrics.js";
 import { buildBAARoutes } from "./routes/baa.js";
 import { buildAttestationRoutes } from "./routes/attestations.js";
 import { buildNotificationRuleRoutes } from "./routes/notification-rules.js";
@@ -116,6 +117,7 @@ const gapRoutes = buildGapAnalysisRoutes({ db });
 const remediationRoutes = buildRemediationRoutes({ db });
 const baaRoutes = buildBAARoutes({ db });
 const attestationRoutes = buildAttestationRoutes({ db });
+const aiMetricsRoutes = buildAIMetricsRoutes({ db });
 
 // --- Evidence upload service (stub S3 presigner until real provider is configured) ---
 const stubS3Presigner = {
@@ -1788,6 +1790,76 @@ initEncryption(envelope);
 
 registerEncryptionAdminRoutes(app, authHook, dekCache);
 registerDomainRoutes(app, authHook);
+
+// ── AI Metrics ─────────────────────────────────────────
+app.get("/v1/ai-metrics/stats", { preHandler: authHook }, async (request) => {
+  const orgId = (request as any).orgId ?? "default";
+  return withTenant(db, orgId, () => aiMetricsRoutes.getStats(orgId));
+});
+
+app.get("/v1/ai-metrics/trend", { preHandler: authHook }, async (request) => {
+  const orgId = (request as any).orgId ?? "default";
+  const { days, projectId } = request.query as any;
+  return withTenant(db, orgId, () =>
+    aiMetricsRoutes.getTrend(orgId, { days: days ? Number(days) : undefined, projectId: projectId || undefined }),
+  );
+});
+
+app.get("/v1/ai-metrics/tools", { preHandler: authHook }, async (request) => {
+  const orgId = (request as any).orgId ?? "default";
+  const { projectId } = request.query as any;
+  return withTenant(db, orgId, () => aiMetricsRoutes.getTools(orgId, { projectId: projectId || undefined }));
+});
+
+app.get("/v1/ai-metrics/projects", { preHandler: authHook }, async (request) => {
+  const orgId = (request as any).orgId ?? "default";
+  const { limit, sortBy } = request.query as any;
+  return withTenant(db, orgId, () => aiMetricsRoutes.getProjects(orgId, { limit: limit ? Number(limit) : undefined, sortBy: sortBy || undefined }));
+});
+
+app.get("/v1/ai-metrics/projects/compare", { preHandler: authHook }, async (request, reply) => {
+  const orgId = (request as any).orgId ?? "default";
+  const { projectIds, days } = request.query as any;
+  if (!projectIds) return reply.code(400).send({ error: "projectIds required" });
+  const ids = Array.isArray(projectIds) ? projectIds : projectIds.split(",");
+  try {
+    return await withTenant(db, orgId, () => aiMetricsRoutes.compareProjects(orgId, ids, days ? Number(days) : undefined));
+  } catch (err: any) {
+    return reply.code(400).send({ error: err.message });
+  }
+});
+
+app.get("/v1/ai-metrics/compliance", { preHandler: authHook }, async (request) => {
+  const orgId = (request as any).orgId ?? "default";
+  return withTenant(db, orgId, () => aiMetricsRoutes.getCompliance(orgId));
+});
+
+app.get("/v1/ai-metrics/alerts", { preHandler: authHook }, async (request) => {
+  const orgId = (request as any).orgId ?? "default";
+  return withTenant(db, orgId, () => aiMetricsRoutes.getAlerts(orgId));
+});
+
+app.get("/v1/ai-metrics/config", { preHandler: authHook }, async (request) => {
+  const orgId = (request as any).orgId ?? "default";
+  return withTenant(db, orgId, () => aiMetricsRoutes.getConfig(orgId));
+});
+
+app.put("/v1/ai-metrics/config", { preHandler: authHook }, async (request, reply) => {
+  const orgId = (request as any).orgId ?? "default";
+  const userId = (request as any).userId ?? "unknown";
+  try {
+    const result = await withTenant(db, orgId, () => aiMetricsRoutes.updateConfig(orgId, request.body));
+    await auditLog.append(orgId, {
+      actor: { type: "user", id: userId, name: userId },
+      action: "ai_metrics_config.update",
+      resource: { type: "ai_metrics_config", id: orgId },
+      detail: request.body as any,
+    });
+    return result;
+  } catch (err: any) {
+    return reply.code(400).send({ error: err.message });
+  }
+});
 
 // --- Graceful shutdown ---
 const shutdown = async () => {
