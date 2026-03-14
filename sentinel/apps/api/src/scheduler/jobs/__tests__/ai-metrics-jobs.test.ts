@@ -4,12 +4,17 @@ import { AIMetricsRollupJob } from "../ai-metrics-rollup.js";
 import { AIMetricsAnomalyJob } from "../ai-metrics-anomaly.js";
 import type { JobContext } from "../../types.js";
 
-vi.mock("@sentinel/compliance", () => ({
-  AIMetricsService: vi.fn().mockImplementation(() => ({
-    generateDailySnapshot: vi.fn().mockResolvedValue(undefined),
-    getActiveAlerts: vi.fn().mockResolvedValue([]),
-  })),
-}));
+const mockGenerateDailySnapshot = vi.fn().mockResolvedValue(undefined);
+const mockGetActiveAlerts = vi.fn().mockResolvedValue([]);
+
+vi.mock("@sentinel/compliance", () => {
+  return {
+    AIMetricsService: class {
+      generateDailySnapshot = mockGenerateDailySnapshot;
+      getActiveAlerts = mockGetActiveAlerts;
+    },
+  };
+});
 
 function createMockContext(overrides?: Record<string, any>): JobContext {
   return {
@@ -38,6 +43,9 @@ describe("AIMetricsSnapshotJob", () => {
   let job: AIMetricsSnapshotJob;
 
   beforeEach(() => {
+    vi.clearAllMocks();
+    mockGenerateDailySnapshot.mockResolvedValue(undefined);
+    mockGetActiveAlerts.mockResolvedValue([]);
     job = new AIMetricsSnapshotJob();
   });
 
@@ -49,6 +57,7 @@ describe("AIMetricsSnapshotJob", () => {
   });
 
   it("executes for all orgs and logs completion", async () => {
+    mockGenerateDailySnapshot.mockResolvedValue(undefined);
     const ctx = createMockContext();
     ctx.db.organization.findMany.mockResolvedValue([
       { id: "org-1" },
@@ -58,16 +67,22 @@ describe("AIMetricsSnapshotJob", () => {
     await job.execute(ctx);
 
     expect(ctx.logger.info).toHaveBeenCalledWith(
-      { orgs: 2 },
+      { generated: 2, total: 2 },
       "AI metrics daily snapshots generated",
+    );
+    // Should publish snapshot.generated event per org
+    expect(ctx.eventBus.publish).toHaveBeenCalledTimes(2);
+    expect(ctx.eventBus.publish).toHaveBeenCalledWith(
+      "sentinel.notifications",
+      expect.objectContaining({
+        topic: "ai-metrics.snapshot.generated",
+        orgId: "org-1",
+      }),
     );
   });
 
   it("logs error per org on failure but continues", async () => {
-    const { AIMetricsService } = await import("@sentinel/compliance");
-    (AIMetricsService as any).mockImplementation(() => ({
-      generateDailySnapshot: vi.fn().mockRejectedValue(new Error("db error")),
-    }));
+    mockGenerateDailySnapshot.mockRejectedValue(new Error("db error"));
 
     const ctx = createMockContext();
     ctx.db.organization.findMany.mockResolvedValue([
@@ -79,7 +94,7 @@ describe("AIMetricsSnapshotJob", () => {
 
     expect(ctx.logger.error).toHaveBeenCalledTimes(2);
     expect(ctx.logger.info).toHaveBeenCalledWith(
-      { orgs: 2 },
+      { generated: 0, total: 2 },
       "AI metrics daily snapshots generated",
     );
   });
@@ -145,6 +160,8 @@ describe("AIMetricsAnomalyJob", () => {
   let job: AIMetricsAnomalyJob;
 
   beforeEach(() => {
+    vi.clearAllMocks();
+    mockGetActiveAlerts.mockResolvedValue([]);
     job = new AIMetricsAnomalyJob();
   });
 
@@ -156,13 +173,10 @@ describe("AIMetricsAnomalyJob", () => {
   });
 
   it("publishes alerts when anomalies detected", async () => {
-    const { AIMetricsService } = await import("@sentinel/compliance");
-    (AIMetricsService as any).mockImplementation(() => ({
-      getActiveAlerts: vi.fn().mockResolvedValue([
-        { type: "threshold_exceeded", message: "Ratio too high", severity: "warning" },
-        { type: "spike_detected", message: "Spike in AI ratio", severity: "warning" },
-      ]),
-    }));
+    mockGetActiveAlerts.mockResolvedValue([
+      { type: "threshold_exceeded", message: "Ratio too high", severity: "warning" },
+      { type: "spike_detected", message: "Spike in AI ratio", severity: "warning" },
+    ]);
 
     const ctx = createMockContext();
     await job.execute(ctx);
@@ -189,10 +203,7 @@ describe("AIMetricsAnomalyJob", () => {
   });
 
   it("handles no alerts gracefully", async () => {
-    const { AIMetricsService } = await import("@sentinel/compliance");
-    (AIMetricsService as any).mockImplementation(() => ({
-      getActiveAlerts: vi.fn().mockResolvedValue([]),
-    }));
+    mockGetActiveAlerts.mockResolvedValue([]);
 
     const ctx = createMockContext();
     await job.execute(ctx);

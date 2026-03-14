@@ -43,6 +43,13 @@ export class AIMetricsRollupJob implements SchedulerJob {
             aiInfluenceScore: mean(snapshots.map((s: any) => s.aiInfluenceScore)),
             totalFiles: Math.round(mean(snapshots.map((s: any) => s.totalFiles))),
             aiFiles: Math.round(mean(snapshots.map((s: any) => s.aiFiles))),
+            totalLoc: Math.round(mean(snapshots.map((s: any) => s.totalLoc ?? 0))),
+            aiLoc: Math.round(mean(snapshots.map((s: any) => s.aiLoc ?? 0))),
+            avgProbability: mean(snapshots.map((s: any) => s.avgProbability ?? 0)),
+            medianProbability: mean(snapshots.map((s: any) => s.medianProbability ?? 0)),
+            p95Probability: mean(snapshots.map((s: any) => s.p95Probability ?? 0)),
+            toolBreakdown: snapshots[snapshots.length - 1]?.toolBreakdown ?? [],
+            complianceGaps: snapshots[snapshots.length - 1]?.complianceGaps ?? {},
             scanCount: snapshots.reduce((sum: number, s: any) => sum + (s.scanCount ?? 0), 0),
           };
 
@@ -60,7 +67,7 @@ export class AIMetricsRollupJob implements SchedulerJob {
             },
             create: {
               orgId: org.id,
-              projectId,
+              projectId: projectId ?? "",
               granularity: "weekly",
               snapshotDate: weekDate,
               ...avg,

@@ -79,7 +79,7 @@ export class AIMetricsService {
     if (opts.projectId) {
       where.projectId = opts.projectId;
     } else {
-      where.projectId = null;
+      where.projectId = "";
     }
 
     const snapshots = await this.db.aIMetricsSnapshot.findMany({
@@ -236,7 +236,7 @@ export class AIMetricsService {
 
     // Get org ratio history from snapshots
     const historySnapshots = await this.db.aIMetricsSnapshot.findMany({
-      where: { orgId, projectId: null, granularity: "daily" },
+      where: { orgId, projectId: "", granularity: "daily" },
       orderBy: { snapshotDate: "asc" },
       take: 30,
     });
@@ -360,7 +360,7 @@ export class AIMetricsService {
           snapshotDate: date,
         },
       },
-      create: { orgId, projectId: null, granularity: "daily", snapshotDate: date, ...orgSnapshotData },
+      create: { orgId, projectId: "", granularity: "daily", snapshotDate: date, ...orgSnapshotData },
       update: orgSnapshotData,
     });
 

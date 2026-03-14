@@ -13,13 +13,22 @@ export class AIMetricsSnapshotJob implements SchedulerJob {
     today.setUTCHours(0, 0, 0, 0);
     const service = new AIMetricsService(ctx.db);
 
+    let generated = 0;
     for (const org of orgs) {
       try {
         await service.generateDailySnapshot(org.id, today);
+        await ctx.eventBus.publish("sentinel.notifications", {
+          id: `evt-ai-snapshot-${org.id}-${today.toISOString().slice(0, 10)}`,
+          orgId: org.id,
+          topic: "ai-metrics.snapshot.generated",
+          payload: { date: today.toISOString().slice(0, 10) },
+          timestamp: new Date().toISOString(),
+        });
+        generated++;
       } catch (err) {
         ctx.logger.error({ orgId: org.id, err }, "Failed to generate AI metrics snapshot");
       }
     }
-    ctx.logger.info({ orgs: orgs.length }, "AI metrics daily snapshots generated");
+    ctx.logger.info({ generated, total: orgs.length }, "AI metrics daily snapshots generated");
   }
 }

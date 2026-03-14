@@ -220,9 +220,9 @@ describe("AIMetricsService", () => {
       // org-wide + 2 projects = 3 upserts
       expect(db.aIMetricsSnapshot.upsert).toHaveBeenCalledTimes(3);
 
-      // First call is org-wide (projectId null in create)
+      // First call is org-wide (projectId "" for unique constraint compatibility)
       const orgCall = db.aIMetricsSnapshot.upsert.mock.calls[0][0];
-      expect(orgCall.create.projectId).toBeNull();
+      expect(orgCall.create.projectId).toBe("");
       expect(orgCall.create.granularity).toBe("daily");
       expect(orgCall.create.snapshotDate).toEqual(date);
     });
