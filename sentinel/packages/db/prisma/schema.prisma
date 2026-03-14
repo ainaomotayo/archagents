@@ -143,6 +143,8 @@ model Policy {
   projectId String?  @map("project_id") @db.Uuid
   name      String
   rules     Json
+  treeRules Json?    @map("tree_rules")
+  format    String   @default("yaml")
   version   Int      @default(1)
   createdBy String   @map("created_by")
   createdAt DateTime  @default(now()) @map("created_at")
@@ -162,6 +164,8 @@ model PolicyVersion {
   version    Int
   name       String
   rules      Json
+  treeRules  Json?    @map("tree_rules")
+  format     String   @default("yaml")
   changedBy  String   @map("changed_by")
   changedAt  DateTime @default(now()) @map("changed_at")
   changeType String   @map("change_type")

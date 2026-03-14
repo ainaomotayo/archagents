@@ -12,6 +12,7 @@ import { buildScanRoutes } from "./routes/scans.js";
 import { registerWebhookRoutes } from "./routes/webhooks.js";
 import { createScanStore, createAuditEventStore } from "./stores.js";
 import { registerSecurityPlugins } from "./plugins/security.js";
+import { validateAndCompileTree, simulatePolicy } from "./services/policy-service.js";
 
 const app = Fastify({
   logger: {
@@ -370,11 +371,13 @@ app.get("/v1/projects/:id/findings", { preHandler: authHook }, async (request) =
 // --- Policies ---
 const policyBodySchema = {
   type: "object",
-  required: ["name", "rules"],
+  required: ["name"],
   properties: {
     name: { type: "string", minLength: 1, maxLength: 255 },
     rules: { type: "array", items: { type: "object" } },
     projectId: { type: "string", format: "uuid" },
+    format: { type: "string", enum: ["yaml", "tree"] },
+    treeRules: { type: "object" },
   },
   additionalProperties: false,
 } as const;
@@ -402,8 +405,37 @@ app.get("/v1/policies/:id", { preHandler: authHook }, async (request, reply) => 
 app.post("/v1/policies", { preHandler: authHook, schema: { body: policyBodySchema } }, async (request, reply) => {
   const orgId = (request as any).orgId ?? "default";
   const body = request.body as any;
+  const format = body.format ?? "yaml";
+
+  // Tree-format validation
+  if (format === "tree") {
+    if (!body.treeRules) {
+      reply.code(400).send({ error: "treeRules is required when format is tree" });
+      return;
+    }
+    const result = validateAndCompileTree(body.treeRules);
+    if (!result.valid) {
+      reply.code(400).send({ error: "Invalid tree", issues: result.issues });
+      return;
+    }
+    // Auto-populate rules from compiled tree if not provided
+    if (!body.rules) {
+      body.rules = [];
+    }
+  } else {
+    // For yaml format, rules are required
+    if (!body.rules) {
+      reply.code(400).send({ error: "rules is required when format is yaml" });
+      return;
+    }
+  }
+
+  const data: any = { name: body.name, rules: body.rules, format };
+  if (body.treeRules) data.treeRules = body.treeRules;
+  if (body.projectId) data.projectId = body.projectId;
+
   const policy = await withTenant(db, orgId, async (tx) => {
-    return tx.policy.create({ data: body });
+    return tx.policy.create({ data });
   });
   const role = (request as any).role ?? "unknown";
   try {
@@ -437,6 +469,32 @@ app.put("/v1/policies/:id", { preHandler: authHook, schema: { body: policyBodySc
   const orgId = (request as any).orgId ?? "default";
   const { id } = request.params as { id: string };
   const body = request.body as any;
+  const format = body.format ?? "yaml";
+
+  // Tree-format validation
+  if (format === "tree") {
+    if (!body.treeRules) {
+      reply.code(400).send({ error: "treeRules is required when format is tree" });
+      return;
+    }
+    const result = validateAndCompileTree(body.treeRules);
+    if (!result.valid) {
+      reply.code(400).send({ error: "Invalid tree", issues: result.issues });
+      return;
+    }
+    if (!body.rules) {
+      body.rules = [];
+    }
+  } else {
+    if (!body.rules) {
+      reply.code(400).send({ error: "rules is required when format is yaml" });
+      return;
+    }
+  }
+
+  const updateData: any = { name: body.name, rules: body.rules, format, version: { increment: 1 } };
+  if (body.treeRules) updateData.treeRules = body.treeRules;
+
   return withTenant(db, orgId, async (tx) => {
     const existing = await tx.policy.findFirst({ where: { id, deletedAt: null } });
     if (!existing) {
@@ -445,7 +503,7 @@ app.put("/v1/policies/:id", { preHandler: authHook, schema: { body: policyBodySc
     }
     const updated = await tx.policy.update({
       where: { id },
-      data: { name: body.name, rules: body.rules, version: { increment: 1 } },
+      data: updateData,
     });
     const role = (request as any).role ?? "unknown";
     try {
@@ -516,6 +574,37 @@ app.delete("/v1/policies/:id", { preHandler: authHook }, async (request, reply) 
     }
     reply.code(204).send();
   });
+});
+
+// --- Policy simulation & compile-yaml ---
+app.post("/v1/policies/simulate", { preHandler: authHook }, async (request, reply) => {
+  const body = request.body as any;
+  if (!body?.tree || !body?.input) {
+    reply.code(400).send({ error: "tree and input are required" });
+    return;
+  }
+  try {
+    const result = simulatePolicy(body.tree, body.input);
+    return result;
+  } catch (err: any) {
+    reply.code(400).send({ error: err.message ?? "Simulation failed" });
+    return;
+  }
+});
+
+app.post("/v1/policies/compile-yaml", { preHandler: authHook }, async (request, reply) => {
+  const body = request.body as any;
+  if (!body?.tree) {
+    reply.code(400).send({ error: "tree is required" });
+    return;
+  }
+  try {
+    const result = validateAndCompileTree(body.tree);
+    return result;
+  } catch (err: any) {
+    reply.code(400).send({ error: err.message ?? "Compilation failed" });
+    return;
+  }
 });
 
 app.get("/v1/policies/:id/versions", { preHandler: authHook }, async (request) => {

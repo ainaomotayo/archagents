@@ -19,6 +19,7 @@
     "@sentinel/auth": "workspace:*",
     "@sentinel/db": "workspace:*",
     "@sentinel/events": "workspace:*",
+    "@sentinel/policy-engine": "workspace:*",
     "@sentinel/github": "workspace:*",
     "@sentinel/security": "workspace:*",
     "@sentinel/shared": "workspace:*",

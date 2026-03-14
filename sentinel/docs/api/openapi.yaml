@@ -816,6 +816,97 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /v1/policies/simulate:
+    post:
+      operationId: simulatePolicy
+      summary: Simulate a policy tree
+      description: |
+        Evaluate a policy tree against a sample input and return the simulation result
+        with match status, execution trace, and matched actions.
+      tags: [Policies]
+      security:
+        - hmacAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [tree, input]
+              properties:
+                tree:
+                  $ref: "#/components/schemas/GroupNode"
+                input:
+                  $ref: "#/components/schemas/PolicySimulationInput"
+      responses:
+        "200":
+          description: Simulation result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SimulationResult"
+        "400":
+          description: Invalid tree or input
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /v1/policies/compile-yaml:
+    post:
+      operationId: compilePolicyYaml
+      summary: Compile a policy tree to YAML
+      description: |
+        Validate a policy tree and compile it to a YAML representation.
+        Returns validation issues and the compiled YAML string.
+      tags: [Policies]
+      security:
+        - hmacAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [tree]
+              properties:
+                tree:
+                  $ref: "#/components/schemas/GroupNode"
+      responses:
+        "200":
+          description: Compilation result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  valid:
+                    type: boolean
+                  yaml:
+                    type: string
+                  issues:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/ValidationIssue"
+        "400":
+          description: Invalid tree
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /v1/audit:
     get:
       operationId: queryAuditLog
@@ -1332,6 +1423,103 @@ components:
                 enum: [eq, neq, gt, lt, gte, lte, contains, not_contains]
               value:
                 type: string
+
+    GroupNode:
+      type: object
+      required: [id, type, operator, children]
+      properties:
+        id:
+          type: string
+        type:
+          type: string
+          enum: [group]
+        operator:
+          type: string
+          enum: [AND, OR, NOT]
+        children:
+          type: array
+          items:
+            oneOf:
+              - $ref: "#/components/schemas/GroupNode"
+              - $ref: "#/components/schemas/ConditionNode"
+              - $ref: "#/components/schemas/ActionNode"
+
+    ConditionNode:
+      type: object
+      required: [id, type, conditionType, config]
+      properties:
+        id:
+          type: string
+        type:
+          type: string
+          enum: [condition]
+        conditionType:
+          type: string
+        config:
+          type: object
+
+    ActionNode:
+      type: object
+      required: [id, type, actionType, config]
+      properties:
+        id:
+          type: string
+        type:
+          type: string
+          enum: [action]
+        actionType:
+          type: string
+        config:
+          type: object
+
+    PolicySimulationInput:
+      type: object
+      properties:
+        severity:
+          type: string
+        category:
+          type: string
+        riskScore:
+          type: number
+        branch:
+          type: string
+        license:
+          type: string
+
+    SimulationResult:
+      type: object
+      required: [match, trace, matchedActions]
+      properties:
+        match:
+          type: boolean
+        trace:
+          type: array
+          items:
+            type: object
+            required: [nodeId, match]
+            properties:
+              nodeId:
+                type: string
+              match:
+                type: boolean
+              shortCircuited:
+                type: boolean
+        matchedActions:
+          type: array
+          items:
+            $ref: "#/components/schemas/ActionNode"
+
+    ValidationIssue:
+      type: object
+      required: [nodeId, level, message]
+      properties:
+        nodeId:
+          type: string
+        level:
+          type: string
+          enum: [error, warning]
+        message:
+          type: string
 
     AuditEvent:
       type: object

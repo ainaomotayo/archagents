@@ -2,7 +2,12 @@
 
 import { revalidatePath } from "next/cache";
 
-export async function updatePolicy(id: string, data: { name: string; rules: unknown }) {
+export async function updatePolicy(id: string, data: {
+  name: string;
+  rules?: unknown;
+  treeRules?: unknown;
+  format?: "yaml" | "tree";
+}) {
   const { apiPut } = await import("@/lib/api-client");
   const result = await apiPut(`/v1/policies/${id}`, data);
   revalidatePath(`/policies/${id}`);
@@ -10,7 +15,12 @@ export async function updatePolicy(id: string, data: { name: string; rules: unkn
   return result;
 }
 
-export async function createPolicy(data: { name: string; rules: unknown }) {
+export async function createPolicy(data: {
+  name: string;
+  rules?: unknown;
+  treeRules?: unknown;
+  format?: "yaml" | "tree";
+}) {
   const { apiPost } = await import("@/lib/api-client");
   const result = await apiPost<{ id: string }>("/v1/policies", data);
   revalidatePath("/policies");
