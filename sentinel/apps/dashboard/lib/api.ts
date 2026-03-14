@@ -25,6 +25,7 @@ import type {
   Project,
   RemediationItem,
   RemediationStats,
+  RiskTrendResult,
   Scan,
   SlaDataPoint,
   VelocityDataPoint,
@@ -568,6 +569,15 @@ export async function getAutoFixStatus(
       headers,
     );
   }, { status: "none" });
+}
+
+// ── Risk Trends ──────────────────────────────────────────
+
+export async function getRiskTrends(days = 90): Promise<RiskTrendResult> {
+  return tryApi(async (headers) => {
+    const { apiGet } = await import("./api-client");
+    return apiGet<RiskTrendResult>("/v1/risk-trends", { days: String(days) }, headers);
+  }, { trends: {}, meta: { days, generatedAt: new Date().toISOString() } });
 }
 
 function filterMockRemediations(filters?: {

@@ -271,3 +271,23 @@ export interface AIMetricsConfig {
   alertSpikeStdDev: number;
   alertNewTool: boolean;
 }
+
+// Risk Trend
+export interface RiskTrendPoint {
+  date: string;
+  score: number;
+}
+
+export interface ProjectRiskTrend {
+  points: RiskTrendPoint[];
+  direction: "up" | "down" | "flat";
+  changePercent: number;
+}
+
+export interface RiskTrendResult {
+  trends: Record<string, ProjectRiskTrend>;
+  meta: {
+    days: number;
+    generatedAt: string;
+  };
+}
