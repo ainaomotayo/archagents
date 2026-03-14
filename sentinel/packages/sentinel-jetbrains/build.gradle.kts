@@ -11,6 +11,12 @@ repositories {
     mavenCentral()
 }
 
+dependencies {
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.8.1")
+    testImplementation("org.jetbrains.kotlin:kotlin-test-junit5")
+    testImplementation("io.mockk:mockk:1.13.12")
+}
+
 intellij {
     version.set("2024.1")
     type.set("IC")
@@ -23,6 +29,9 @@ tasks {
     }
     patchPluginXml {
         sinceBuild.set("241")
-        untilBuild.set("243.*")
+        untilBuild.set("251.*")
+    }
+    test {
+        useJUnitPlatform()
     }
 }
