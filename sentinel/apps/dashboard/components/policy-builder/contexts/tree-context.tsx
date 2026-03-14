@@ -12,7 +12,6 @@ import {
 
 // ---------------------------------------------------------------------------
 // Types
-// TODO: import from @sentinel/policy-engine once built
 // ---------------------------------------------------------------------------
 
 export interface GroupNode {
