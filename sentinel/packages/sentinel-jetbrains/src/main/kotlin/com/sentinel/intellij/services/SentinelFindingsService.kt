@@ -3,8 +3,8 @@ package com.sentinel.intellij.services
 import com.intellij.openapi.Disposable
 import com.intellij.openapi.components.Service
 import com.intellij.openapi.project.Project
-import com.intellij.openapi.vfs.LocalFileSystem
 import com.intellij.openapi.vfs.VirtualFile
+import com.sentinel.intellij.lsp.SentinelLspRequestManager
 import com.sentinel.intellij.model.Finding
 import com.sentinel.intellij.model.FindingsState
 import kotlinx.coroutines.flow.StateFlow
@@ -28,8 +28,7 @@ class SentinelFindingsService(private val project: Project) : Disposable {
     fun suppressFinding(findingId: String) {
         core.suppressFinding(findingId)
         try {
-            val lsp = project.getService(com.sentinel.intellij.lsp.SentinelLspRequestManager::class.java)
-            lsp.suppressFinding(findingId)
+            SentinelLspRequestManager(project).suppressFinding(findingId)
         } catch (_: Exception) {}
     }
 
