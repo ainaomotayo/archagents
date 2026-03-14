@@ -51,3 +51,7 @@ export { computeTrends, type TrendResult, type TrendPoint, type SnapshotInput } 
 export { selectGranularity } from "./ai-metrics/compute-granularity.js";
 export { detectAnomalies, type AnomalyAlert, type AnomalyConfig, type ProjectSnapshot } from "./ai-metrics/detect-anomalies.js";
 export { AIMetricsService, ORG_WIDE_PROJECT_ID, type ProjectAIMetric } from "./ai-metrics/service.js";
+
+// Risk Trend
+export { fillGaps, computeDirection, computeChangePercent, type TrendPoint as RiskTrendPoint } from "./risk-trend/compute.js";
+export { RiskTrendService, type ProjectTrend, type RiskTrendResult } from "./risk-trend/service.js";
