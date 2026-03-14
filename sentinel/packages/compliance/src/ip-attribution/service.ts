@@ -278,4 +278,26 @@ export class IPAttributionService {
       orderBy: { certificate: { createdAt: "desc" } },
     });
   }
+
+  async getOrgAiRatioTrend(orgId: string, days = 90): Promise<Array<{ date: string; aiRatio: number }>> {
+    const since = new Date();
+    since.setDate(since.getDate() - days);
+
+    const certs = await this.db.iPAttributionCertificate.findMany({
+      where: {
+        orgId,
+        createdAt: { gte: since },
+      },
+      select: {
+        createdAt: true,
+        overallAiRatio: true,
+      },
+      orderBy: { createdAt: "asc" },
+    });
+
+    return certs.map((c: any) => ({
+      date: new Date(c.createdAt).toISOString().slice(0, 10),
+      aiRatio: c.overallAiRatio,
+    }));
+  }
 }

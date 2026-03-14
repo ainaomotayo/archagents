@@ -2044,6 +2044,16 @@ app.get("/v1/scans/:id/ip-attribution/export/cyclonedx", { preHandler: authHook 
   return withTenant(db, orgId, () => ipAttributionRoutes.downloadCycloneDx(id));
 });
 
+app.get("/v1/scans/:id/ip-attribution/export/pdf", { preHandler: authHook }, async (request, reply) => {
+  const orgId = (request as any).orgId ?? "default";
+  const { id } = request.params as { id: string };
+  const result = await withTenant(db, orgId, () => ipAttributionRoutes.downloadPdf(id));
+  if (result.error) return result;
+  reply.header("Content-Type", "application/pdf");
+  reply.header("Content-Disposition", `attachment; filename="ip-attribution-${id}.pdf"`);
+  return reply.send(result.content);
+});
+
 app.get("/v1/ip-attribution/tools", { preHandler: authHook }, async (request) => {
   const orgId = (request as any).orgId ?? "default";
   return withTenant(db, orgId, () => ipAttributionRoutes.getOrgToolBreakdown(orgId));
@@ -2053,6 +2063,12 @@ app.get("/v1/ip-attribution/files/:file/history", { preHandler: authHook }, asyn
   const orgId = (request as any).orgId ?? "default";
   const { file } = request.params as { file: string };
   return withTenant(db, orgId, () => ipAttributionRoutes.getFileHistory(orgId, decodeURIComponent(file)));
+});
+
+app.get("/v1/ip-attribution/ai-trend", { preHandler: authHook }, async (request) => {
+  const orgId = (request as any).orgId ?? "default";
+  const { days = "90" } = request.query as any;
+  return withTenant(db, orgId, () => ipAttributionRoutes.getOrgAiTrend(orgId, parseInt(days, 10)));
 });
 
 app.post("/v1/scans/:id/ip-attribution/generate", { preHandler: authHook }, async (request) => {

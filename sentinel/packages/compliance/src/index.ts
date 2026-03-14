@@ -33,6 +33,8 @@ export {
   type HipaaAssessmentData,
 } from "./reports/generator.js";
 
+export { generateIPAttributionPdf } from "./reports/generator.js";
+
 export { computeGapAnalysis, type GapAnalysis, type GapItem } from "./gap-analysis/service.js";
 export { RemediationService, type CreateRemediationInput, type UpdateRemediationInput } from "./remediation/service.js";
 export { computePriorityScore, type PriorityScoreInput } from "./remediation/priority-score.js";
@@ -80,6 +82,7 @@ export {
 } from "./ip-attribution/certificate.js";
 export { generateSpdxExport } from "./ip-attribution/spdx-export.js";
 export { generateCycloneDxExport } from "./ip-attribution/cyclonedx-export.js";
+export { IPAttributionService } from "./ip-attribution/service.js";
 export type {
   Classification, SourceEvidence, ReconciledAttribution,
   IPAttributionDocument, IPAttributionReportData,

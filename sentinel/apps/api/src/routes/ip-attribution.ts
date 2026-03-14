@@ -3,6 +3,8 @@ import {
   verifyIPAttributionCertificate,
   generateSpdxExport,
   generateCycloneDxExport,
+  generateIPAttributionPdf,
+  type IPAttributionReportData,
 } from "@sentinel/compliance";
 
 interface IPAttributionRouteDeps {
@@ -54,12 +56,34 @@ export function buildIPAttributionRoutes(deps: IPAttributionRouteDeps) {
       return { content: generateCycloneDxExport(doc), contentType: "application/json" };
     },
 
+    downloadPdf: async (scanId: string) => {
+      const doc = await service.getByScanId(scanId);
+      if (!doc) return { error: "Not found", statusCode: 404 };
+      const reportData: IPAttributionReportData = {
+        certificateId: doc.id,
+        generatedAt: doc.provenance.generatedAt,
+        subject: doc.subject,
+        summary: doc.summary,
+        toolBreakdown: doc.toolBreakdown,
+        files: doc.files,
+        methodology: doc.methodology,
+        signature: doc.signature,
+        evidenceChainHash: doc.provenance.evidenceChainHash,
+      };
+      const buffer = await generateIPAttributionPdf(reportData);
+      return { content: buffer, contentType: "application/pdf" };
+    },
+
     getOrgToolBreakdown: async (orgId: string) => {
       return service.getOrgToolBreakdown(orgId);
     },
 
     getFileHistory: async (orgId: string, file: string) => {
       return service.getFileHistory(orgId, file);
+    },
+
+    getOrgAiTrend: async (orgId: string, days: number) => {
+      return service.getOrgAiRatioTrend(orgId, days);
     },
 
     generate: async (scanId: string, orgId: string) => {
