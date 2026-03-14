@@ -1,4 +1,4 @@
-import { getOverviewStats, getRecentScans } from "@/lib/api";
+import { getOverviewStats, getRecentScans, getAIMetricsStats, getAIMetricsTrend } from "@/lib/api";
 import { PageHeader } from "@/components/page-header";
 import { StatusBadge } from "@/components/status-badge";
 import {
@@ -7,6 +7,7 @@ import {
   IconSearch,
   IconActivity,
   IconTrendingUp,
+  IconCpu,
 } from "@/components/icons";
 
 function formatDate(iso: string): string {
@@ -43,8 +44,12 @@ const STAT_ICONS = [
 ];
 
 export default async function OverviewPage() {
-  const stats = await getOverviewStats();
-  const recentScans = await getRecentScans(10);
+  const [stats, recentScans, aiStats, aiTrend] = await Promise.all([
+    getOverviewStats(),
+    getRecentScans(10),
+    getAIMetricsStats().catch(() => null),
+    getAIMetricsTrend(30).catch(() => null),
+  ]);
 
   const statCards = [
     {
@@ -140,6 +145,107 @@ export default async function OverviewPage() {
           })}
         </div>
       </section>
+
+      {/* AI Code Analysis */}
+      {aiStats?.hasData && (
+        <section
+          aria-label="AI code analysis"
+          className="animate-fade-up"
+          style={{ animationDelay: "0.07s" }}
+        >
+          <div className="mb-3 flex items-center justify-between">
+            <h2 className="text-sm font-semibold text-text-primary">
+              AI Code Analysis
+            </h2>
+            <a
+              href="/ai-metrics"
+              className="text-[11px] font-medium text-accent hover:brightness-110 transition-colors"
+            >
+              View details
+            </a>
+          </div>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            {/* AI Code Ratio */}
+            <div className="stat-card group relative overflow-hidden rounded-xl border border-border bg-surface-1 p-5">
+              <div className="absolute -right-6 -top-6 h-24 w-24 rounded-full bg-gradient-radial from-accent/20 to-transparent opacity-0 transition-opacity group-hover:opacity-100" />
+              <div className="relative">
+                <div className="flex items-center justify-between">
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-text-tertiary">
+                    AI Code Ratio
+                  </p>
+                  <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-surface-2 text-accent">
+                    <IconCpu className="h-3.5 w-3.5" />
+                  </div>
+                </div>
+                <p className="mt-2 text-3xl font-bold tracking-tight text-text-primary">
+                  {(aiStats.stats.aiRatio * 100).toFixed(1)}%
+                </p>
+                <div className="mt-2 flex items-center justify-between">
+                  <p className="text-[10px] text-text-tertiary">Of total codebase</p>
+                  {aiTrend && (
+                    <span
+                      className={`text-[10px] font-semibold ${
+                        aiTrend.momChange <= 0
+                          ? "text-status-pass"
+                          : "text-status-warn"
+                      }`}
+                    >
+                      {aiTrend.momChange > 0 ? "+" : ""}
+                      {(aiTrend.momChange * 100).toFixed(1)}% MoM
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* AI Influence */}
+            <div className="stat-card group relative overflow-hidden rounded-xl border border-border bg-surface-1 p-5">
+              <div className="absolute -right-6 -top-6 h-24 w-24 rounded-full bg-gradient-radial from-status-warn/20 to-transparent opacity-0 transition-opacity group-hover:opacity-100" />
+              <div className="relative">
+                <div className="flex items-center justify-between">
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-text-tertiary">
+                    AI Influence
+                  </p>
+                  <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-surface-2 text-status-warn">
+                    <IconTrendingUp className="h-3.5 w-3.5" />
+                  </div>
+                </div>
+                <p className="mt-2 text-3xl font-bold tracking-tight text-text-primary">
+                  {(aiStats.stats.aiInfluenceScore * 100).toFixed(1)}%
+                </p>
+                <div className="mt-2 flex items-center justify-between">
+                  <p className="text-[10px] text-text-tertiary">Weighted influence score</p>
+                </div>
+              </div>
+            </div>
+
+            {/* AI Tools Detected */}
+            <div className="stat-card group relative overflow-hidden rounded-xl border border-border bg-surface-1 p-5">
+              <div className="absolute -right-6 -top-6 h-24 w-24 rounded-full bg-gradient-radial from-status-pass/20 to-transparent opacity-0 transition-opacity group-hover:opacity-100" />
+              <div className="relative">
+                <div className="flex items-center justify-between">
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-text-tertiary">
+                    AI Tools Detected
+                  </p>
+                  <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-surface-2 text-status-pass">
+                    <IconSearch className="h-3.5 w-3.5" />
+                  </div>
+                </div>
+                <p className="mt-2 text-3xl font-bold tracking-tight text-text-primary">
+                  {aiStats.toolBreakdown.length}
+                </p>
+                <div className="mt-2 flex items-center justify-between">
+                  <p className="text-[10px] text-text-tertiary">
+                    {aiStats.toolBreakdown.length > 0
+                      ? `Top: ${aiStats.toolBreakdown[0].tool}`
+                      : "No tools detected"}
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+      )}
 
       <div className="grid gap-6 lg:grid-cols-3">
         {/* Risk trend chart */}

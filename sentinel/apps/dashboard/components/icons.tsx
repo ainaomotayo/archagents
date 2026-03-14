@@ -219,6 +219,16 @@ export function IconWrench(props: React.SVGProps<SVGSVGElement>) {
   );
 }
 
+export function IconCpu(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <rect x="4" y="4" width="16" height="16" rx="2" />
+      <rect x="9" y="9" width="6" height="6" />
+      <path d="M15 2v2M15 20v2M2 15h2M2 9h2M20 15h2M20 9h2M9 2v2M9 20v2" />
+    </svg>
+  );
+}
+
 export const ICON_MAP: Record<string, React.ComponentType<React.SVGProps<SVGSVGElement>>> = {
   home: IconHome,
   folder: IconFolder,
@@ -232,4 +242,5 @@ export const ICON_MAP: Record<string, React.ComponentType<React.SVGProps<SVGSVGE
   "check-circle": IconCheckCircle,
   wrench: IconWrench,
   chart: IconBarChart,
+  cpu: IconCpu,
 };
