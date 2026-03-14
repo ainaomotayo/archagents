@@ -1,4 +1,4 @@
-import { AIMetricsService } from "@sentinel/compliance";
+import { AIMetricsService, ORG_WIDE_PROJECT_ID } from "@sentinel/compliance";
 
 interface AIMetricsRouteDeps {
   db: any;
@@ -15,7 +15,7 @@ export function buildAIMetricsRoutes(deps: AIMetricsRouteDeps) {
     compareProjects: async (orgId: string, projectIds: string[], days?: number) => service.compareProjects(orgId, projectIds, days),
     getCompliance: async (orgId: string) => {
       const snap = await deps.db.aIMetricsSnapshot.findFirst({
-        where: { orgId, projectId: null, granularity: "daily" },
+        where: { orgId, projectId: ORG_WIDE_PROJECT_ID, granularity: "daily" },
         orderBy: { snapshotDate: "desc" },
         select: { complianceGaps: true },
       });

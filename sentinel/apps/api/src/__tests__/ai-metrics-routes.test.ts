@@ -3,43 +3,44 @@ import { buildAIMetricsRoutes } from "../routes/ai-metrics.js";
 
 // ── Mock AIMetricsService ───────────────────────────────────────────────────
 vi.mock("@sentinel/compliance", () => ({
-  AIMetricsService: vi.fn().mockImplementation(() => ({
-    getCurrentStats: vi.fn().mockResolvedValue({
+  ORG_WIDE_PROJECT_ID: "00000000-0000-0000-0000-000000000000",
+  AIMetricsService: class {
+    getCurrentStats = vi.fn().mockResolvedValue({
       hasData: true,
       stats: { aiRatio: 0.35, aiInfluenceScore: 0.4, aiFiles: 7, totalFiles: 20 },
       toolBreakdown: [{ tool: "copilot", count: 5, ratio: 0.25 }],
-    }),
-    getTrend: vi.fn().mockResolvedValue({
+    });
+    getTrend = vi.fn().mockResolvedValue({
       points: [{ date: "2026-03-01", aiRatio: 0.3 }],
       momChange: 0.05,
-    }),
-    getToolBreakdown: vi.fn().mockResolvedValue([
+    });
+    getToolBreakdown = vi.fn().mockResolvedValue([
       { tool: "copilot", count: 5, ratio: 0.25 },
-    ]),
-    getProjectLeaderboard: vi.fn().mockResolvedValue([
+    ]);
+    getProjectLeaderboard = vi.fn().mockResolvedValue([
       { projectId: "p1", projectName: "Alpha", aiRatio: 0.5, aiInfluenceScore: 0.6, aiFiles: 10, totalFiles: 20 },
-    ]),
-    compareProjects: vi.fn().mockImplementation((_orgId: string, projectIds: string[]) => {
+    ]);
+    compareProjects = vi.fn().mockImplementation((_orgId: string, projectIds: string[]) => {
       if (projectIds.length < 2 || projectIds.length > 5) {
         throw new Error("Select 2-5 projects to compare");
       }
       return Promise.resolve({ projects: [], trends: [] });
-    }),
-    getActiveAlerts: vi.fn().mockResolvedValue([]),
-    getConfig: vi.fn().mockResolvedValue({
+    });
+    getActiveAlerts = vi.fn().mockResolvedValue([]);
+    getConfig = vi.fn().mockResolvedValue({
       threshold: 0.5,
       alertEnabled: false,
       alertMaxRatio: null,
       alertSpikeStdDev: 2,
       alertNewTool: false,
-    }),
-    updateConfig: vi.fn().mockImplementation((_orgId: string, data: any) => {
+    });
+    updateConfig = vi.fn().mockImplementation((_orgId: string, data: any) => {
       if (data.threshold !== undefined && (data.threshold < 0 || data.threshold > 1)) {
         throw new Error("Threshold must be between 0 and 1");
       }
       return Promise.resolve({ threshold: data.threshold ?? 0.5 });
-    }),
-  })),
+    });
+  },
 }));
 
 describe("buildAIMetricsRoutes", () => {
