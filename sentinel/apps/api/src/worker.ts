@@ -12,7 +12,7 @@ import {
   shutdownTracing,
 } from "@sentinel/telemetry";
 import { isArchiveEnabled, archiveToS3, getArchiveConfig } from "@sentinel/security";
-import { AIMetricsService } from "@sentinel/compliance";
+import { AIMetricsService, enrichTracesForScan } from "@sentinel/compliance";
 import http from "node:http";
 import { createAssessmentStore } from "./stores.js";
 
@@ -102,6 +102,21 @@ async function finalizeScan(scanId: string, hasTimeouts: boolean) {
     });
 
     await assessor.persist(store, assessment, scanId, scan.orgId);
+
+    // Post-persist hook: enrich AI decision traces with pre-declared metadata
+    try {
+      const enriched = await enrichTracesForScan(
+        db,
+        scanId,
+        scan.metadata,
+        process.env as Record<string, string | undefined>,
+      );
+      if (enriched > 0) {
+        logger.info({ scanId, enriched }, "Decision traces enriched with declared metadata");
+      }
+    } catch (enrichErr) {
+      logger.error({ scanId, err: enrichErr }, "Failed to enrich decision traces (non-fatal)");
+    }
 
     // --- Approval gate check ---
     const { shouldCreateApprovalGate } = await import("./approval-gate.js");

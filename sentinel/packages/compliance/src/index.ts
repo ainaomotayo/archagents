@@ -59,3 +59,11 @@ export { RiskTrendService, type ProjectTrend, type RiskTrendResult } from "./ris
 // Decision Trace
 export { extractTrace, dominantSignal, type TraceSignalDetail, type TraceSignals, type ExtractedTrace } from "./decision-trace/extract.js";
 export { DecisionTraceService } from "./decision-trace/service.js";
+export {
+  parseSentinelAIConfig,
+  configFromEnvVars,
+  matchDeclaredTool,
+  enrichTracesForScan,
+  type DeclaredTool,
+  type SentinelAIConfig,
+} from "./decision-trace/enrichment.js";
