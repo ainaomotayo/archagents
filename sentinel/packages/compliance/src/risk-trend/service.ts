@@ -21,7 +21,7 @@ export class RiskTrendService {
     orgId: string,
     opts: { days?: number } = {},
   ): Promise<RiskTrendResult> {
-    const days = Math.min(opts.days ?? 90, 365);
+    const days = Math.max(1, Math.min(opts.days ?? 90, 365));
     const since = new Date();
     since.setDate(since.getDate() - days);
 
