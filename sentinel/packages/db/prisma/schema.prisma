@@ -36,6 +36,8 @@ model Organization {
   integrationConfigs          IntegrationConfig[]
   workflowConfig              WorkflowConfig?
   remediationSnapshots        RemediationSnapshot[]
+  aiMetricsSnapshots          AIMetricsSnapshot[]
+  aiMetricsConfig             AIMetricsConfig?
 
   @@map("organizations")
 }
@@ -54,6 +56,7 @@ model Project {
   organization  Organization    @relation(fields: [orgId], references: [id])
   scans         Scan[]
   approvalGates ApprovalGate[]
+  aiMetricsSnapshots AIMetricsSnapshot[]
 
   @@index([orgId])
   @@map("projects")
@@ -821,4 +824,55 @@ model RemediationSnapshot {
   @@unique([orgId, snapshotDate, scope, scopeValue])
   @@index([orgId, scope, snapshotDate])
   @@map("remediation_snapshots")
+}
+
+// --- AI Code Metrics ---
+
+model AIMetricsSnapshot {
+  id                String    @id @default(uuid()) @db.Uuid
+  orgId             String    @map("org_id") @db.Uuid
+  projectId         String?   @map("project_id") @db.Uuid
+  snapshotDate      DateTime  @map("snapshot_date") @db.Date
+  granularity       String    @default("daily")
+
+  totalFiles        Int       @map("total_files")
+  aiFiles           Int       @map("ai_files")
+  totalLoc          Int       @map("total_loc")
+  aiLoc             Int       @map("ai_loc")
+  aiRatio           Float     @map("ai_ratio")
+  aiInfluenceScore  Float     @map("ai_influence_score")
+
+  avgProbability    Float     @map("avg_probability")
+  medianProbability Float     @map("median_probability")
+  p95Probability    Float     @map("p95_probability")
+
+  toolBreakdown     Json      @default("[]") @map("tool_breakdown")
+  complianceGaps    Json      @default("{}") @map("compliance_gaps")
+
+  scanCount         Int       @map("scan_count")
+  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz
+
+  organization      Organization @relation(fields: [orgId], references: [id])
+  project           Project?     @relation(fields: [projectId], references: [id])
+
+  @@unique([orgId, projectId, snapshotDate, granularity])
+  @@index([orgId, granularity, snapshotDate(sort: Desc)])
+  @@index([projectId, granularity, snapshotDate(sort: Desc)])
+  @@map("ai_metrics_snapshots")
+}
+
+model AIMetricsConfig {
+  id                String   @id @default(uuid()) @db.Uuid
+  orgId             String   @unique @map("org_id") @db.Uuid
+  threshold         Float    @default(0.50)
+  strictMode        Boolean  @default(false) @map("strict_mode")
+  alertEnabled      Boolean  @default(false) @map("alert_enabled")
+  alertMaxRatio     Float?   @map("alert_max_ratio")
+  alertSpikeStdDev  Float    @default(2.0) @map("alert_spike_std_dev")
+  alertNewTool      Boolean  @default(true) @map("alert_new_tool")
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt         DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  organization      Organization @relation(fields: [orgId], references: [id])
+  @@map("ai_metrics_configs")
 }
