@@ -25,6 +25,7 @@ from sentinel_aidetector.stylometric import (
     analyze_naming_uniformity,
 )
 from sentinel_aidetector.timing import analyze_timing
+from sentinel_aidetector.trace import SignalDetail, TraceBuilder
 
 # Default weights (used when no calibrator is available)
 _WEIGHT_ENTROPY = 0.25
@@ -158,19 +159,47 @@ class AIDetectorAgent(BaseAgent):
                 "standards. Ensure AI-generated code has been manually verified.",
                 category="ai-generated",
                 scanner="ai-detector",
-                extra={
-                    "ai_probability": round(probability, 3),
-                    "entropy": round(entropy, 3),
-                    "token_entropy": round(ast_entropy.token_entropy, 3),
-                    "structure_entropy": round(ast_entropy.structure_entropy, 3),
-                    "naming_entropy": round(ast_entropy.naming_entropy, 3),
-                    "naming_uniformity": round(uniformity, 3),
-                    "marker_count": len(marker_matches),
-                    "marker_tools": marker_tools,
-                    "lines_changed": timing_signal.lines_changed,
-                    "is_burst": timing_signal.is_burst,
-                    "size_uniformity": timing_signal.size_uniformity,
-                },
+                extra=TraceBuilder(
+                    tool_name=marker_tools[0] if marker_tools else None,
+                    entropy=SignalDetail(
+                        weight=_WEIGHT_ENTROPY,
+                        raw_value=round(entropy, 3),
+                        probability=round(entropy_prob, 3),
+                        contribution=round(_WEIGHT_ENTROPY * entropy_prob, 4),
+                        detail={
+                            "tokenEntropy": round(ast_entropy.token_entropy, 3),
+                            "structureEntropy": round(ast_entropy.structure_entropy, 3),
+                            "namingEntropy": round(ast_entropy.naming_entropy, 3),
+                        },
+                    ),
+                    uniformity=SignalDetail(
+                        weight=_WEIGHT_UNIFORMITY,
+                        raw_value=round(uniformity, 3),
+                        probability=round(uniformity, 3),
+                        contribution=round(_WEIGHT_UNIFORMITY * uniformity, 4),
+                    ),
+                    markers=SignalDetail(
+                        weight=_WEIGHT_MARKERS,
+                        raw_value=len(marker_matches),
+                        probability=round(marker_prob, 3),
+                        contribution=round(_WEIGHT_MARKERS * marker_prob, 4),
+                        detail={
+                            "tools": marker_tools,
+                            "matchCount": len(marker_matches),
+                        },
+                    ),
+                    timing=SignalDetail(
+                        weight=_WEIGHT_TIMING,
+                        raw_value=timing_signal.lines_changed,
+                        probability=round(timing_signal.probability, 3),
+                        contribution=round(_WEIGHT_TIMING * timing_signal.probability, 4),
+                        detail={
+                            "linesChanged": timing_signal.lines_changed,
+                            "isBurst": timing_signal.is_burst,
+                            "sizeUniformity": round(timing_signal.size_uniformity, 3),
+                        },
+                    ),
+                ).to_extra(),
             )
 
             # Apply adaptive calibration if available

@@ -41,7 +41,7 @@ def test_clean_code_low_probability():
     assert result.status == "completed"
     # Few lines + no markers -> low or no detection
     for f in result.findings:
-        assert f.extra["ai_probability"] < 0.5
+        assert f.extra["trace"]["overallScore"] < 0.5
 
 
 def test_detects_marker_annotated_code():
@@ -70,8 +70,8 @@ def test_detects_marker_annotated_code():
     assert len(result.findings) >= 1
     finding = result.findings[0]
     assert finding.type == "ai-detection"
-    assert finding.extra["marker_count"] >= 1
-    assert finding.extra["ai_probability"] > 0.2
+    assert finding.extra["trace"]["signals"]["markers"]["detail"]["matchCount"] >= 1
+    assert finding.extra["trace"]["overallScore"] > 0.2
 
 
 def test_bulk_commit_increases_probability():
@@ -94,7 +94,7 @@ def test_bulk_commit_increases_probability():
     result = agent.run_scan(_make_event(files))
     assert result.status == "completed"
     assert len(result.findings) >= 1
-    assert result.findings[0].extra["lines_changed"] == 600
+    assert result.findings[0].extra["trace"]["signals"]["timing"]["detail"]["linesChanged"] == 600
 
 
 def test_empty_diff_no_findings():
@@ -133,8 +133,8 @@ def test_finding_fields():
         f = result.findings[0]
         assert f.scanner == "ai-detector"
         assert f.category == "ai-generated"
-        assert "ai_probability" in f.extra
-        assert 0.0 <= f.extra["ai_probability"] <= 1.0
+        assert "trace" in f.extra
+        assert 0.0 <= f.extra["trace"]["overallScore"] <= 1.0
 
 
 def test_finding_has_ast_entropy_fields():
@@ -152,10 +152,11 @@ def test_finding_has_ast_entropy_fields():
     result = agent.run_scan(_make_event(files))
     if result.findings:
         extra = result.findings[0].extra
-        assert "token_entropy" in extra
-        assert "structure_entropy" in extra
-        assert "naming_entropy" in extra
-        assert "is_burst" in extra
+        signals = extra["trace"]["signals"]
+        assert "tokenEntropy" in signals["entropy"]["detail"]
+        assert "structureEntropy" in signals["entropy"]["detail"]
+        assert "namingEntropy" in signals["entropy"]["detail"]
+        assert "isBurst" in signals["timing"]["detail"]
 
 
 def test_calibrator_adjusts_confidence():
