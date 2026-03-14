@@ -12,7 +12,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
-import java.awt.Component
 import javax.swing.Icon
 
 class SentinelStatusBarWidgetFactory : StatusBarWidgetFactory {
@@ -59,5 +58,4 @@ class SentinelStatusBarWidget(private val project: Project) :
         return "Sentinel: $count finding${if (count != 1) "s" else ""} | $status"
     }
 
-    override fun getAlignment(): Float = Component.CENTER_ALIGNMENT
 }

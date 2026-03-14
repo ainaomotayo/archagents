@@ -17,16 +17,14 @@ class SentinelLspServerDescriptor(private val project: Project) : ProcessStreamC
         val commands = mutableListOf(binary.absolutePath, "--stdio")
         setCommands(commands)
         setWorkingDirectory(project.basePath)
-    }
 
-    override fun getEnvironmentVariables(): Map<String, String> {
         val settings = SentinelSettingsService.getInstance(project)
         val auth = ApplicationManager.getApplication().getService(SentinelAuthService::class.java)
-        return buildMap {
-            put("SENTINEL_API_URL", settings.state.apiUrl)
-            put("SENTINEL_PROJECT_ID", settings.state.projectId)
-            auth.getToken(project)?.let { put("SENTINEL_API_TOKEN", it) }
-        }
+        val env = mutableMapOf<String, String>()
+        env["SENTINEL_API_URL"] = settings.state.apiUrl
+        env["SENTINEL_PROJECT_ID"] = settings.state.projectId
+        auth.getToken(project)?.let { env["SENTINEL_API_TOKEN"] = it }
+        setUserEnvironmentVariables(env)
     }
 
     companion object {
