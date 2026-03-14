@@ -43,3 +43,11 @@ export { EvidenceService, type S3Presigner } from "./remediation/evidence-servic
 export { ChartsService } from "./remediation/charts-service.js";
 export { AutoFixService, type GitHubPRClient } from "./remediation/auto-fix-service.js";
 export { SyncHandler } from "./remediation/sync-handler.js";
+
+// AI Metrics
+export { computeAIRatio, type FileSignal, type AIRatioResult } from "./ai-metrics/compute-ai-ratio.js";
+export { computeToolBreakdown, type ToolBreakdownEntry } from "./ai-metrics/compute-tool-breakdown.js";
+export { computeTrends, type TrendResult, type TrendPoint, type SnapshotInput } from "./ai-metrics/compute-trends.js";
+export { selectGranularity } from "./ai-metrics/compute-granularity.js";
+export { detectAnomalies, type AnomalyAlert, type AnomalyConfig, type ProjectSnapshot } from "./ai-metrics/detect-anomalies.js";
+export { AIMetricsService, type ProjectAIMetric } from "./ai-metrics/service.js";
