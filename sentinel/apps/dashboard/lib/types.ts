@@ -199,3 +199,75 @@ export interface SlaDataPoint {
   date: string;
   compliance: number;
 }
+
+// ── AI Metrics ──────────────────────────────────────────
+export interface AIMetricsStats {
+  hasData: boolean;
+  stats: {
+    aiRatio: number;
+    aiFiles: number;
+    totalFiles: number;
+    aiLoc: number;
+    totalLoc: number;
+    aiInfluenceScore: number;
+    avgProbability: number;
+    medianProbability: number;
+    p95Probability: number;
+  };
+  toolBreakdown: AIToolBreakdownEntry[];
+}
+
+export interface AIToolBreakdownEntry {
+  tool: string;
+  confirmedFiles: number;
+  estimatedFiles: number;
+  totalLoc: number;
+  percentage: number;
+}
+
+export interface AITrendPoint {
+  date: string;
+  aiRatio: number;
+  aiInfluenceScore: number;
+  scanCount: number;
+}
+
+export interface AITrendResult {
+  points: AITrendPoint[];
+  momChange: number;
+  movingAvg7d: number;
+  movingAvg30d: number;
+}
+
+export interface AIProjectMetric {
+  projectId: string;
+  projectName: string;
+  aiRatio: number;
+  aiInfluenceScore: number;
+  aiFiles: number;
+  totalFiles: number;
+}
+
+export interface AIProjectComparison {
+  projectIds: string[];
+  days: number;
+  series: Record<string, { date: string; aiRatio: number; aiInfluenceScore: number }[]>;
+}
+
+export interface AIAnomalyAlert {
+  type: "threshold_exceeded" | "spike_detected" | "new_tool";
+  projectId?: string;
+  projectName?: string;
+  detail: string;
+  severity: "warning" | "critical";
+  detectedAt: string;
+}
+
+export interface AIMetricsConfig {
+  threshold: number;
+  strictMode: boolean;
+  alertEnabled: boolean;
+  alertMaxRatio: number | null;
+  alertSpikeStdDev: number;
+  alertNewTool: boolean;
+}
