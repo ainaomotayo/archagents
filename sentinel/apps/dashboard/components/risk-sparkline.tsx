@@ -1,5 +1,6 @@
 "use client";
 
+import { useId } from "react";
 import {
   AreaChart,
   Area,
@@ -41,13 +42,14 @@ export function RiskSparkline({
   }
 
   const color = COLORS[direction];
+  const gradId = useId();
 
   return (
     <div data-direction={direction} style={{ width, height }}>
       <ResponsiveContainer width="100%" height="100%">
         <AreaChart data={points} margin={{ top: 2, right: 2, bottom: 2, left: 2 }}>
           <defs>
-            <linearGradient id={`sparkGrad-${direction}`} x1="0" y1="0" x2="0" y2="1">
+            <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
               <stop offset="0%" stopColor={color} stopOpacity={0.3} />
               <stop offset="100%" stopColor={color} stopOpacity={0.05} />
             </linearGradient>
@@ -59,7 +61,7 @@ export function RiskSparkline({
             dataKey="score"
             stroke={color}
             strokeWidth={1.5}
-            fill={`url(#sparkGrad-${direction})`}
+            fill={`url(#${gradId})`}
             isAnimationActive={false}
           />
         </AreaChart>
