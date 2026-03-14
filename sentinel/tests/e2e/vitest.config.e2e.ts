@@ -18,6 +18,7 @@ export default defineConfig({
       E2E_SECRET: "e2e-test-secret",
       E2E_ORG_ID: "org-e2e-test",
       E2E_PROJECT_ID: "proj-e2e-test",
+      E2E_SCHEDULER_URL: "http://localhost:9091",
     },
   },
 });

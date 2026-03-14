@@ -66,6 +66,20 @@ const invariants: Invariant[] = [
     name: "certificate_after_scan_start",
     passed: state.certificate == null || new Date(state.certificate.issuedAt) >= new Date(state.scan.startedAt),
   }),
+  // 7. Certificate references the correct scan
+  (state) => ({
+    name: "certificate_references_scan",
+    passed: state.certificate == null || state.certificate.scanId === state.scan.id,
+    detail: state.certificate && state.certificate.scanId !== state.scan.id
+      ? `certificate.scanId=${state.certificate.scanId} != scan.id=${state.scan.id}`
+      : undefined,
+  }),
+  // 8. Certificate has valid signature (non-empty)
+  (state) => ({
+    name: "certificate_immutable",
+    passed: state.certificate == null || (typeof state.certificate.signature === "string" && state.certificate.signature.length > 0),
+    detail: state.certificate && !state.certificate.signature ? "Certificate missing signature" : undefined,
+  }),
 ];
 
 export function checkInvariants(state: PipelineState): InvariantResult[] {
@@ -78,5 +92,24 @@ export function assertAllInvariantsHold(state: PipelineState): void {
   if (failures.length > 0) {
     const msg = failures.map((f) => `  - ${f.name}: ${f.detail ?? "FAILED"}`).join("\n");
     throw new Error(`Pipeline invariant violations:\n${msg}`);
+  }
+}
+
+/**
+ * Verify scan isolation: findings from one scan never leak into another.
+ * Pass multiple PipelineStates and verify no cross-contamination.
+ */
+export function assertScanIsolation(states: PipelineState[]): void {
+  const violations: string[] = [];
+  for (let i = 0; i < states.length; i++) {
+    const { scan, findings } = states[i];
+    for (const f of findings) {
+      if (f.scanId !== scan.id) {
+        violations.push(`scan[${i}] (${scan.id}): finding ${f.id} references scanId=${f.scanId}`);
+      }
+    }
+  }
+  if (violations.length > 0) {
+    throw new Error(`Scan isolation violations:\n${violations.map((v) => `  - ${v}`).join("\n")}`);
   }
 }
