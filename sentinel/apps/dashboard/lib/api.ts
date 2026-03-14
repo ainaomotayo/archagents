@@ -25,6 +25,7 @@ import type {
   Project,
   RemediationItem,
   RemediationStats,
+  DecisionTrace,
   RiskTrendResult,
   Scan,
   SlaDataPoint,
@@ -205,6 +206,7 @@ export async function getFindings(): Promise<Finding[]> {
       codeSnippet: f.rawData?.codeSnippet ?? "",
       remediation: f.remediation ?? "",
       createdAt: f.createdAt,
+      agentName: f.agentName ?? f.agent_name ?? "",
     }));
   }, MOCK_FINDINGS);
 }
@@ -229,6 +231,7 @@ export async function getFindingById(id: string): Promise<Finding | null> {
       codeSnippet: f.rawData?.codeSnippet ?? "",
       remediation: f.remediation ?? "",
       createdAt: f.createdAt,
+      agentName: f.agentName ?? f.agent_name ?? "",
     };
   }, MOCK_FINDINGS.find((f) => f.id === id) ?? null);
 }
@@ -578,6 +581,14 @@ export async function getRiskTrends(days = 90): Promise<RiskTrendResult> {
     const { apiGet } = await import("./api-client");
     return apiGet<RiskTrendResult>("/v1/risk-trends", { days: String(days) }, headers);
   }, { trends: {}, meta: { days, generatedAt: new Date().toISOString() } });
+}
+
+// ── Decision Trace ────────────────────────────────────────────────────
+export async function getDecisionTrace(findingId: string): Promise<DecisionTrace | null> {
+  return tryApi(async (headers) => {
+    const { apiGet } = await import("./api-client");
+    return apiGet<DecisionTrace>(`/v1/findings/${findingId}/trace`, {}, headers);
+  }, null);
 }
 
 function filterMockRemediations(filters?: {

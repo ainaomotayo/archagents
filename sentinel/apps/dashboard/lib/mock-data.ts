@@ -172,6 +172,7 @@ export const MOCK_FINDINGS: Finding[] = [
     remediation:
       "Move the API key to an environment variable and rotate the exposed key immediately. Use a secrets manager for production credentials.",
     createdAt: "2026-03-07T09:15:00Z",
+    agentName: "",
   },
   {
     id: "find-202",
@@ -192,6 +193,7 @@ export const MOCK_FINDINGS: Finding[] = [
     remediation:
       "Use parameterized queries or a query builder that automatically escapes user input. Never concatenate user input into SQL strings.",
     createdAt: "2026-03-07T09:15:00Z",
+    agentName: "",
   },
   {
     id: "find-203",
@@ -212,6 +214,7 @@ export const MOCK_FINDINGS: Finding[] = [
     remediation:
       "Replace MD5 with bcrypt, scrypt, or Argon2 for password hashing. These algorithms are designed for password storage and include salt and work factor parameters.",
     createdAt: "2026-03-06T18:45:00Z",
+    agentName: "",
   },
   {
     id: "find-204",
@@ -232,6 +235,7 @@ export const MOCK_FINDINGS: Finding[] = [
     remediation:
       "Add rate limiting middleware (e.g., express-rate-limit) to the authentication endpoint. Limit to 5-10 attempts per minute per IP address.",
     createdAt: "2026-03-07T09:15:00Z",
+    agentName: "",
   },
   {
     id: "find-205",
@@ -252,6 +256,7 @@ export const MOCK_FINDINGS: Finding[] = [
     remediation:
       "Add a review marker comment (// @ai-reviewed) after manual review of the AI-generated code block to indicate it has been verified by a human.",
     createdAt: "2026-03-06T18:45:00Z",
+    agentName: "",
   },
   {
     id: "find-206",
@@ -272,6 +277,7 @@ export const MOCK_FINDINGS: Finding[] = [
     remediation:
       "Restrict CORS to specific trusted origins. Use environment-specific configuration to allow broader access only in development.",
     createdAt: "2026-03-08T14:30:00Z",
+    agentName: "",
   },
   {
     id: "find-207",
@@ -291,6 +297,7 @@ export const MOCK_FINDINGS: Finding[] = [
     remediation:
       "Update lodash to version 4.17.21 or later which includes the security fix.",
     createdAt: "2026-03-04T16:30:00Z",
+    agentName: "",
   },
 ];
 

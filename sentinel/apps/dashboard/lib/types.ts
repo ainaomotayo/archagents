@@ -55,6 +55,7 @@ export interface Finding {
   codeSnippet: string;
   remediation: string;
   createdAt: string;
+  agentName: string;
 }
 
 export interface Certificate {
@@ -290,4 +291,27 @@ export interface RiskTrendResult {
     days: number;
     generatedAt: string;
   };
+}
+
+// Decision Trace
+export interface DecisionTraceSignal {
+  weight: number;
+  rawValue: number;
+  probability: number;
+  contribution: number;
+  detail: Record<string, unknown>;
+}
+
+export interface DecisionTrace {
+  id: string;
+  findingId: string;
+  toolName: string | null;
+  modelVersion: string | null;
+  promptHash: string | null;
+  promptCategory: string | null;
+  overallScore: number;
+  signals: Record<string, DecisionTraceSignal>;
+  declaredTool: string | null;
+  declaredModel: string | null;
+  enrichedAt: string | null;
 }

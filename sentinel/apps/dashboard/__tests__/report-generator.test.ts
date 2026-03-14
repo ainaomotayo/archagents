@@ -9,9 +9,9 @@ const SCANS: Scan[] = [
 ];
 
 const FINDINGS: Finding[] = [
-  { id: "f1", projectId: "p1", scanId: "s2", title: "Secret", description: "d", severity: "critical", confidence: 90, status: "open", category: "secret-detection", filePath: "a.ts", lineStart: 1, lineEnd: 1, codeSnippet: "", remediation: "", createdAt: "2026-03-05T00:00:00Z" },
-  { id: "f2", projectId: "p1", scanId: "s2", title: "SQL Injection", description: "d", severity: "high", confidence: 85, status: "open", category: "security", filePath: "b.ts", lineStart: 1, lineEnd: 1, codeSnippet: "", remediation: "", createdAt: "2026-03-05T00:00:00Z" },
-  { id: "f3", projectId: "p1", scanId: "s2", title: "Old dep", description: "d", severity: "medium", confidence: 99, status: "resolved", category: "dependency", filePath: "c.ts", lineStart: 1, lineEnd: 1, codeSnippet: "", remediation: "", createdAt: "2026-03-05T00:00:00Z" },
+  { id: "f1", projectId: "p1", scanId: "s2", title: "Secret", description: "d", severity: "critical", confidence: 90, status: "open", category: "secret-detection", filePath: "a.ts", lineStart: 1, lineEnd: 1, codeSnippet: "", remediation: "", createdAt: "2026-03-05T00:00:00Z", agentName: "" },
+  { id: "f2", projectId: "p1", scanId: "s2", title: "SQL Injection", description: "d", severity: "high", confidence: 85, status: "open", category: "security", filePath: "b.ts", lineStart: 1, lineEnd: 1, codeSnippet: "", remediation: "", createdAt: "2026-03-05T00:00:00Z", agentName: "" },
+  { id: "f3", projectId: "p1", scanId: "s2", title: "Old dep", description: "d", severity: "medium", confidence: 99, status: "resolved", category: "dependency", filePath: "c.ts", lineStart: 1, lineEnd: 1, codeSnippet: "", remediation: "", createdAt: "2026-03-05T00:00:00Z", agentName: "" },
 ];
 
 const CERTS: Certificate[] = [
