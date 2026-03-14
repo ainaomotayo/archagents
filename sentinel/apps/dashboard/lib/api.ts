@@ -26,6 +26,9 @@ import type {
   RemediationItem,
   RemediationStats,
   DecisionTrace,
+  IPAttributionCertificate,
+  FileAttribution,
+  AttributionEvidence,
   RiskTrendResult,
   Scan,
   SlaDataPoint,
@@ -589,6 +592,35 @@ export async function getDecisionTrace(findingId: string): Promise<DecisionTrace
     const { apiGet } = await import("./api-client");
     return apiGet<DecisionTrace>(`/v1/findings/${findingId}/trace`, {}, headers);
   }, null);
+}
+
+// ── IP Attribution ──────────────────────────────────────
+export async function getIPAttributionCertificate(scanId: string): Promise<IPAttributionCertificate | null> {
+  return tryApi(async (headers) => {
+    const { apiGet } = await import("./api-client");
+    return apiGet<IPAttributionCertificate>(`/v1/scans/${scanId}/ip-attribution`, {}, headers);
+  }, null);
+}
+
+export async function getIPAttributions(scanId: string): Promise<FileAttribution[]> {
+  return tryApi(async (headers) => {
+    const { apiGet } = await import("./api-client");
+    return apiGet<FileAttribution[]>(`/v1/scans/${scanId}/ip-attribution/files`, {}, headers);
+  }, []);
+}
+
+export async function getFileEvidence(scanId: string, file: string): Promise<(FileAttribution & { evidence: AttributionEvidence[] }) | null> {
+  return tryApi(async (headers) => {
+    const { apiGet } = await import("./api-client");
+    return apiGet<FileAttribution & { evidence: AttributionEvidence[] }>(`/v1/scans/${scanId}/ip-attribution/files/${encodeURIComponent(file)}`, {}, headers);
+  }, null);
+}
+
+export async function getIPAttributionToolBreakdown(): Promise<Array<{ tool: string; files: number; loc: number }>> {
+  return tryApi(async (headers) => {
+    const { apiGet } = await import("./api-client");
+    return apiGet<Array<{ tool: string; files: number; loc: number }>>("/v1/ip-attribution/tools", {}, headers);
+  }, []);
 }
 
 function filterMockRemediations(filters?: {
