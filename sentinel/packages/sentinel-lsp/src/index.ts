@@ -28,7 +28,7 @@ const { createConnection: createNodeConnection } = esmRequire("vscode-languagese
 };
 
 // Only start the server when running as a process (not when imported in tests)
-const isDirectRun = process.argv[1]?.endsWith("index.js") || process.argv.includes("--stdio");
+const isDirectRun = process.argv[1]?.endsWith("index.js") || process.argv[1]?.includes("sentinel-lsp") || process.argv.includes("--stdio");
 if (isDirectRun && process.env.NODE_ENV !== "test") {
   const connection = createNodeConnection(ProposedFeatures.all);
   const documents = new TextDocuments(TextDocument);
