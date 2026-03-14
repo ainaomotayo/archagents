@@ -115,10 +115,38 @@ model Finding {
 
   scan Scan @relation(fields: [scanId], references: [id])
   remediationItems RemediationItem[]
+  decisionTrace   DecisionTrace?
 
   @@index([scanId, severity])
   @@index([orgId])
   @@map("findings")
+}
+
+model DecisionTrace {
+  id              String    @id @default(uuid()) @db.Uuid
+  findingId       String    @unique @map("finding_id") @db.Uuid
+  orgId           String    @map("org_id") @db.Uuid
+  scanId          String    @map("scan_id") @db.Uuid
+
+  toolName        String?   @map("tool_name")
+  modelVersion    String?   @map("model_version")
+  promptHash      String?   @map("prompt_hash")
+  promptCategory  String?   @map("prompt_category")
+
+  overallScore    Float     @map("overall_score")
+  signals         Json      @map("signals")
+
+  declaredTool    String?   @map("declared_tool")
+  declaredModel   String?   @map("declared_model")
+  enrichedAt      DateTime? @map("enriched_at")
+
+  createdAt       DateTime  @default(now()) @map("created_at")
+
+  finding         Finding   @relation(fields: [findingId], references: [id])
+
+  @@index([orgId, toolName])
+  @@index([scanId])
+  @@map("decision_traces")
 }
 
 model Certificate {
