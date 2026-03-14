@@ -1,0 +1,128 @@
+import { Document, Page, View, Text, StyleSheet } from "@react-pdf/renderer";
+import type { IPAttributionReportData } from "../ip-attribution/types.js";
+
+const styles = StyleSheet.create({
+  page: { padding: 40, fontFamily: "Helvetica", fontSize: 10 },
+  title: { fontSize: 20, fontWeight: "bold", marginBottom: 4, color: "#111827" },
+  subtitle: { fontSize: 12, color: "#6b7280", marginBottom: 20 },
+  section: { marginBottom: 16 },
+  sectionTitle: { fontSize: 14, fontWeight: "bold", marginBottom: 8, color: "#1f2937" },
+  row: { flexDirection: "row", justifyContent: "space-between", paddingVertical: 4, borderBottomWidth: 0.5, borderBottomColor: "#e5e7eb" },
+  headerRow: { flexDirection: "row", justifyContent: "space-between", paddingVertical: 4, borderBottomWidth: 1, borderBottomColor: "#1f2937", marginBottom: 4 },
+  cell: { flex: 1 },
+  cellBold: { flex: 1, fontWeight: "bold" },
+  summaryBox: { backgroundColor: "#f9fafb", padding: 12, borderRadius: 4, marginBottom: 12 },
+  summaryRow: { flexDirection: "row", justifyContent: "space-between", marginBottom: 4 },
+  badge: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 3, fontSize: 9 },
+  badgeAI: { backgroundColor: "#fef3c7", color: "#92400e" },
+  badgeHuman: { backgroundColor: "#d1fae5", color: "#065f46" },
+  methodologyText: { fontSize: 9, color: "#6b7280", lineHeight: 1.5 },
+  footer: { position: "absolute", bottom: 30, left: 40, right: 40, textAlign: "center", fontSize: 8, color: "#9ca3af" },
+});
+
+export { type IPAttributionReportData };
+
+export function IPAttributionReport({ data }: { data: IPAttributionReportData }) {
+  const { subject, summary, toolBreakdown, files, methodology, signature } = data;
+
+  return (
+    <Document>
+      <Page size="A4" style={styles.page}>
+        {/* Header */}
+        <Text style={styles.title}>IP Attribution Certificate</Text>
+        <Text style={styles.subtitle}>
+          {subject.repository} — {subject.branch} @ {subject.commitHash.slice(0, 8)}
+        </Text>
+
+        {/* Summary */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Provenance Summary</Text>
+          <View style={styles.summaryBox}>
+            <View style={styles.summaryRow}>
+              <Text>Total Files: {summary.totalFiles}</Text>
+              <Text>Total LOC: {summary.totalLoc}</Text>
+              <Text>AI Ratio: {(summary.overallAiRatio * 100).toFixed(1)}%</Text>
+            </View>
+            <View style={styles.summaryRow}>
+              <Text>Human: {summary.classifications.human.files}</Text>
+              <Text>AI-Generated: {summary.classifications.aiGenerated.files}</Text>
+              <Text>AI-Assisted: {summary.classifications.aiAssisted.files}</Text>
+              <Text>Mixed: {summary.classifications.mixed.files}</Text>
+              <Text>Unknown: {summary.classifications.unknown.files}</Text>
+            </View>
+            <View style={styles.summaryRow}>
+              <Text>Avg Confidence: {(summary.avgConfidence * 100).toFixed(1)}%</Text>
+              <Text>Conflicting Files: {summary.conflictingFiles}</Text>
+            </View>
+          </View>
+        </View>
+
+        {/* Tool Breakdown */}
+        {toolBreakdown.length > 0 && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Tool Attribution</Text>
+            <View style={styles.headerRow}>
+              <Text style={styles.cellBold}>Tool</Text>
+              <Text style={styles.cellBold}>Model</Text>
+              <Text style={styles.cellBold}>Files</Text>
+              <Text style={styles.cellBold}>LOC</Text>
+              <Text style={styles.cellBold}>%</Text>
+            </View>
+            {toolBreakdown.map((t, i) => (
+              <View key={i} style={styles.row}>
+                <Text style={styles.cell}>{t.tool}</Text>
+                <Text style={styles.cell}>{t.model ?? "—"}</Text>
+                <Text style={styles.cell}>{t.files}</Text>
+                <Text style={styles.cell}>{t.loc}</Text>
+                <Text style={styles.cell}>{(t.percentage * 100).toFixed(1)}%</Text>
+              </View>
+            ))}
+          </View>
+        )}
+
+        {/* File Attributions */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>File Attributions</Text>
+          <View style={styles.headerRow}>
+            <Text style={{ ...styles.cellBold, flex: 3 }}>File</Text>
+            <Text style={styles.cellBold}>Classification</Text>
+            <Text style={styles.cellBold}>Confidence</Text>
+            <Text style={styles.cellBold}>Tool</Text>
+            <Text style={styles.cellBold}>Source</Text>
+          </View>
+          {files.slice(0, 100).map((f, i) => (
+            <View key={i} style={styles.row}>
+              <Text style={{ ...styles.cell, flex: 3 }}>{f.path}</Text>
+              <Text style={styles.cell}>{f.classification}</Text>
+              <Text style={styles.cell}>{(f.confidence * 100).toFixed(0)}%</Text>
+              <Text style={styles.cell}>{f.toolName ?? "—"}</Text>
+              <Text style={styles.cell}>{f.primarySource}</Text>
+            </View>
+          ))}
+          {files.length > 100 && (
+            <Text style={{ fontSize: 9, color: "#6b7280", marginTop: 4 }}>
+              ... and {files.length - 100} more files
+            </Text>
+          )}
+        </View>
+
+        {/* Methodology */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Methodology</Text>
+          <Text style={styles.methodologyText}>
+            Algorithm: {methodology.algorithm} v{methodology.algorithmVersion}
+          </Text>
+          <Text style={styles.methodologyText}>
+            Org Base Rate: {(methodology.orgBaseRate * 100).toFixed(0)}%  |  AI-Generated Threshold: {(methodology.classificationThresholds.aiGenerated * 100).toFixed(0)}%  |  AI-Assisted Threshold: {(methodology.classificationThresholds.aiAssisted * 100).toFixed(0)}%
+          </Text>
+          <Text style={styles.methodologyText}>Sources: {methodology.sources.join(", ")}</Text>
+        </View>
+
+        {/* Signature */}
+        <Text style={styles.footer}>
+          Certificate ID: {data.certificateId} | Signature: {signature.slice(0, 16)}... | Generated: {data.generatedAt}
+        </Text>
+      </Page>
+    </Document>
+  );
+}
