@@ -26,6 +26,7 @@ import { buildGapAnalysisRoutes } from "./routes/gap-analysis.js";
 import { buildRemediationRoutes } from "./routes/remediations.js";
 import { buildAIMetricsRoutes } from "./routes/ai-metrics.js";
 import { buildRiskTrendRoutes } from "./routes/risk-trends.js";
+import { buildDecisionTraceRoutes } from "./routes/decision-traces.js";
 import { buildBAARoutes } from "./routes/baa.js";
 import { buildAttestationRoutes } from "./routes/attestations.js";
 import { buildNotificationRuleRoutes } from "./routes/notification-rules.js";
@@ -120,6 +121,7 @@ const baaRoutes = buildBAARoutes({ db });
 const attestationRoutes = buildAttestationRoutes({ db });
 const aiMetricsRoutes = buildAIMetricsRoutes({ db });
 const riskTrendRoutes = buildRiskTrendRoutes({ db });
+const decisionTraceRoutes = buildDecisionTraceRoutes({ db });
 
 // --- Evidence upload service (stub S3 presigner until real provider is configured) ---
 const stubS3Presigner = {
@@ -1982,6 +1984,19 @@ app.get("/v1/risk-trends", { preHandler: authHook }, async (request) => {
   return withTenant(db, orgId, () =>
     riskTrendRoutes.getTrends(orgId, { days: Number.isNaN(parsedDays) ? undefined : parsedDays }),
   );
+});
+
+// ── Decision Traces ────────────────────────────────────────
+app.get("/v1/findings/:id/trace", { preHandler: authHook }, async (request) => {
+  const orgId = (request as any).orgId ?? "default";
+  const { id } = request.params as { id: string };
+  return withTenant(db, orgId, () => decisionTraceRoutes.getByFinding(id));
+});
+
+app.get("/v1/scans/:id/traces", { preHandler: authHook }, async (request) => {
+  const orgId = (request as any).orgId ?? "default";
+  const { id } = request.params as { id: string };
+  return withTenant(db, orgId, () => decisionTraceRoutes.getByScan(id));
 });
 
 // --- Graceful shutdown ---
