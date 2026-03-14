@@ -84,6 +84,7 @@ model Scan {
   agentResults  AgentResult[]
   certificate   Certificate?
   approvalGates ApprovalGate[]
+  ipAttributionCertificate IPAttributionCertificate?
 
   @@index([projectId, startedAt(sort: Desc)])
   @@index([commitHash])
@@ -147,6 +148,68 @@ model DecisionTrace {
   @@index([orgId, toolName])
   @@index([scanId])
   @@map("decision_traces")
+}
+
+model IPAttributionCertificate {
+  id              String    @id @default(uuid()) @db.Uuid
+  scanId          String    @unique @map("scan_id") @db.Uuid
+  orgId           String    @map("org_id") @db.Uuid
+  projectId       String    @map("project_id") @db.Uuid
+  version         String    @default("1.0")
+  document        Json
+  signature       String
+  overallAiRatio  Float     @map("overall_ai_ratio")
+  totalFiles      Int       @map("total_files")
+  totalLoc        Int       @map("total_loc")
+  conflictingFiles Int      @map("conflicting_files")
+  spdxExport      String?   @map("spdx_export") @db.Text
+  cyclonedxExport String?   @map("cyclonedx_export") @db.Text
+  pdfUrl          String?   @map("pdf_url")
+  createdAt       DateTime  @default(now()) @map("created_at")
+
+  scan            Scan      @relation(fields: [scanId], references: [id])
+  fileAttributions FileAttribution[]
+
+  @@index([orgId])
+  @@index([projectId])
+  @@map("ip_attribution_certificates")
+}
+
+model FileAttribution {
+  id              String    @id @default(uuid()) @db.Uuid
+  certificateId   String    @map("certificate_id") @db.Uuid
+  file            String
+  classification  String
+  confidence      Float
+  primarySource   String    @map("primary_source")
+  toolName        String?   @map("tool_name")
+  toolModel       String?   @map("tool_model")
+  loc             Int
+  fusionMethod    String    @map("fusion_method")
+  conflicting     Boolean   @default(false)
+
+  certificate     IPAttributionCertificate @relation(fields: [certificateId], references: [id])
+  evidence        AttributionEvidence[]
+
+  @@index([certificateId])
+  @@index([file])
+  @@map("file_attributions")
+}
+
+model AttributionEvidence {
+  id              String    @id @default(uuid()) @db.Uuid
+  attributionId   String    @map("attribution_id") @db.Uuid
+  source          String
+  classification  String
+  confidence      Float
+  toolName        String?   @map("tool_name")
+  toolModel       String?   @map("tool_model")
+  rawEvidence     Json      @map("raw_evidence")
+
+  attribution     FileAttribution @relation(fields: [attributionId], references: [id])
+
+  @@index([attributionId])
+  @@map("attribution_evidence")
 }
 
 model Certificate {
