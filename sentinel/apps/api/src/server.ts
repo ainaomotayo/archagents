@@ -1978,7 +1978,10 @@ app.put("/v1/ai-metrics/config", { preHandler: authHook }, async (request, reply
 app.get("/v1/risk-trends", { preHandler: authHook }, async (request) => {
   const orgId = (request as any).orgId ?? "default";
   const { days = "90" } = request.query as any;
-  return riskTrendRoutes.getTrends(orgId, { days: parseInt(days, 10) });
+  const parsedDays = parseInt(days, 10);
+  return withTenant(db, orgId, () =>
+    riskTrendRoutes.getTrends(orgId, { days: Number.isNaN(parsedDays) ? undefined : parsedDays }),
+  );
 });
 
 // --- Graceful shutdown ---
