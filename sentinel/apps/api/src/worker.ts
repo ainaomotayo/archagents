@@ -118,6 +118,24 @@ async function finalizeScan(scanId: string, hasTimeouts: boolean) {
       logger.error({ scanId, err: enrichErr }, "Failed to enrich decision traces (non-fatal)");
     }
 
+    // Post-persist hook: publish IP attribution export event
+    try {
+      const ipCert = await db.iPAttributionCertificate.findUnique({
+        where: { scanId },
+        select: { id: true },
+      });
+      if (ipCert) {
+        await eventBus.publish("sentinel.ip-attribution.export", {
+          scanId,
+          orgId: scan.orgId,
+          certificateId: ipCert.id,
+        });
+        logger.info({ scanId, certificateId: ipCert.id }, "IP attribution export event published");
+      }
+    } catch (ipErr) {
+      logger.error({ scanId, err: ipErr }, "Failed to publish IP attribution export event (non-fatal)");
+    }
+
     // --- Approval gate check ---
     const { shouldCreateApprovalGate } = await import("./approval-gate.js");
     const requirement = await shouldCreateApprovalGate({

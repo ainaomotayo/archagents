@@ -1,5 +1,5 @@
 import type { PrismaClient } from "@sentinel/db";
-import { DecisionTraceService } from "@sentinel/compliance";
+import { DecisionTraceService, IPAttributionService } from "@sentinel/compliance";
 
 export function createScanStore(db: PrismaClient) {
   return {
@@ -92,6 +92,18 @@ export function createAssessmentStore(db: PrismaClient) {
               // Best-effort — trace creation failure should not block assessment
             }
           }
+        }
+
+        // 2c: Generate IP attribution certificate (best-effort)
+        try {
+          const ipService = new IPAttributionService(db);
+          await ipService.generateForScan(
+            data.scanId,
+            findingRecords[0]?.orgId ?? "",
+            process.env.SENTINEL_SECRET ?? "",
+          );
+        } catch {
+          // Non-fatal — certificate generation is best-effort
         }
       }
 
