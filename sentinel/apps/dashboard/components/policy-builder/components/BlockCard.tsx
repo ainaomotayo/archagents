@@ -88,6 +88,13 @@ export function BlockCard({ node }: BlockCardProps) {
         e.stopPropagation();
         select(node.id);
       }}
+      onPointerUp={(e) => {
+        // useSortable captures onPointerDown; use onPointerUp for selection
+        if (!isDragging) {
+          e.stopPropagation();
+          select(node.id);
+        }
+      }}
       data-testid="block-card"
       className={`relative rounded-lg border border-border bg-surface-1 px-3 py-2 cursor-pointer transition-all hover:border-accent/50 ${ringClass}`}
     >

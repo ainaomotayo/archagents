@@ -11,6 +11,7 @@ import {
 } from "@/components/policy-validator";
 import { PolicyBuilder } from "@/components/policy-builder";
 import type { GroupNode } from "@/components/policy-builder";
+import { validateTree } from "@sentinel/policy-engine";
 import { IconChevronLeft } from "@/components/icons";
 import { createPolicy } from "../[id]/actions";
 
@@ -33,7 +34,7 @@ export default function NewPolicyPage() {
   const [messages, setMessages] = useState<ValidationMessage[]>(() =>
     validatePolicy(DEFAULT_POLICY),
   );
-  const [treeValid, setTreeValid] = useState(true);
+  const [treeValid, setTreeValid] = useState(false);
   const [saved, setSaved] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
 
@@ -46,8 +47,8 @@ export default function NewPolicyPage() {
 
   const handleTreeChange = useCallback((tree: GroupNode) => {
     treeRef.current = tree;
-    // A tree with at least one child is considered valid
-    setTreeValid(tree.children.length > 0);
+    const issues = validateTree(tree);
+    setTreeValid(!issues.some((i) => i.level === "error"));
     setSaved(false);
     setSaveError(null);
   }, []);

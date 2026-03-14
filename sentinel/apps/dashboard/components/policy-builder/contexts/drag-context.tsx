@@ -11,6 +11,9 @@ import {
 import {
   DndContext,
   DragOverlay,
+  PointerSensor,
+  useSensors,
+  useSensor,
   type DragStartEvent,
   type DragEndEvent,
   pointerWithin,
@@ -49,7 +52,7 @@ const DragContext = createContext<DragContextValue | null>(null);
 // Helpers
 // ---------------------------------------------------------------------------
 
-function createNodeFromPlugin(blockType: string): RuleNode | null {
+export function createNodeFromPlugin(blockType: string): RuleNode | null {
   const plugin = defaultRegistry.get(blockType);
   if (!plugin) return null;
 
@@ -98,6 +101,11 @@ function createNodeFromPlugin(blockType: string): RuleNode | null {
 export function DragProvider({ children }: { children: ReactNode }) {
   const { dispatch } = useTree();
   const [dragState, setDragState] = useState<DragState>(initialDragState);
+
+  // Require 5px movement before activating drag so clicks pass through for selection
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+  );
 
   const handleDragStart = useCallback((event: DragStartEvent) => {
     const { active } = event;
@@ -190,6 +198,7 @@ export function DragProvider({ children }: { children: ReactNode }) {
   return (
     <DragContext value={value}>
       <DndContext
+        sensors={sensors}
         collisionDetection={pointerWithin}
         onDragStart={handleDragStart}
         onDragOver={handleDragOver}
