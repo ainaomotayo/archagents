@@ -332,6 +332,23 @@ export class AIMetricsService {
 
     const allSignals = this.findingsToSignals(findings);
     const orgStats = computeAIRatio(allSignals, config.threshold);
+    const orgToolBreakdown = computeToolBreakdown(allSignals, config.threshold);
+    const orgComplianceGaps = this.computeComplianceGaps(findings);
+
+    const orgSnapshotData = {
+      aiRatio: orgStats.aiRatio,
+      aiInfluenceScore: orgStats.aiInfluenceScore,
+      totalFiles: orgStats.totalFiles,
+      aiFiles: orgStats.aiFiles,
+      totalLoc: orgStats.totalLoc,
+      aiLoc: orgStats.aiLoc,
+      avgProbability: orgStats.avgProbability,
+      medianProbability: orgStats.medianProbability,
+      p95Probability: orgStats.p95Probability,
+      toolBreakdown: orgToolBreakdown as any,
+      complianceGaps: orgComplianceGaps as any,
+      scanCount: findings.length,
+    };
 
     // Upsert org-wide snapshot
     await this.db.aIMetricsSnapshot.upsert({
@@ -343,24 +360,8 @@ export class AIMetricsService {
           snapshotDate: date,
         },
       },
-      create: {
-        orgId,
-        projectId: null,
-        granularity: "daily",
-        snapshotDate: date,
-        aiRatio: orgStats.aiRatio,
-        aiInfluenceScore: orgStats.aiInfluenceScore,
-        totalFiles: orgStats.totalFiles,
-        aiFiles: orgStats.aiFiles,
-        scanCount: findings.length,
-      },
-      update: {
-        aiRatio: orgStats.aiRatio,
-        aiInfluenceScore: orgStats.aiInfluenceScore,
-        totalFiles: orgStats.totalFiles,
-        aiFiles: orgStats.aiFiles,
-        scanCount: findings.length,
-      },
+      create: { orgId, projectId: null, granularity: "daily", snapshotDate: date, ...orgSnapshotData },
+      update: orgSnapshotData,
     });
 
     // Group by project and create per-project snapshots
@@ -375,6 +376,23 @@ export class AIMetricsService {
     for (const [projectId, projectFindings] of byProject) {
       const signals = this.findingsToSignals(projectFindings);
       const stats = computeAIRatio(signals, config.threshold);
+      const toolBreakdown = computeToolBreakdown(signals, config.threshold);
+      const complianceGaps = this.computeComplianceGaps(projectFindings);
+
+      const projData = {
+        aiRatio: stats.aiRatio,
+        aiInfluenceScore: stats.aiInfluenceScore,
+        totalFiles: stats.totalFiles,
+        aiFiles: stats.aiFiles,
+        totalLoc: stats.totalLoc,
+        aiLoc: stats.aiLoc,
+        avgProbability: stats.avgProbability,
+        medianProbability: stats.medianProbability,
+        p95Probability: stats.p95Probability,
+        toolBreakdown: toolBreakdown as any,
+        complianceGaps: complianceGaps as any,
+        scanCount: projectFindings.length,
+      };
 
       await this.db.aIMetricsSnapshot.upsert({
         where: {
@@ -385,26 +403,22 @@ export class AIMetricsService {
             snapshotDate: date,
           },
         },
-        create: {
-          orgId,
-          projectId,
-          granularity: "daily",
-          snapshotDate: date,
-          aiRatio: stats.aiRatio,
-          aiInfluenceScore: stats.aiInfluenceScore,
-          totalFiles: stats.totalFiles,
-          aiFiles: stats.aiFiles,
-          scanCount: projectFindings.length,
-        },
-        update: {
-          aiRatio: stats.aiRatio,
-          aiInfluenceScore: stats.aiInfluenceScore,
-          totalFiles: stats.totalFiles,
-          aiFiles: stats.aiFiles,
-          scanCount: projectFindings.length,
-        },
+        create: { orgId, projectId, granularity: "daily", snapshotDate: date, ...projData },
+        update: projData,
       });
     }
+  }
+
+  private computeComplianceGaps(findings: any[]): Record<string, number> {
+    const gaps: Record<string, number> = {};
+    for (const f of findings) {
+      const category = f.rawData?.compliance_gap ?? f.category ?? "unknown";
+      // Count AI findings lacking provenance, oversight, or bias review
+      if (!f.rawData?.provenance_verified) gaps.provenance = (gaps.provenance ?? 0) + 1;
+      if (!f.rawData?.human_reviewed) gaps.oversight = (gaps.oversight ?? 0) + 1;
+      if (!f.rawData?.bias_checked) gaps.bias = (gaps.bias ?? 0) + 1;
+    }
+    return gaps;
   }
 
   private findingsToSignals(findings: any[]): FileSignal[] {

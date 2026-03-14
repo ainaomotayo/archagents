@@ -12,6 +12,7 @@ import {
   shutdownTracing,
 } from "@sentinel/telemetry";
 import { isArchiveEnabled, archiveToS3, getArchiveConfig } from "@sentinel/security";
+import { AIMetricsService } from "@sentinel/compliance";
 import http from "node:http";
 import { createAssessmentStore } from "./stores.js";
 
@@ -261,6 +262,15 @@ async function finalizeScan(scanId: string, hasTimeouts: boolean) {
       payload: { scanId, riskScore: assessment.riskScore, verdict: assessment.status, findingCount: allFindings.length },
       timestamp: new Date().toISOString(),
     });
+
+    // Post-scan hook: incrementally upsert today's AI metrics snapshot
+    try {
+      const aiMetrics = new AIMetricsService(db);
+      await aiMetrics.generateDailySnapshot(scan.orgId, new Date());
+      logger.info({ scanId, orgId: scan.orgId }, "AI metrics snapshot updated post-scan");
+    } catch (aiErr) {
+      logger.error({ scanId, err: aiErr }, "Failed to update AI metrics post-scan (non-fatal)");
+    }
 
     for (const finding of allFindings) {
       await eventBus.publish("sentinel.notifications", {

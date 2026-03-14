@@ -226,5 +226,43 @@ describe("AIMetricsService", () => {
       expect(orgCall.create.granularity).toBe("daily");
       expect(orgCall.create.snapshotDate).toEqual(date);
     });
+
+    it("persists all snapshot fields including LOC, probabilities, toolBreakdown, and complianceGaps", async () => {
+      const findings = [
+        makeFinding({
+          projectId: "proj-1",
+          file: "a.ts",
+          rawData: { ai_probability: 0.9, loc: 100, marker_tools: ["copilot"], estimated_tool: "copilot" },
+        }),
+      ];
+      db.finding.findMany.mockResolvedValue(findings);
+
+      const date = new Date("2026-03-14");
+      await service.generateDailySnapshot(ORG, date);
+
+      const orgCall = db.aIMetricsSnapshot.upsert.mock.calls[0][0];
+
+      // Verify all fields are present in create
+      expect(orgCall.create).toHaveProperty("totalLoc");
+      expect(orgCall.create).toHaveProperty("aiLoc");
+      expect(orgCall.create).toHaveProperty("avgProbability");
+      expect(orgCall.create).toHaveProperty("medianProbability");
+      expect(orgCall.create).toHaveProperty("p95Probability");
+      expect(orgCall.create).toHaveProperty("toolBreakdown");
+      expect(orgCall.create).toHaveProperty("complianceGaps");
+
+      // Verify values are sensible
+      expect(orgCall.create.totalLoc).toBe(100);
+      expect(orgCall.create.aiLoc).toBe(100);
+      expect(orgCall.create.avgProbability).toBe(0.9);
+      expect(Array.isArray(orgCall.create.toolBreakdown)).toBe(true);
+      expect(typeof orgCall.create.complianceGaps).toBe("object");
+
+      // Verify update also has the same fields
+      expect(orgCall.update).toHaveProperty("totalLoc");
+      expect(orgCall.update).toHaveProperty("aiLoc");
+      expect(orgCall.update).toHaveProperty("toolBreakdown");
+      expect(orgCall.update).toHaveProperty("complianceGaps");
+    });
   });
 });
