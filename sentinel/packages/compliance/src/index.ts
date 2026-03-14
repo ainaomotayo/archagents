@@ -67,3 +67,21 @@ export {
   type DeclaredTool,
   type SentinelAIConfig,
 } from "./decision-trace/enrichment.js";
+
+// IP Attribution
+export { reconcile } from "./ip-attribution/reconciler.js";
+export {
+  adaptAIDetector, adaptDeclared, adaptGit, adaptLicense,
+  AI_COAUTHOR_PATTERNS, BOT_AUTHOR_PATTERNS,
+} from "./ip-attribution/adapters.js";
+export {
+  generateIPAttributionCertificate, verifyIPAttributionCertificate,
+  buildIPAttributionSummary,
+} from "./ip-attribution/certificate.js";
+export { generateSpdxExport } from "./ip-attribution/spdx-export.js";
+export { generateCycloneDxExport } from "./ip-attribution/cyclonedx-export.js";
+export type {
+  Classification, SourceEvidence, ReconciledAttribution,
+  IPAttributionDocument, IPAttributionReportData,
+  ToolBreakdownSummary, GitMetadata, GitFileMetadata,
+} from "./ip-attribution/types.js";
