@@ -4,6 +4,7 @@ import { SeverityBadge } from "@/components/severity-badge";
 import { PageHeader } from "@/components/page-header";
 import { IconChevronLeft } from "@/components/icons";
 import { DecisionTraceCard } from "@/components/decision-trace-card";
+import { IPAttributionCard } from "@/components/ip-attribution-card";
 import { FindingActions } from "./finding-actions";
 
 interface FindingDetailPageProps {
@@ -132,6 +133,8 @@ export default async function FindingDetailPage({
       {finding.agentName === "ai-detector" && (
         <DecisionTraceCard findingId={finding.id} />
       )}
+
+      <IPAttributionCard scanId={finding.scanId} />
 
       {/* Code snippet */}
       <section aria-label="Code snippet" className="animate-fade-up" style={{ animationDelay: "0.1s" }}>
