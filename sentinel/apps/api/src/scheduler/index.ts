@@ -32,6 +32,7 @@ import { RemediationScoreRefreshJob } from "./jobs/remediation-score-refresh.js"
 import { AIMetricsSnapshotJob } from "./jobs/ai-metrics-snapshot.js";
 import { AIMetricsRollupJob } from "./jobs/ai-metrics-rollup.js";
 import { AIMetricsAnomalyJob } from "./jobs/ai-metrics-anomaly.js";
+import { AIMetricsMonthlyRollupJob } from "./jobs/ai-metrics-monthly-rollup.js";
 
 import { createAuditEventStore } from "../stores.js";
 
@@ -243,6 +244,7 @@ export async function startScheduler(): Promise<void> {
     new RemediationScoreRefreshJob(),
     new AIMetricsSnapshotJob(),
     new AIMetricsRollupJob(),
+    new AIMetricsMonthlyRollupJob(),
     new AIMetricsAnomalyJob(),
   ];
   if (config.cveRescanEnabled) {

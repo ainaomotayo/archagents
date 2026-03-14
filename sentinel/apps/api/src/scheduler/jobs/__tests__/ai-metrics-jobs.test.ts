@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { AIMetricsSnapshotJob } from "../ai-metrics-snapshot.js";
 import { AIMetricsRollupJob } from "../ai-metrics-rollup.js";
+import { AIMetricsMonthlyRollupJob } from "../ai-metrics-monthly-rollup.js";
 import { AIMetricsAnomalyJob } from "../ai-metrics-anomaly.js";
 import type { JobContext } from "../../types.js";
 
@@ -9,6 +10,7 @@ const mockGetActiveAlerts = vi.fn().mockResolvedValue([]);
 
 vi.mock("@sentinel/compliance", () => {
   return {
+    ORG_WIDE_PROJECT_ID: "00000000-0000-0000-0000-000000000000",
     AIMetricsService: class {
       generateDailySnapshot = mockGenerateDailySnapshot;
       getActiveAlerts = mockGetActiveAlerts;
@@ -153,6 +155,67 @@ describe("AIMetricsRollupJob", () => {
       { rolledUp: 1 },
       "AI metrics weekly rollup completed",
     );
+  });
+});
+
+describe("AIMetricsMonthlyRollupJob", () => {
+  let job: AIMetricsMonthlyRollupJob;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    job = new AIMetricsMonthlyRollupJob();
+  });
+
+  it("has correct metadata", () => {
+    expect(job.name).toBe("ai-metrics-monthly-rollup");
+    expect(job.schedule).toBe("0 5 1 * *");
+    expect(job.tier).toBe("non-critical");
+    expect(job.dependencies).toContain("postgres");
+  });
+
+  it("skips orgs with no old weekly snapshots", async () => {
+    const ctx = createMockContext();
+    await job.execute(ctx);
+
+    expect(ctx.db.aIMetricsSnapshot.upsert).not.toHaveBeenCalled();
+    expect(ctx.logger.info).toHaveBeenCalledWith(
+      { rolledUp: 0 },
+      "AI metrics monthly rollup completed",
+    );
+  });
+
+  it("rolls up old weekly snapshots into monthly", async () => {
+    const oldDate = new Date();
+    oldDate.setFullYear(oldDate.getFullYear() - 2);
+    const ctx = createMockContext();
+    ctx.db.aIMetricsSnapshot.findMany.mockResolvedValue([
+      {
+        id: "snap-w1",
+        projectId: null,
+        snapshotDate: oldDate,
+        aiRatio: 0.3,
+        aiInfluenceScore: 0.2,
+        totalFiles: 80,
+        aiFiles: 24,
+        totalLoc: 5000,
+        aiLoc: 1500,
+        avgProbability: 0.6,
+        medianProbability: 0.55,
+        p95Probability: 0.9,
+        toolBreakdown: [],
+        complianceGaps: {},
+        scanCount: 7,
+      },
+    ]);
+
+    await job.execute(ctx);
+
+    expect(ctx.db.aIMetricsSnapshot.upsert).toHaveBeenCalled();
+    const call = ctx.db.aIMetricsSnapshot.upsert.mock.calls[0][0];
+    expect(call.create.granularity).toBe("monthly");
+    expect(ctx.db.aIMetricsSnapshot.deleteMany).toHaveBeenCalledWith({
+      where: { id: { in: ["snap-w1"] } },
+    });
   });
 });
 

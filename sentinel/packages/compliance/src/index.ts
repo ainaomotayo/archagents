@@ -50,4 +50,4 @@ export { computeToolBreakdown, type ToolBreakdownEntry } from "./ai-metrics/comp
 export { computeTrends, type TrendResult, type TrendPoint, type SnapshotInput } from "./ai-metrics/compute-trends.js";
 export { selectGranularity } from "./ai-metrics/compute-granularity.js";
 export { detectAnomalies, type AnomalyAlert, type AnomalyConfig, type ProjectSnapshot } from "./ai-metrics/detect-anomalies.js";
-export { AIMetricsService, type ProjectAIMetric } from "./ai-metrics/service.js";
+export { AIMetricsService, ORG_WIDE_PROJECT_ID, type ProjectAIMetric } from "./ai-metrics/service.js";

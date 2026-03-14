@@ -4,6 +4,9 @@ import { computeTrends, type TrendResult, type SnapshotInput } from "./compute-t
 import { selectGranularity } from "./compute-granularity.js";
 import { detectAnomalies, type AnomalyAlert, type AnomalyConfig } from "./detect-anomalies.js";
 
+/** Sentinel UUID used for org-wide snapshots (projectId column is @db.Uuid, can't use "" or null) */
+export const ORG_WIDE_PROJECT_ID = "00000000-0000-0000-0000-000000000000";
+
 export interface ProjectAIMetric {
   projectId: string;
   projectName: string;
@@ -79,7 +82,7 @@ export class AIMetricsService {
     if (opts.projectId) {
       where.projectId = opts.projectId;
     } else {
-      where.projectId = "";
+      where.projectId = ORG_WIDE_PROJECT_ID;
     }
 
     const snapshots = await this.db.aIMetricsSnapshot.findMany({
@@ -236,7 +239,7 @@ export class AIMetricsService {
 
     // Get org ratio history from snapshots
     const historySnapshots = await this.db.aIMetricsSnapshot.findMany({
-      where: { orgId, projectId: "", granularity: "daily" },
+      where: { orgId, projectId: ORG_WIDE_PROJECT_ID, granularity: "daily" },
       orderBy: { snapshotDate: "asc" },
       take: 30,
     });
@@ -355,12 +358,12 @@ export class AIMetricsService {
       where: {
         orgId_projectId_granularity_snapshotDate: {
           orgId,
-          projectId: "",
+          projectId: ORG_WIDE_PROJECT_ID,
           granularity: "daily",
           snapshotDate: date,
         },
       },
-      create: { orgId, projectId: "", granularity: "daily", snapshotDate: date, ...orgSnapshotData },
+      create: { orgId, projectId: ORG_WIDE_PROJECT_ID, granularity: "daily", snapshotDate: date, ...orgSnapshotData },
       update: orgSnapshotData,
     });
 
