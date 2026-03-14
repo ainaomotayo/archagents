@@ -1,0 +1,4 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 12 12">
+  <polygon points="6,1 11,11 1,11" fill="#FB8C00" stroke="#E65100" stroke-width="0.5"/>
+  <text x="6" y="10" text-anchor="middle" font-size="7" font-weight="bold" fill="white">!</text>
+</svg>

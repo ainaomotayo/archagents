@@ -1,0 +1,9 @@
+{
+  "name": "@sentinel/sentinel-jetbrains",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "build": "echo 'JetBrains plugin — build via Gradle: cd packages/sentinel-jetbrains && ./gradlew buildPlugin'",
+    "test": "echo 'no tests yet'"
+  }
+}

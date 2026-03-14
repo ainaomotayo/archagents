@@ -1,0 +1,7 @@
+.gradle/
+build/
+.turbo/
+gradle/wrapper/gradle-wrapper.jar
+*.class
+*.jar
+!gradlew
