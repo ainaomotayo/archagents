@@ -29,6 +29,9 @@ import { RemediationOverdueJob } from "./jobs/remediation-overdue.js";
 import { ApprovalExpiryJob } from "./jobs/approval-expiry.js";
 import { RemediationSnapshotJob } from "./jobs/remediation-snapshot.js";
 import { RemediationScoreRefreshJob } from "./jobs/remediation-score-refresh.js";
+import { AIMetricsSnapshotJob } from "./jobs/ai-metrics-snapshot.js";
+import { AIMetricsRollupJob } from "./jobs/ai-metrics-rollup.js";
+import { AIMetricsAnomalyJob } from "./jobs/ai-metrics-anomaly.js";
 
 import { createAuditEventStore } from "../stores.js";
 
@@ -238,6 +241,9 @@ export async function startScheduler(): Promise<void> {
     new ApprovalExpiryJob(),
     new RemediationSnapshotJob(),
     new RemediationScoreRefreshJob(),
+    new AIMetricsSnapshotJob(),
+    new AIMetricsRollupJob(),
+    new AIMetricsAnomalyJob(),
   ];
   if (config.cveRescanEnabled) {
     allJobs.push(new CVERescanJob());
