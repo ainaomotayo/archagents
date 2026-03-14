@@ -55,3 +55,7 @@ export { AIMetricsService, ORG_WIDE_PROJECT_ID, type ProjectAIMetric } from "./a
 // Risk Trend
 export { fillGaps, computeDirection, computeChangePercent, type TrendPoint as RiskTrendPoint } from "./risk-trend/compute.js";
 export { RiskTrendService, type ProjectTrend, type RiskTrendResult } from "./risk-trend/service.js";
+
+// Decision Trace
+export { extractTrace, dominantSignal, type TraceSignalDetail, type TraceSignals, type ExtractedTrace } from "./decision-trace/extract.js";
+export { DecisionTraceService } from "./decision-trace/service.js";
