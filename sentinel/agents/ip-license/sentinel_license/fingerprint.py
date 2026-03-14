@@ -7,12 +7,13 @@ with text-based normalization fallback. Includes binary format detection.
 from __future__ import annotations
 
 import hashlib
-import json
 import os
 import re
 from dataclasses import dataclass
 
 from sentinel_agents.types import Confidence, DiffEvent, Finding, Severity
+from sentinel_license.fingerprint_db import FingerprintDB
+from sentinel_license.minhash import LSHIndex, MinHashSignature, compute_minhash
 
 # Languages supported by agent_core tree-sitter fingerprinting
 _AST_LANGUAGES = {
@@ -21,21 +22,77 @@ _AST_LANGUAGES = {
 }
 
 
-def _load_oss_fingerprints() -> dict[str, tuple[str, str]]:
-    """Load OSS fingerprint database from seed JSON file."""
-    data_path = os.path.join(
-        os.path.dirname(__file__), "..", "data", "oss_fingerprints.json"
-    )
+# Legacy dict kept for backward compatibility with tests that inject hashes.
+# Primary lookup is via _fingerprint_db (SQLite).
+KNOWN_OSS_HASHES: dict[str, tuple[str, str]] = {}
+
+
+def _resolve_data_path(filename: str) -> str:
+    """Resolve path to a data file, supporting both dev and Docker layouts.
+
+    Checks (in order):
+    1. SENTINEL_DATA_DIR env var (explicit override for Docker/k8s)
+    2. Relative to source: ``sentinel_license/../data/``  (dev / editable install)
+    3. ``/app/data/`` (Docker fallback via shared agent.Dockerfile)
+    """
+    env_dir = os.environ.get("SENTINEL_DATA_DIR")
+    if env_dir:
+        return os.path.join(env_dir, filename)
+
+    dev_path = os.path.join(os.path.dirname(__file__), "..", "data", filename)
+    if os.path.exists(dev_path):
+        return dev_path
+
+    # Docker: shared agent.Dockerfile puts agent at /app/agent/
+    docker_path = os.path.join("/app", "agent", "data", filename)
+    if os.path.exists(docker_path):
+        return docker_path
+
+    # Default to dev path (will create new DB if needed)
+    return dev_path
+
+
+def _init_fingerprint_db() -> FingerprintDB:
+    """Load the SQLite fingerprint DB, falling back to JSON import."""
+    db_path = _resolve_data_path("oss_fingerprints.db")
+    json_path = _resolve_data_path("oss_fingerprints.json")
+    if os.path.exists(db_path):
+        return FingerprintDB(db_path)
+    # Create DB and import from legacy JSON if available
+    db = FingerprintDB(db_path)
+    if os.path.exists(json_path):
+        try:
+            db.import_legacy_json(json_path)
+        except Exception:
+            pass
+    return db
+
+
+_fingerprint_db: FingerprintDB = _init_fingerprint_db()
+
+
+def _tokenize_window(code: str, language: str) -> set[str]:
+    """Split code into tokens, return set of 3-grams."""
+    # Split on whitespace and punctuation boundaries
+    tokens = re.findall(r"[A-Za-z_]\w*|[^\s]", code)
+    if len(tokens) < 3:
+        return set()
+    ngrams: set[str] = set()
+    for i in range(len(tokens) - 2):
+        ngrams.add(f"{tokens[i]} {tokens[i+1]} {tokens[i+2]}")
+    return ngrams
+
+
+def _init_lsh_index() -> tuple[LSHIndex, dict, dict]:
+    """Lazily load the LSH index from the fingerprint DB."""
     try:
-        with open(data_path) as f:
-            raw = json.load(f)
-        return {k: tuple(v) for k, v in raw.get("fingerprints", {}).items()}
-    except (FileNotFoundError, json.JSONDecodeError):
-        return {}
+        return _fingerprint_db.load_lsh_index()
+    except Exception:
+        from sentinel_license.fingerprint_db import FingerprintRecord
+        return LSHIndex(), {}, {}
 
 
-# Maps normalized code hash -> (source_url, license)
-KNOWN_OSS_HASHES: dict[str, tuple[str, str]] = _load_oss_fingerprints()
+_lsh_index, _lsh_records, _lsh_sigs = _init_lsh_index()
 
 
 # --- Binary Format Detection ---
@@ -144,34 +201,83 @@ def fingerprint_code(event: DiffEvent) -> list[Finding]:
                     continue
                 fprint = hash_fragment(normalized)
 
-            if fprint in KNOWN_OSS_HASHES:
+            # Try SQLite DB first, then fall back to legacy dict
+            rec = _fingerprint_db.lookup(fprint)
+            if rec is not None:
+                source = rec.source_url
+                license_name = rec.spdx_license or "unknown"
+                extra = {
+                    "similarityScore": 1.0,
+                    "sourceMatch": source,
+                    "licenseDetected": license_name,
+                    "findingType": "copyleft-risk",
+                    "policyAction": "review",
+                    "packageVersion": rec.package_version,
+                    "ecosystem": rec.ecosystem,
+                    "matchType": "exact",
+                }
+            elif fprint in KNOWN_OSS_HASHES:
                 source, license_name = KNOWN_OSS_HASHES[fprint]
-                findings.append(
-                    Finding(
-                        type="license",
-                        file=diff_file.path,
-                        line_start=start_line + i,
-                        line_end=start_line + i + window_size,
-                        severity=(
-                            Severity.HIGH
-                            if license_name in ("GPL", "AGPL")
-                            else Severity.MEDIUM
-                        ),
-                        confidence=Confidence.MEDIUM,
-                        title=f"Code matches known OSS: {source}",
-                        description=(
-                            f"Code fragment matches {source} (license: {license_name})"
-                        ),
-                        category="copyleft-risk",
-                        scanner="fingerprint",
-                        extra={
-                            "similarityScore": 1.0,
-                            "sourceMatch": source,
-                            "licenseDetected": license_name,
-                            "findingType": "copyleft-risk",
-                            "policyAction": "review",
-                        },
-                    )
+                extra = {
+                    "similarityScore": 1.0,
+                    "sourceMatch": source,
+                    "licenseDetected": license_name,
+                    "findingType": "copyleft-risk",
+                    "policyAction": "review",
+                }
+            else:
+                # Fuzzy matching fallback via MinHash/LSH
+                tokens = _tokenize_window(window, lang)
+                if not tokens:
+                    continue
+                sig = compute_minhash(tokens)
+                candidates = _lsh_index.query(sig)
+                best_sim = 0.0
+                best_id = None
+                for cand_id in candidates:
+                    cand_sig = _lsh_sigs.get(cand_id)
+                    if cand_sig is None:
+                        continue
+                    sim = sig.similarity(cand_sig)
+                    if sim > best_sim:
+                        best_sim = sim
+                        best_id = cand_id
+                if best_id is None or best_sim < 0.7:
+                    continue
+                rec = _lsh_records[best_id]
+                source = rec.source_url
+                license_name = rec.spdx_license or "unknown"
+                extra = {
+                    "similarityScore": best_sim,
+                    "sourceMatch": source,
+                    "licenseDetected": license_name,
+                    "findingType": "copyleft-risk",
+                    "policyAction": "review",
+                    "packageVersion": rec.package_version,
+                    "ecosystem": rec.ecosystem,
+                    "matchType": "fuzzy",
+                }
+
+            findings.append(
+                Finding(
+                    type="license",
+                    file=diff_file.path,
+                    line_start=start_line + i,
+                    line_end=start_line + i + window_size,
+                    severity=(
+                        Severity.HIGH
+                        if license_name in ("GPL", "AGPL")
+                        else Severity.MEDIUM
+                    ),
+                    confidence=Confidence.MEDIUM,
+                    title=f"Code matches known OSS: {source}",
+                    description=(
+                        f"Code fragment matches {source} (license: {license_name})"
+                    ),
+                    category="copyleft-risk",
+                    scanner="fingerprint",
+                    extra=extra,
                 )
+            )
 
     return findings

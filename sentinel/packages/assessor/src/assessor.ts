@@ -9,6 +9,7 @@ import type {
 } from "@sentinel/shared";
 import { calculateRiskScore, determineStatus } from "./risk-scorer.js";
 import { generateCertificate } from "./certificate.js";
+import { correlateFindings } from "./correlator.js";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -80,10 +81,12 @@ export class Assessor {
    */
   assess(input: AssessInput): ComplianceAssessment {
     const allFindings = this.mergeFindings(input.findingEvents);
+    const correlatedFindings = correlateFindings(allFindings);
+    const combinedFindings = [...allFindings, ...correlatedFindings];
     const agentResults = this.mergeAgentResults(input.findingEvents);
 
     const { score, categories } = calculateRiskScore({
-      findings: allFindings,
+      findings: combinedFindings,
       agentResults,
     });
 
@@ -97,7 +100,7 @@ export class Assessor {
       status,
       riskScore: score,
       categories: this.pickAssessmentCategories(categories),
-      findings: allFindings,
+      findings: combinedFindings,
       agentResults,
       drift: {
         aiComposition: {
@@ -132,12 +135,14 @@ export class Assessor {
     orgSecret: string,
   ): ComplianceAssessment {
     const allFindings = [...existingAssessment.findings, ...newFindings];
+    const correlatedFindings = correlateFindings(allFindings);
+    const combinedFindings = [...allFindings, ...correlatedFindings];
     const agentResults = existingAssessment.agentResults;
 
     const hasTimeouts = agentResults.some((ar) => ar.status === "timeout");
 
     const { score, categories } = calculateRiskScore({
-      findings: allFindings,
+      findings: combinedFindings,
       agentResults,
     });
 
@@ -149,7 +154,7 @@ export class Assessor {
       status,
       riskScore: score,
       categories: this.pickAssessmentCategories(categories),
-      findings: allFindings,
+      findings: combinedFindings,
     };
 
     const certJson = generateCertificate(updated, orgSecret);

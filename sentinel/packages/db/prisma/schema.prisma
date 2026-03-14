@@ -426,6 +426,23 @@ model EvidenceRecord {
   @@map("evidence_records")
 }
 
+model OssFingerprint {
+  hash           String   @id
+  sourceUrl      String   @map("source_url")
+  packageName    String   @map("package_name")
+  packageVersion String?  @map("package_version")
+  ecosystem      String
+  spdxLicense    String?  @map("spdx_license")
+  filePath       String?  @map("file_path")
+  lineStart      Int?     @map("line_start")
+  lineEnd        Int?     @map("line_end")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  @@index([packageName, ecosystem])
+  @@index([spdxLicense])
+  @@map("oss_fingerprints")
+}
+
 model Report {
   id          String    @id @default(uuid()) @db.Uuid
   orgId       String    @map("org_id") @db.Uuid

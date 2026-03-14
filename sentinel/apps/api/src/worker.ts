@@ -29,7 +29,7 @@ const store = createAssessmentStore(db);
 
 // Only agents that are actually deployed. Additional agents can be added here
 // as they come online — the worker will wait for all listed agents or timeout.
-const EXPECTED_AGENTS = (process.env.EXPECTED_AGENTS ?? "security,dependency")
+const EXPECTED_AGENTS = (process.env.EXPECTED_AGENTS ?? "security,dependency,ip-license")
   .split(",")
   .map((s) => s.trim())
   .filter(Boolean);
@@ -219,6 +219,19 @@ async function finalizeScan(scanId: string, hasTimeouts: boolean) {
         ),
       },
     });
+
+    // Forward agent-level provenance chains to the evidence stream
+    for (const agentResult of pending.findings) {
+      const extra = agentResult.extra ?? agentResult.agentResult?.extra;
+      if (extra?.evidenceChain) {
+        await eventBus.publish("sentinel.evidence", {
+          orgId: scan.orgId,
+          type: "provenance_chain",
+          scanId,
+          eventData: extra.evidenceChain,
+        });
+      }
+    }
 
     if (assessment.certificate) {
       await eventBus.publish("sentinel.evidence", {

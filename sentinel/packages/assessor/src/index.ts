@@ -7,3 +7,5 @@ export { evaluateApprovalPolicies } from "./approval-policy.js";
 export type { PolicyConfig, PolicyInput, ApprovalRequirement } from "./approval-policy.js";
 export { ApprovalFSM } from "./approval-fsm.js";
 export type { GateState, GateAction } from "./approval-fsm.js";
+export { correlateFindings, extractPackageName } from "./correlator.js";
+export type { CorrelationRule } from "./correlator.js";
