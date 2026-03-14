@@ -1,13 +1,27 @@
 <idea-plugin>
     <id>com.sentinel.intellij</id>
     <name>Sentinel Security</name>
-    <vendor>Sentinel</vendor>
+    <vendor email="support@sentinel.dev" url="https://sentinel.dev">Sentinel</vendor>
     <version>0.1.0</version>
+    <category>Code tools</category>
     <description><![CDATA[
-        Real-time security findings, IP attribution, and compliance checks
-        inline in your JetBrains IDE. Features severity-colored gutter icons,
-        a sortable findings table, inline annotations with remediation advice,
-        and one-click finding suppression.
+        <h2>Sentinel Security — AI Code Governance for JetBrains IDEs</h2>
+        <p>Real-time security findings, IP attribution, and compliance checks
+        inline in your JetBrains IDE.</p>
+        <h3>Features</h3>
+        <ul>
+            <li><b>Gutter Icons</b> — Severity-colored markers at affected lines</li>
+            <li><b>Tool Window</b> — Sortable, filterable findings table with double-click navigation</li>
+            <li><b>Inline Annotations</b> — Descriptions and remediation advice directly in the editor</li>
+            <li><b>Status Bar</b> — Scan status and finding count at a glance</li>
+            <li><b>One-Click Suppress</b> — Dismiss findings from gutter or tool window</li>
+            <li><b>Real-Time Updates</b> — SSE push delivers new findings instantly</li>
+            <li><b>Trigger Scans</b> — Run security scans from the Tools menu</li>
+        </ul>
+        <h3>Supported IDEs</h3>
+        <p>Works with all JetBrains IDEs based on the IntelliJ Platform:
+        IntelliJ IDEA, PhpStorm, WebStorm, PyCharm, GoLand, RubyMine,
+        CLion, Rider, DataGrip, and Android Studio.</p>
     ]]></description>
 
     <depends>com.intellij.modules.platform</depends>
