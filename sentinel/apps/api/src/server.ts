@@ -25,6 +25,7 @@ import { buildApprovalRoutes } from "./routes/approvals.js";
 import { buildGapAnalysisRoutes } from "./routes/gap-analysis.js";
 import { buildRemediationRoutes } from "./routes/remediations.js";
 import { buildAIMetricsRoutes } from "./routes/ai-metrics.js";
+import { buildRiskTrendRoutes } from "./routes/risk-trends.js";
 import { buildBAARoutes } from "./routes/baa.js";
 import { buildAttestationRoutes } from "./routes/attestations.js";
 import { buildNotificationRuleRoutes } from "./routes/notification-rules.js";
@@ -118,6 +119,7 @@ const remediationRoutes = buildRemediationRoutes({ db });
 const baaRoutes = buildBAARoutes({ db });
 const attestationRoutes = buildAttestationRoutes({ db });
 const aiMetricsRoutes = buildAIMetricsRoutes({ db });
+const riskTrendRoutes = buildRiskTrendRoutes({ db });
 
 // --- Evidence upload service (stub S3 presigner until real provider is configured) ---
 const stubS3Presigner = {
@@ -1970,6 +1972,13 @@ app.put("/v1/ai-metrics/config", { preHandler: authHook }, async (request, reply
   } catch (err: any) {
     return reply.code(400).send({ error: err.message });
   }
+});
+
+// ── Risk Trends ────────────────────────────────────────
+app.get("/v1/risk-trends", { preHandler: authHook }, async (request) => {
+  const orgId = (request as any).orgId ?? "default";
+  const { days = "90" } = request.query as any;
+  return riskTrendRoutes.getTrends(orgId, { days: parseInt(days, 10) });
 });
 
 // --- Graceful shutdown ---
