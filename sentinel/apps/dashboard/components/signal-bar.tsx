@@ -26,7 +26,14 @@ export function SignalBar({
       <span className="w-20 text-right text-[11px] font-medium text-text-secondary">
         {name}
       </span>
-      <div className="relative h-2 flex-1 rounded-full bg-surface-3">
+      <div
+        role="progressbar"
+        aria-valuenow={Math.round(pct)}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-label={`${name} signal contribution: ${(contribution * 100).toFixed(0)}%`}
+        className="relative h-2 flex-1 rounded-full bg-surface-3"
+      >
         <div
           className={`absolute inset-y-0 left-0 rounded-full ${barColor(contribution)}`}
           style={{ width: `${Math.min(100, pct)}%` }}
