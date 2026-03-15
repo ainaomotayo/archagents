@@ -1,10 +1,13 @@
 import { PageHeader } from "@/components/page-header";
-import { getComplianceScores, getComplianceTrends } from "@/lib/api";
+import { getComplianceScores, getComplianceTrends, getActiveAttestations } from "@/lib/api";
 import { GapAnalysisClient } from "@/components/compliance/GapAnalysisClient";
 import { RefreshButton } from "@/components/compliance/RefreshButton";
 
 export default async function GapAnalysisPage() {
-  const frameworks = await getComplianceScores();
+  const [frameworks, attestationOverrides] = await Promise.all([
+    getComplianceScores(),
+    getActiveAttestations(),
+  ]);
 
   // Pre-fetch trends for all frameworks in parallel
   const trendEntries = await Promise.all(
@@ -23,7 +26,7 @@ export default async function GapAnalysisPage() {
         action={<RefreshButton />}
       />
 
-      <GapAnalysisClient frameworks={frameworks} trendData={trendData} />
+      <GapAnalysisClient frameworks={frameworks} trendData={trendData} attestationOverrides={attestationOverrides} />
     </div>
   );
 }

@@ -222,6 +222,26 @@ export function IconGrid(props: React.SVGProps<SVGSVGElement>) {
   );
 }
 
+export function IconClipboardCheck(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg {...iconProps} {...props}>
+      <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" />
+      <rect x="8" y="2" width="8" height="4" rx="1" ry="1" />
+      <path d="M9 14l2 2 4-4" />
+    </svg>
+  );
+}
+
+export function IconShieldCheck2(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg {...iconProps} {...props}>
+      <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" fill="currentColor" fillOpacity="0.15" />
+      <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+      <path d="M9 12l2 2 4-4" />
+    </svg>
+  );
+}
+
 export const ICON_MAP: Record<string, React.ComponentType<React.SVGProps<SVGSVGElement>>> = {
   home: IconHome,
   folder: IconFolder,
@@ -233,4 +253,5 @@ export const ICON_MAP: Record<string, React.ComponentType<React.SVGProps<SVGSVGE
   clock: IconClock,
   settings: IconSettings,
   grid: IconGrid,
+  "clipboard-check": IconClipboardCheck,
 };

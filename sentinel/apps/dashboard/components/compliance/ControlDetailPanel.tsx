@@ -8,12 +8,20 @@ import { TrendSparkline } from "./TrendSparkline";
 import { VerdictBadge } from "./VerdictBadge";
 import { scoreToVerdictEnum } from "./types";
 
+interface AttestationInfo {
+  attestationId: string;
+  attestedScore: number;
+  automatedScore: number;
+  expiresAt: string;
+}
+
 interface ControlDetailPanelProps {
   cell: SelectedCell | null;
   getTrends: (slug: string) => Promise<ComplianceTrendPoint[]>;
+  attestationInfo?: AttestationInfo | null;
 }
 
-export function ControlDetailPanel({ cell, getTrends }: ControlDetailPanelProps) {
+export function ControlDetailPanel({ cell, getTrends, attestationInfo }: ControlDetailPanelProps) {
   const [trends, setTrends] = useState<ComplianceTrendPoint[]>([]);
   const [loading, setLoading] = useState(false);
 
@@ -107,6 +115,24 @@ export function ControlDetailPanel({ cell, getTrends }: ControlDetailPanelProps)
           <TrendSparkline data={trends} />
         )}
       </div>
+
+      {attestationInfo && (
+        <div className="mt-4 rounded-lg border border-accent/30 bg-accent-subtle p-3">
+          <p className="text-[11px] font-semibold text-accent mb-1">Attested Override</p>
+          <p className="text-[12px] text-text-primary">
+            Automated: {Math.round(attestationInfo.automatedScore * 100)}% &rarr; Attested: {Math.round(attestationInfo.attestedScore * 100)}%
+          </p>
+          <p className="text-[10px] text-text-tertiary mt-0.5">
+            Expires: {new Date(attestationInfo.expiresAt).toLocaleDateString()}
+          </p>
+          <a
+            href={`/compliance/attestations/${attestationInfo.attestationId}`}
+            className="mt-1 inline-flex text-[11px] font-medium text-accent hover:underline"
+          >
+            View attestation &rarr;
+          </a>
+        </div>
+      )}
 
       {cell.failing > 0 && (
         <a

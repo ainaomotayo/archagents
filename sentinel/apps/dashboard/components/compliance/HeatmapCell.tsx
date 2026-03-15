@@ -15,6 +15,8 @@ interface HeatmapCellProps {
   height: number;
   isSelected: boolean;
   isFocused: boolean;
+  isAttested?: boolean;
+  attestedExpiresAt?: string;
   onClick: () => void;
 }
 
@@ -39,6 +41,8 @@ export function HeatmapCell({
   height,
   isSelected,
   isFocused,
+  isAttested,
+  attestedExpiresAt,
   onClick,
 }: HeatmapCellProps) {
   const color = score < 0 ? "gray" : scoreToColor(score);
@@ -91,7 +95,17 @@ export function HeatmapCell({
           strokeDasharray="4 2"
         />
       )}
-      <title>{`${controlCode}: ${controlName} — ${score < 0 ? "N/A" : `${Math.round(score * 100)}%`}${score >= 0 ? ` (${passing} passing, ${failing} failing)` : ""}`}</title>
+      {isAttested && (
+        <g transform={`translate(${x + width - 12}, ${y + 2})`}>
+          <path
+            d="M5 0L10 2.5V6.5C10 9.5 5 11 5 11S0 9.5 0 6.5V2.5L5 0Z"
+            fill="#6366f1"
+            opacity={0.9}
+          />
+          <path d="M3 5.5L4.5 7L7 4.5" stroke="white" strokeWidth="1.2" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+        </g>
+      )}
+      <title>{`${controlCode}: ${controlName} — ${score < 0 ? "N/A" : `${Math.round(score * 100)}%`}${score >= 0 ? ` (${passing} passing, ${failing} failing)` : ""}${isAttested ? ` (Attested${attestedExpiresAt ? `, expires ${new Date(attestedExpiresAt).toLocaleDateString()}` : ""})` : ""}`}</title>
     </g>
   );
 }

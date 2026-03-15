@@ -17,6 +17,8 @@ import type {
 } from "./types";
 
 import {
+  MOCK_ATTESTATIONS,
+  MOCK_ATTESTATION_OVERRIDES,
   MOCK_AUDIT_LOG,
   MOCK_CERTIFICATES,
   MOCK_COMPLIANCE_TRENDS,
@@ -327,4 +329,29 @@ export async function getComplianceTrends(
       score: t.score,
     }));
   }, MOCK_COMPLIANCE_TRENDS[frameworkSlug] ?? []);
+}
+
+// ── Attestations ─────────────────────────────────────────────────────
+
+import type { Attestation, AttestationOverride } from "@/components/compliance/attestation-types";
+
+export async function getAttestations(): Promise<Attestation[]> {
+  return tryApi(async (headers) => {
+    const { apiGet } = await import("./api-client");
+    return apiGet<Attestation[]>("/v1/attestations", undefined, headers);
+  }, MOCK_ATTESTATIONS);
+}
+
+export async function getAttestationById(id: string): Promise<Attestation | null> {
+  return tryApi(async (headers) => {
+    const { apiGet } = await import("./api-client");
+    return apiGet<Attestation>(`/v1/attestations/${id}`, undefined, headers);
+  }, MOCK_ATTESTATIONS.find((a) => a.id === id) ?? null);
+}
+
+export async function getActiveAttestations(): Promise<AttestationOverride[]> {
+  return tryApi(async (headers) => {
+    const { apiGet } = await import("./api-client");
+    return apiGet<AttestationOverride[]>("/v1/attestations/overrides", undefined, headers);
+  }, MOCK_ATTESTATION_OVERRIDES);
 }

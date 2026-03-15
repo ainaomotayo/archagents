@@ -71,7 +71,7 @@ export function Sidebar({ items }: SidebarProps) {
               Compliance
             </p>
           )}
-          {items.slice(4, 8).map((item) => (
+          {items.slice(4, 9).map((item) => (
             <NavItem
               key={item.href}
               label={item.label}
@@ -81,7 +81,7 @@ export function Sidebar({ items }: SidebarProps) {
             />
           ))}
 
-          {items.length > 8 && (
+          {items.length > 9 && (
             <>
               <div className="my-3 border-t border-border-subtle" />
               {!collapsed && (
@@ -89,7 +89,7 @@ export function Sidebar({ items }: SidebarProps) {
                   System
                 </p>
               )}
-              {items.slice(8).map((item) => (
+              {items.slice(9).map((item) => (
                 <NavItem
                   key={item.href}
                   label={item.label}
