@@ -10,6 +10,7 @@ import {
 import type { SentinelContext, SentinelConfig, Severity } from "./context.js";
 import { defaultConfig } from "./context.js";
 import { activateStatusBar } from "./features/status-bar.js";
+import { activateCommands } from "./commands/index.js";
 
 let client: LanguageClient | undefined;
 
@@ -71,7 +72,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   activateStatusBar(ctx);
   // activateTreeView(ctx);
   // activateGutterIcons(ctx);
-  // activateCommands(ctx);
+  activateCommands(ctx);
   // activateScanTrigger(ctx);
 
   await client.start();

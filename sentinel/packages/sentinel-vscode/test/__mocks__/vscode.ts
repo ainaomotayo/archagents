@@ -38,6 +38,19 @@ export const window = {
     hide: vi.fn(),
     dispose: vi.fn(),
   })),
+  showInputBox: vi.fn(),
+  showInformationMessage: vi.fn(),
+  showWarningMessage: vi.fn(),
+  showErrorMessage: vi.fn(),
+};
+
+export const commands = {
+  registerCommand: vi.fn(),
+  executeCommand: vi.fn(),
+};
+
+export const env = {
+  openExternal: vi.fn(),
 };
 
 export const workspace = {
