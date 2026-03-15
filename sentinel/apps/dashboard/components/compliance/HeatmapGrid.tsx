@@ -2,12 +2,14 @@
 
 import { useState, useCallback, useRef, useEffect } from "react";
 import type { FrameworkScore, SelectedCell } from "./types";
+import type { AttestationOverride } from "./attestation-types";
 import { HeatmapCell } from "./HeatmapCell";
 
 interface HeatmapGridProps {
   frameworks: FrameworkScore[];
   selectedFrameworks: string[];
   onSelectCell: (cell: SelectedCell | null) => void;
+  attestationOverrides?: AttestationOverride[];
 }
 
 const CELL_W = 48;
@@ -20,7 +22,11 @@ export function HeatmapGrid({
   frameworks,
   selectedFrameworks,
   onSelectCell,
+  attestationOverrides = [],
 }: HeatmapGridProps) {
+  const overrideMap = new Map(
+    attestationOverrides.map((o) => [`${o.frameworkSlug}:${o.controlCode}`, o]),
+  );
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [focusPos, setFocusPos] = useState<{ row: number; col: number } | null>(null);
   const svgRef = useRef<SVGSVGElement>(null);
@@ -173,10 +179,12 @@ export function HeatmapGrid({
               {allControlCodes.map((code, ci) => {
                 const cs = scoreMap.get(code);
                 const cellKey = `${fw.frameworkSlug}:${code}`;
+                const override = overrideMap.get(cellKey);
+                const displayScore = override ? override.score : (cs ? cs.score : -1);
                 return (
                   <HeatmapCell
                     key={cellKey}
-                    score={cs ? cs.score : -1}
+                    score={displayScore}
                     total={cs ? cs.total : 0}
                     passing={cs ? cs.passing : 0}
                     failing={cs ? cs.failing : 0}
@@ -188,6 +196,8 @@ export function HeatmapGrid({
                     height={CELL_H}
                     isSelected={selectedKey === cellKey}
                     isFocused={focusPos?.row === ri && focusPos?.col === ci}
+                    isAttested={!!override}
+                    attestedExpiresAt={override?.expiresAt}
                     onClick={() => {
                       if (cs) handleClick(fw, code);
                     }}

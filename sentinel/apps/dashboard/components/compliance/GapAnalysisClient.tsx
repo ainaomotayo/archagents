@@ -81,6 +81,7 @@ export function GapAnalysisClient({
         frameworks={frameworks}
         selectedFrameworks={selectedFrameworks}
         onSelectCell={setSelectedCell}
+        attestationOverrides={attestationOverrides}
       />
 
       <ControlDetailPanel cell={selectedCell} getTrends={getTrends} attestationInfo={attestationInfo} />
