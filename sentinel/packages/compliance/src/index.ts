@@ -90,3 +90,8 @@ export type {
   IPAttributionDocument, IPAttributionReportData,
   ToolBreakdownSummary, GitMetadata, GitFileMetadata,
 } from "./ip-attribution/types.js";
+
+// Report Registry
+export { ReportRegistry, type ReportTemplate, type GatherContext } from "./reports/registry.js";
+export { type BrandingContext, getDefaultBranding } from "./reports/branding.js";
+export { createDefaultRegistry } from "./reports/templates/index.js";
