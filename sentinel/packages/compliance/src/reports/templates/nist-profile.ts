@@ -10,7 +10,7 @@ export const nistProfileTemplate: ReportTemplate<NistProfileData> = {
   gather: async (_ctx: GatherContext): Promise<NistProfileData> => {
     throw new Error("gather() must be called with assembled data");
   },
-  render: (data: NistProfileData, _branding: BrandingContext) => {
-    return createElement(NistProfileReport, { data }) as any;
+  render: (data: NistProfileData, branding: BrandingContext) => {
+    return createElement(NistProfileReport, { data, branding }) as any;
   },
 };

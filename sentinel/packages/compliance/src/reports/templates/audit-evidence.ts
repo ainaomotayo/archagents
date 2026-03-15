@@ -10,7 +10,7 @@ export const auditEvidenceTemplate: ReportTemplate<AuditEvidenceData> = {
   gather: async (_ctx: GatherContext): Promise<AuditEvidenceData> => {
     throw new Error("gather() must be called with assembled data");
   },
-  render: (data: AuditEvidenceData, _branding: BrandingContext) => {
-    return createElement(AuditEvidenceReport, { data }) as any;
+  render: (data: AuditEvidenceData, branding: BrandingContext) => {
+    return createElement(AuditEvidenceReport, { data, branding }) as any;
   },
 };
