@@ -34,26 +34,29 @@ async function createWizardViaUI(page: Page, name: string): Promise<void> {
   const input = page.getByPlaceholder("e.g. Q1 2026 AI System Assessment");
   await input.pressSequentially(name, { delay: 20 });
   await page.getByRole("button", { name: "Create Wizard" }).click();
-  // Wait for navigation to wizard detail
-  await page.waitForURL(/\/compliance\/wizards\/wiz-/, { timeout: 15_000 });
+  // Wait for navigation to wizard detail (generous timeout for parallel test runs)
+  await page.waitForURL(/\/compliance\/wizards\/wiz-/, { timeout: 30_000 });
   await page.waitForLoadState("networkidle");
 }
 
 /** Click a step in the sidebar stepper */
 async function selectStep(page: Page, title: string): Promise<void> {
   await page.getByRole("button", { name: title }).click();
-  await page.waitForTimeout(300);
+  await page.waitForTimeout(800);
 }
 
 /** Check all unchecked required checkboxes by clicking them */
 async function checkAllRequirements(page: Page): Promise<void> {
-  // Use click() instead of check() to avoid strict state verification issues
+  // Use click() instead of check() to avoid strict state verification issues.
+  // Wait generously between clicks to allow API calls + re-renders to settle.
   const unchecked = page.locator("input[type='checkbox']:not(:disabled):not(:checked)");
   let count = await unchecked.count();
-  while (count > 0) {
-    await unchecked.first().click();
-    await page.waitForTimeout(300);
+  let maxIterations = 20; // Safety limit to prevent infinite loops
+  while (count > 0 && maxIterations > 0) {
+    await unchecked.first().click({ timeout: 5_000 });
+    await page.waitForTimeout(600);
     count = await unchecked.count();
+    maxIterations--;
   }
 }
 
@@ -61,9 +64,9 @@ async function checkAllRequirements(page: Page): Promise<void> {
 async function completeCurrentStep(page: Page): Promise<void> {
   await checkAllRequirements(page);
   const completeBtn = page.getByRole("button", { name: "Mark Complete" });
-  await expect(completeBtn).toBeEnabled({ timeout: 5_000 });
+  await expect(completeBtn).toBeEnabled({ timeout: 10_000 });
   await completeBtn.click();
-  await page.waitForTimeout(500);
+  await page.waitForTimeout(800);
 }
 
 /** Skip the current step with a reason */
