@@ -53,7 +53,7 @@ spec:
     spec:
       containers:
         - name: otel-collector
-          image: otel/opentelemetry-collector-contrib:0.96.0
+          image: {{ .Values.monitoring.otel.image | default "otel/opentelemetry-collector-contrib:0.96.0" }}
           args: ["--config=/etc/otel/config.yaml"]
           ports:
             - containerPort: 4317

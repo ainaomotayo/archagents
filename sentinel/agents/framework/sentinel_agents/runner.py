@@ -20,6 +20,42 @@ logger = logging.getLogger(__name__)
 MAX_RETRIES = 3
 BASE_DELAY = 1.0  # seconds
 
+# ── Prometheus Metrics ──────────────────────────────────────────────────────
+
+try:
+    from prometheus_client import Counter, Histogram, Gauge, generate_latest, CONTENT_TYPE_LATEST
+
+    _PROM_AVAILABLE = True
+
+    diffs_processed_total = Counter(
+        "sentinel_agent_diffs_processed_total",
+        "Total diffs processed by agent",
+        ["agent", "status"],
+    )
+    diff_processing_duration = Histogram(
+        "sentinel_agent_diff_processing_duration_seconds",
+        "Time to process a single diff",
+        ["agent"],
+        buckets=[0.1, 0.5, 1, 2.5, 5, 10, 30, 60, 120],
+    )
+    findings_total = Counter(
+        "sentinel_agent_findings_total",
+        "Total findings produced by agent",
+        ["agent", "severity"],
+    )
+    stream_lag = Gauge(
+        "sentinel_agent_stream_lag",
+        "Number of pending messages in the consumer group",
+        ["agent"],
+    )
+    active_processing = Gauge(
+        "sentinel_agent_active_processing",
+        "Number of diffs currently being processed",
+        ["agent"],
+    )
+except ImportError:
+    _PROM_AVAILABLE = False
+
 
 class RunnerStats:
     """Tracks runtime stats for structured health reporting."""
@@ -116,13 +152,27 @@ def run_agent(agent: BaseAgent) -> None:
         # WAL checkpoint: record we started this message
         wal.save(event.scan_id, agent.name, msg_id)
 
+        if _PROM_AVAILABLE:
+            active_processing.labels(agent=agent.name).inc()
+
         start = time.monotonic()
         try:
             result = _retry_with_backoff(agent.run_scan, event)
             producer.publish("sentinel.findings", result.to_dict())
             latency_ms = (time.monotonic() - start) * 1000
+            latency_s = latency_ms / 1000
             stats.latencies.append(latency_ms)
             stats.scans_processed += 1
+
+            if _PROM_AVAILABLE:
+                diffs_processed_total.labels(agent=agent.name, status=result.status).inc()
+                diff_processing_duration.labels(agent=agent.name).observe(latency_s)
+                for finding in result.findings:
+                    findings_total.labels(
+                        agent=agent.name,
+                        severity=getattr(finding, "severity", "unknown"),
+                    ).inc()
+
             logger.info(
                 "Scan %s complete: %d findings, status=%s, %.0fms",
                 event.scan_id,
@@ -133,8 +183,12 @@ def run_agent(agent: BaseAgent) -> None:
         except Exception as exc:
             stats.scans_failed += 1
             stats.last_error = str(exc)
+            if _PROM_AVAILABLE:
+                diffs_processed_total.labels(agent=agent.name, status="error").inc()
             logger.exception("Scan %s failed after retries: %s", event.scan_id, exc)
         finally:
+            if _PROM_AVAILABLE:
+                active_processing.labels(agent=agent.name).dec()
             # Clear WAL on completion (success or final failure)
             wal.clear(event.scan_id, agent.name)
 
@@ -144,6 +198,15 @@ def run_agent(agent: BaseAgent) -> None:
 def _start_health_server(agent: BaseAgent, port: int, stats: RunnerStats | None = None) -> None:
     class Handler(BaseHTTPRequestHandler):
         def do_GET(self) -> None:
+            # Serve Prometheus metrics on /metrics
+            if self.path == "/metrics" and _PROM_AVAILABLE:
+                output = generate_latest()
+                self.send_response(200)
+                self.send_header("Content-Type", CONTENT_TYPE_LATEST)
+                self.end_headers()
+                self.wfile.write(output)
+                return
+
             health = agent.health()
             body: dict = {
                 "name": health.name,

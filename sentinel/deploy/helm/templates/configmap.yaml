@@ -1,12 +1,11 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: sentinel-config
-  namespace: {{ .Values.global.namespace }}
+  name: {{ include "sentinel.fullname" . }}-config
   labels:
     {{- include "sentinel.labels" . | nindent 4 }}
 data:
-  NODE_ENV: {{ .Values.config.nodeEnv | quote }}
-  LOG_LEVEL: {{ .Values.config.logLevel | quote }}
-  CORS_ORIGIN: {{ .Values.config.corsOrigin | quote }}
-  RATE_LIMIT_MAX: {{ .Values.config.rateLimitMax | quote }}
+  NODE_ENV: {{ .Values.config.nodeEnv | default "production" | quote }}
+  LOG_LEVEL: {{ .Values.config.logLevel | default "info" | quote }}
+  CORS_ORIGIN: {{ .Values.config.corsOrigin | default "*" | quote }}
+  RATE_LIMIT_MAX: {{ .Values.config.rateLimitMax | default "100" | quote }}

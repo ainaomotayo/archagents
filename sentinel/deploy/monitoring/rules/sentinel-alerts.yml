@@ -57,6 +57,14 @@ groups:
         labels: { severity: warning }
         annotations:
           summary: "Stream backlog for {{ $labels.agent }}: {{ $value }} pending"
+      - alert: PipelineStalled
+        expr: |
+          increase(sentinel_agent_diffs_processed_total[30m]) == 0
+          and sentinel_agent_stream_lag > 0
+        for: 30m
+        labels: { severity: critical }
+        annotations:
+          summary: "Pipeline stalled: no diffs processed in 30m with pending backlog"
       - alert: WorkerConsumerLag
         expr: sentinel_worker_stream_consumer_lag > 50
         for: 10m
@@ -91,3 +99,11 @@ groups:
         labels: { severity: critical, component: sso }
         annotations:
           summary: "Possible brute force: {{ $value }} rate-limited SSO attempts in 5min"
+      - alert: SSOHighFailureRate
+        expr: |
+          sum(rate(sentinel_api_sso_auth_attempts_total{result="failure"}[10m]))
+          / sum(rate(sentinel_api_sso_auth_attempts_total[10m])) > 0.3
+        for: 10m
+        labels: { severity: warning, component: sso }
+        annotations:
+          summary: "SSO failure rate is {{ $value | humanizePercentage }}"

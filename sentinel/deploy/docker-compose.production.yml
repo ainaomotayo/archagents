@@ -357,3 +357,20 @@ services:
         limits:
           cpus: "0.5"
           memory: 512M
+
+  otel-collector:
+    restart: always
+    ports: !reset []
+    logging: *logging
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 512M
+
+networks:
+  internal:
+    driver: bridge
+    internal: true
+  external:
+    driver: bridge

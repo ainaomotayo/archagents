@@ -58,7 +58,7 @@
         "datasource": "Prometheus",
         "gridPos": { "h": 4, "w": 6, "x": 18, "y": 1 },
         "targets": [
-          { "expr": "sentinel_api_sso_active_sessions", "legendFormat": "sessions" }
+          { "expr": "sum(sentinel_api_sso_auth_attempts_total{result=\"success\"}) - sum(sentinel_api_sso_auth_attempts_total{result=\"logout\"})", "legendFormat": "sessions" }
         ]
       },
       {

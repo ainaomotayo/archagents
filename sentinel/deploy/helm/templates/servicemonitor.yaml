@@ -8,12 +8,28 @@ metadata:
 spec:
   selector:
     matchLabels:
+      {{- include "sentinel.selectorLabels" . | nindent 6 }}
       app.kubernetes.io/component: api
   endpoints:
     - port: http
       path: /metrics
       interval: {{ .Values.monitoring.prometheus.serviceMonitor.interval }}
 ---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ include "sentinel.fullname" . }}-dashboard
+  labels:
+    {{- include "sentinel.labels" . | nindent 4 }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "sentinel.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: dashboard
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: {{ .Values.monitoring.prometheus.serviceMonitor.interval }}
 {{- range $name, $worker := .Values.workers }}
 {{- if $worker.enabled }}
 ---
@@ -21,9 +37,12 @@ apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
 metadata:
   name: {{ include "sentinel.fullname" $ }}-worker-{{ $name }}
+  labels:
+    {{- include "sentinel.labels" $ | nindent 4 }}
 spec:
   selector:
     matchLabels:
+      {{- include "sentinel.selectorLabels" $ | nindent 6 }}
       app.kubernetes.io/component: worker-{{ $name }}
   endpoints:
     - port: metrics
@@ -31,7 +50,6 @@ spec:
       interval: {{ $.Values.monitoring.prometheus.serviceMonitor.interval }}
 {{- end }}
 {{- end }}
----
 {{- range $tier, $agents := .Values.agents }}
 {{- if or (eq $tier "critical") (eq $tier "batch") }}
 {{- range $name, $agent := $agents }}
@@ -41,9 +59,12 @@ apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
 metadata:
   name: {{ include "sentinel.fullname" $ }}-agent-{{ $name }}
+  labels:
+    {{- include "sentinel.labels" $ | nindent 4 }}
 spec:
   selector:
     matchLabels:
+      {{- include "sentinel.selectorLabels" $ | nindent 6 }}
       app.kubernetes.io/component: agent-{{ $name }}
   endpoints:
     - port: health

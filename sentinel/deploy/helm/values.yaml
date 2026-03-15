@@ -3,6 +3,12 @@ global:
   imagePullSecrets: []
   storageClass: ""
 
+config:
+  nodeEnv: production
+  logLevel: info
+  corsOrigin: "*"
+  rateLimitMax: "100"
+
 secrets:
   provider: kubernetes  # kubernetes | aws | gcp | azure | vault
   aws: { region: us-east-1, secretName: sentinel/production }
@@ -39,6 +45,13 @@ dashboard:
   probes:
     readiness: { path: /api/health, port: 3000, initialDelaySeconds: 15 }
     liveness: { path: /api/health, port: 3000, initialDelaySeconds: 20 }
+  topologySpreadConstraints:
+    - maxSkew: 1
+      topologyKey: topology.kubernetes.io/zone
+      whenUnsatisfied: DoNotSchedule
+      labelSelector:
+        matchLabels:
+          app.kubernetes.io/component: dashboard
 
 workers:
   assessor:
@@ -224,6 +237,7 @@ monitoring:
     dashboards: true
   otel:
     enabled: false
+    image: otel/opentelemetry-collector-contrib:0.96.0
     exporters:
       otlp: { endpoint: "" }
       datadog: { apiKey: "" }

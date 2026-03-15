@@ -48,14 +48,14 @@ spec:
     kind: Deployment
     name: {{ include "sentinel.fullname" . }}-dashboard
   minReplicas: {{ .Values.dashboard.replicaCount }}
-  maxReplicas: 6
+  maxReplicas: 5
   metrics:
     - type: Resource
       resource:
         name: cpu
         target:
           type: Utilization
-          averageUtilization: 70
+          averageUtilization: 80
   behavior:
     scaleDown:
       stabilizationWindowSeconds: 300
