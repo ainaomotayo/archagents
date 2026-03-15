@@ -94,6 +94,9 @@ export const window = {
     onDidChangeVisibility: vi.fn(),
     reveal: vi.fn(),
   })),
+  createTextEditorDecorationType: vi.fn(() => ({ dispose: vi.fn() })),
+  onDidChangeActiveTextEditor: vi.fn(() => ({ dispose: () => {} })),
+  activeTextEditor: undefined as any,
 };
 
 export const commands = {
@@ -110,6 +113,22 @@ export const workspace = {
     get: vi.fn((_key: string, defaultValue: any) => defaultValue),
   })),
   createFileSystemWatcher: vi.fn(),
+};
+
+export class Range {
+  constructor(
+    public readonly startLine: number,
+    public readonly startChar: number,
+    public readonly endLine: number,
+    public readonly endChar: number,
+  ) {}
+  get start() { return { line: this.startLine, character: this.startChar }; }
+  get end() { return { line: this.endLine, character: this.endChar }; }
+}
+
+export const languages = {
+  getDiagnostics: vi.fn(() => []),
+  onDidChangeDiagnostics: vi.fn(() => ({ dispose: () => {} })),
 };
 
 export const Uri = {

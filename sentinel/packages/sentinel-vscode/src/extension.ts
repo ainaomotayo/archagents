@@ -12,6 +12,7 @@ import { defaultConfig } from "./context.js";
 import { activateStatusBar } from "./features/status-bar.js";
 import { activateCommands } from "./commands/index.js";
 import { activateTreeView } from "./features/tree-view.js";
+import { activateGutterIcons } from "./features/gutter-icons.js";
 
 let client: LanguageClient | undefined;
 
@@ -72,7 +73,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   // Feature modules will be activated here in subsequent tasks:
   activateStatusBar(ctx);
   const treeProvider = activateTreeView(ctx);
-  // activateGutterIcons(ctx);
+  activateGutterIcons(ctx);
   activateCommands(ctx);
   // activateScanTrigger(ctx);
 
