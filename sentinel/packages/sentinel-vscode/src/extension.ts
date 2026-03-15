@@ -13,6 +13,7 @@ import { activateStatusBar } from "./features/status-bar.js";
 import { activateCommands } from "./commands/index.js";
 import { activateTreeView } from "./features/tree-view.js";
 import { activateGutterIcons } from "./features/gutter-icons.js";
+import { activateScanTrigger } from "./features/scan-trigger.js";
 
 let client: LanguageClient | undefined;
 
@@ -75,7 +76,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   const treeProvider = activateTreeView(ctx);
   activateGutterIcons(ctx);
   activateCommands(ctx);
-  // activateScanTrigger(ctx);
+  activateScanTrigger(ctx);
 
   await client.start();
   output.appendLine("Sentinel LSP client started.");
