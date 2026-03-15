@@ -1,6 +1,7 @@
 import { PageHeader } from "@/components/page-header";
 import { getComplianceScores, getComplianceTrends } from "@/lib/api";
 import { GapAnalysisClient } from "@/components/compliance/GapAnalysisClient";
+import { RefreshButton } from "@/components/compliance/RefreshButton";
 
 export default async function GapAnalysisPage() {
   const frameworks = await getComplianceScores();
@@ -19,6 +20,7 @@ export default async function GapAnalysisPage() {
       <PageHeader
         title="Gap Analysis"
         description="Visual overview of compliance control coverage across frameworks"
+        action={<RefreshButton />}
       />
 
       <GapAnalysisClient frameworks={frameworks} trendData={trendData} />
