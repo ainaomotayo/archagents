@@ -78,7 +78,7 @@ function buildPayload(rawDiff: string): SentinelDiffPayload {
   const ci = detectCiProvider();
   return {
     projectId: process.env.SENTINEL_PROJECT_ID ?? ci.projectId ?? "default",
-    commitHash: process.env.SENTINEL_COMMIT_HASH ?? ci.commitHash ?? "unknown",
+    commitHash: process.env.SENTINEL_COMMIT_HASH ?? process.env.SENTINEL_COMMIT ?? ci.commitHash ?? "unknown",
     branch: process.env.SENTINEL_BRANCH ?? ci.branch ?? "unknown",
     author: process.env.SENTINEL_AUTHOR ?? ci.author ?? "unknown",
     timestamp: new Date().toISOString(),

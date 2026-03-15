@@ -127,7 +127,7 @@ The CLI auto-detects Azure Pipelines via the `TF_BUILD` environment variable. If
 ```yaml
 env:
   SENTINEL_PROVIDER: azure_devops
-  SENTINEL_COMMIT: $(Build.SourceVersion)
+  SENTINEL_COMMIT_HASH: $(Build.SourceVersion)
   SENTINEL_BRANCH: $(Build.SourceBranchName)
   SENTINEL_AUTHOR: $(Build.RequestedFor)
   SENTINEL_PROJECT: $(Build.Repository.Name)
