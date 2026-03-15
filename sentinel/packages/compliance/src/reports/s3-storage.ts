@@ -26,7 +26,8 @@ export class S3ReportStorage implements ReportStorage {
   }
 
   async getSignedUrl(key: string, expiresInSeconds: number): Promise<string> {
-    return getSignedUrl(this.client, new GetObjectCommand({
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- AWS SDK type mismatch between @smithy/types versions
+    return (getSignedUrl as any)(this.client, new GetObjectCommand({
       Bucket: this.bucket,
       Key: key,
     }), { expiresIn: expiresInSeconds });
