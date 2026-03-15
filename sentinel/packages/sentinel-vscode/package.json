@@ -13,10 +13,11 @@
   "contributes": {
     "commands": [
       { "command": "sentinel.configure", "title": "Sentinel: Configure API Token" },
-      { "command": "sentinel.openDashboard", "title": "Sentinel: Open Dashboard" },
+      { "command": "sentinel.openDashboard", "title": "Sentinel: Open Dashboard", "icon": "$(link-external)" },
       { "command": "sentinel.triggerScan", "title": "Sentinel: Trigger Scan" },
-      { "command": "sentinel.refresh", "title": "Sentinel: Refresh Findings" },
-      { "command": "sentinel.suppress", "title": "Sentinel: Suppress Finding" },
+      { "command": "sentinel.refresh", "title": "Sentinel: Refresh Findings", "icon": "$(refresh)" },
+      { "command": "sentinel.suppress", "title": "Sentinel: Suppress Finding", "icon": "$(eye-closed)" },
+      { "command": "sentinel.showFindings", "title": "Sentinel: Show Findings for File" },
       { "command": "sentinel.showFindingDetail", "title": "Sentinel: Show Finding Detail" }
     ],
     "viewsContainers": {
@@ -43,6 +44,15 @@
         "contents": "No findings yet.\n[Trigger Scan](command:sentinel.triggerScan)\n[Configure API Token](command:sentinel.configure)"
       }
     ],
+    "menus": {
+      "view/title": [
+        { "command": "sentinel.refresh", "when": "view == sentinelFindings", "group": "navigation" }
+      ],
+      "view/item/context": [
+        { "command": "sentinel.suppress", "when": "viewItem == finding", "group": "inline" },
+        { "command": "sentinel.openDashboard", "when": "viewItem == finding", "group": "inline" }
+      ]
+    },
     "configuration": {
       "title": "Sentinel",
       "properties": {

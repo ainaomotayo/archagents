@@ -66,4 +66,23 @@ describe("DetailHTML", () => {
     const html = renderDetailHtml(baseFinding, {});
     expect(html).not.toContain("Decision Trace");
   });
+
+  it("renders action buttons", () => {
+    const html = renderDetailHtml(baseFinding, {});
+    expect(html).toContain("Suppress");
+    expect(html).toContain("View in Dashboard");
+  });
+
+  it("renders code location section", () => {
+    const html = renderDetailHtml(baseFinding, {});
+    expect(html).toContain("Location");
+    expect(html).toContain("42");
+  });
+
+  it("renders related findings when provided", () => {
+    const related = { ...baseFinding, id: "f2", title: "Related XSS", severity: "high" as const, file: "src/api.ts", lineStart: 10, lineEnd: 10 };
+    const html = renderDetailHtml(baseFinding, { relatedFindings: [related] });
+    expect(html).toContain("Related Findings");
+    expect(html).toContain("Related XSS");
+  });
 });

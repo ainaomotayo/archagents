@@ -74,7 +74,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
   // Feature modules will be activated here in subsequent tasks:
   const statusBarItem = activateStatusBar(ctx);
-  const treeProvider = activateTreeView(ctx);
+  const { provider: treeProvider, treeView } = activateTreeView(ctx);
   activateGutterIcons(ctx);
   activateCommands(ctx);
   activateScanTrigger(ctx);
@@ -102,6 +102,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       }
 
       treeProvider.updateFindings(sentinelFindings as any);
+      treeView.badge = { value: treeProvider.totalCount, tooltip: `${treeProvider.totalCount} findings` };
       updateStatusBar(statusBarItem, "connected", criticalCount, highCount);
     }),
   );

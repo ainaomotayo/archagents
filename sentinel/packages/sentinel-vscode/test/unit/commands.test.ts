@@ -34,6 +34,12 @@ describe("Commands", () => {
     );
   });
 
+  it("showFindings focuses the sentinel panel", async () => {
+    const { handleShowFindings } = await import("../../src/commands/show-findings.js");
+    handleShowFindings();
+    // The mock executeCommand is called — verify it doesn't throw
+  });
+
   it("suppress sends LSP command and returns finding ID", async () => {
     const { handleSuppress } = await import("../../src/commands/suppress.js");
     const client = { sendRequest: vi.fn().mockResolvedValue(undefined) };

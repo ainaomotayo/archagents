@@ -69,6 +69,12 @@ export function renderDetailHtml(finding: Finding, extras: DetailExtras, cssUri?
   html += `<h2 style="margin:8px 0 4px">${escapeHtml(finding.title ?? finding.category ?? "Finding")}</h2>`;
   html += `<div style="font-size:12px;color:var(--vscode-descriptionForeground)">${escapeHtml(finding.file)}:${finding.lineStart}-${finding.lineEnd}</div>`;
 
+  // Code snippet (lines flagged)
+  html += `<div class="section"><h3>Location</h3>`;
+  html += `<div style="background:var(--vscode-textCodeBlock-background);padding:8px 12px;border-radius:4px;font-family:var(--vscode-editor-font-family,monospace);font-size:12px;overflow-x:auto">`;
+  html += `<span style="color:var(--vscode-editorLineNumber-foreground)">${finding.lineStart}</span> <span style="color:var(--vscode-errorForeground)">▸ ${escapeHtml(finding.title ?? finding.category ?? 'Finding flagged here')}</span>`;
+  html += `</div></div>`;
+
   // Description
   if (finding.description) {
     html += `<div class="section"><h3>Description</h3><p style="font-size:13px">${escapeHtml(finding.description)}</p></div>`;
@@ -118,6 +124,30 @@ export function renderDetailHtml(finding: Finding, extras: DetailExtras, cssUri?
     }
     html += `</div></div>`;
   }
+
+  // Related findings
+  if (extras.relatedFindings && extras.relatedFindings.length > 0) {
+    html += `<div class="section"><h3>Related Findings</h3><div style="font-size:12px">`;
+    for (const related of extras.relatedFindings) {
+      html += `<div style="padding:4px 0;border-bottom:1px solid var(--vscode-widget-border)">`;
+      html += `<span class="badge" style="background:${severityColors[related.severity] ?? '#a0aec0'};font-size:10px;padding:1px 4px">${escapeHtml(related.severity.toUpperCase())}</span> `;
+      html += `${escapeHtml(related.title ?? related.category ?? 'Finding')} — ${escapeHtml(related.file)}:${related.lineStart}`;
+      html += `</div>`;
+    }
+    html += `</div></div>`;
+  }
+
+  // Actions
+  html += `<div class="section" style="margin-top:24px"><h3>Actions</h3><div style="display:flex;gap:8px">`;
+  html += `<button onclick="suppress()" style="padding:4px 12px;border:1px solid var(--vscode-button-border,transparent);background:var(--vscode-button-secondaryBackground);color:var(--vscode-button-secondaryForeground);border-radius:3px;cursor:pointer;font-size:12px">${finding.suppressed ? 'Unsuppress' : 'Suppress'}</button>`;
+  html += `<button onclick="openDashboard()" style="padding:4px 12px;border:1px solid var(--vscode-button-border,transparent);background:var(--vscode-button-secondaryBackground);color:var(--vscode-button-secondaryForeground);border-radius:3px;cursor:pointer;font-size:12px">View in Dashboard</button>`;
+  html += `</div></div>`;
+
+  html += `<script>
+  const vscode = acquireVsCodeApi();
+  function suppress() { vscode.postMessage({ type: 'suppress', findingId: '${escapeHtml(finding.id)}' }); }
+  function openDashboard() { vscode.postMessage({ type: 'openDashboard', findingId: '${escapeHtml(finding.id)}' }); }
+</script>`;
 
   html += `</body></html>`;
   return html;

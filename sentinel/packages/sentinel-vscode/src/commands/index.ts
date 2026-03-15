@@ -3,6 +3,7 @@ import type { SentinelContext } from "../context.js";
 import { handleConfigure } from "./configure.js";
 import { handleOpenDashboard } from "./open-dashboard.js";
 import { handleTriggerScan } from "./trigger-scan.js";
+import { handleShowFindings } from "./show-findings.js";
 import { handleSuppress } from "./suppress.js";
 
 export function activateCommands(ctx: SentinelContext): void {
@@ -23,6 +24,9 @@ export function activateCommands(ctx: SentinelContext): void {
       });
       vscode.window.showInformationMessage("Sentinel findings refreshed.");
     }),
+    vscode.commands.registerCommand("sentinel.showFindings", (filePath?: string, line?: number) =>
+      handleShowFindings(filePath, line),
+    ),
     vscode.commands.registerCommand("sentinel.suppress", (findingId: string) =>
       handleSuppress(client, findingId),
     ),
