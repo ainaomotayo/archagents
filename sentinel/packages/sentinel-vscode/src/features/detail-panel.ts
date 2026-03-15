@@ -16,7 +16,7 @@ export function activateDetailPanel(ctx: SentinelContext): void {
           "sentinelFindingDetail",
           "Sentinel: Finding Detail",
           vscode.ViewColumn.Beside,
-          { enableScripts: false, localResourceRoots: [] },
+          { enableScripts: true, localResourceRoots: [] },
         );
         currentPanel.onDidDispose(() => { currentPanel = undefined; }, null, ctx.subscriptions);
       }
@@ -34,6 +34,18 @@ export function activateDetailPanel(ctx: SentinelContext): void {
 
       currentPanel.title = `Finding: ${(finding.title as string) ?? "Detail"}`;
       currentPanel.webview.html = renderDetailHtml(finding as any, extras);
+
+      currentPanel.webview.onDidReceiveMessage(
+        async (message: { type: string; findingId?: string }) => {
+          if (message.type === 'suppress' && message.findingId) {
+            await vscode.commands.executeCommand('sentinel.suppress', message.findingId);
+          } else if (message.type === 'openDashboard' && message.findingId) {
+            await vscode.commands.executeCommand('sentinel.openDashboard');
+          }
+        },
+        null,
+        ctx.subscriptions,
+      );
     }),
   );
 }
