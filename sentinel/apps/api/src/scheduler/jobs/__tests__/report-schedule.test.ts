@@ -174,4 +174,26 @@ describe("ReportScheduleJob", () => {
       "Report schedules triggered",
     );
   });
+
+  it("sets lastStatus to failed when processing throws", async () => {
+    ctx.db.reportSchedule.findMany.mockResolvedValue([{
+      id: "sched-err",
+      orgId: "org-1",
+      reportType: "executive",
+      frameworkId: null,
+      cronExpression: "0 8 * * 1",
+      timezone: "UTC",
+      recipients: ["a@b.com"],
+      parameters: {},
+    }]);
+    ctx.db.report.create.mockRejectedValue(new Error("DB connection lost"));
+
+    await job.execute(ctx);
+
+    expect(ctx.db.reportSchedule.update).toHaveBeenCalledWith({
+      where: { id: "sched-err" },
+      data: { lastStatus: "failed" },
+    });
+    expect(ctx.logger.error).toHaveBeenCalled();
+  });
 });
