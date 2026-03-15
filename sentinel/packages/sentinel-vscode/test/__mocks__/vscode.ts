@@ -4,6 +4,52 @@ export class ThemeColor {
   constructor(public id: string) {}
 }
 
+export class ThemeIcon {
+  constructor(public id: string) {}
+}
+
+export class MarkdownString {
+  value: string;
+  constructor(value?: string) {
+    this.value = value ?? "";
+  }
+}
+
+export enum TreeItemCollapsibleState {
+  None = 0,
+  Collapsed = 1,
+  Expanded = 2,
+}
+
+export class TreeItem {
+  label: string;
+  collapsibleState: number;
+  description?: string;
+  tooltip?: any;
+  iconPath?: any;
+  contextValue?: string;
+  command?: any;
+  resourceUri?: any;
+  constructor(label: string, collapsibleState?: number) {
+    this.label = label;
+    this.collapsibleState = collapsibleState ?? 0;
+  }
+}
+
+export class EventEmitter<T> {
+  private listeners: Array<(e: T) => void> = [];
+  event = (listener: (e: T) => void) => {
+    this.listeners.push(listener);
+    return { dispose: () => { this.listeners = this.listeners.filter((l) => l !== listener); } };
+  };
+  fire(data?: T): void {
+    for (const l of this.listeners) l(data as T);
+  }
+  dispose(): void {
+    this.listeners = [];
+  }
+}
+
 export enum StatusBarAlignment {
   Left = 1,
   Right = 2,
@@ -42,6 +88,12 @@ export const window = {
   showInformationMessage: vi.fn(),
   showWarningMessage: vi.fn(),
   showErrorMessage: vi.fn(),
+  createTreeView: vi.fn((_viewId: string, _options: any) => ({
+    dispose: vi.fn(),
+    onDidChangeSelection: vi.fn(),
+    onDidChangeVisibility: vi.fn(),
+    reveal: vi.fn(),
+  })),
 };
 
 export const commands = {
