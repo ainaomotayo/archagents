@@ -13,8 +13,8 @@ import {
 } from "@sentinel/telemetry";
 import { isArchiveEnabled, archiveToS3, getArchiveConfig } from "@sentinel/security";
 import { AIMetricsService, enrichTracesForScan, generateSpdxExport, generateCycloneDxExport } from "@sentinel/compliance";
-import http from "node:http";
 import { createAssessmentStore } from "./stores.js";
+import { createWorkerHealthServer } from "./worker-metrics.js";
 
 if (process.env.OTEL_EXPORTER_OTLP_ENDPOINT) {
   initTracing({ serviceName: "sentinel-worker" });
@@ -379,16 +379,7 @@ async function handleIPAttributionExport(_id: string, data: Record<string, unkno
 }
 
 const healthPort = parseInt(process.env.WORKER_HEALTH_PORT ?? "9092", 10);
-const healthServer = http.createServer((req, res) => {
-  if (req.url === "/health") {
-    res.writeHead(200, { "Content-Type": "application/json" });
-    res.end(JSON.stringify({ status: "ok", uptime: process.uptime() }));
-  } else {
-    res.writeHead(404);
-    res.end();
-  }
-});
-healthServer.listen(healthPort);
+const healthServer = createWorkerHealthServer(healthPort);
 logger.info({ port: healthPort }, "Worker health server listening");
 
 // Graceful shutdown

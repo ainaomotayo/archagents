@@ -43,13 +43,13 @@ export const certificatesIssued = new client.Counter({
 export const ssoAuthAttempts = new client.Counter({
   name: "sentinel_api_sso_auth_attempts_total",
   help: "SSO authentication attempts",
-  labelNames: ["provider", "result"],
+  labelNames: ["provider", "result", "reason"],
 });
 
 export const auditEventsEmitted = new client.Counter({
   name: "sentinel_api_audit_events_total",
   help: "Audit events emitted",
-  labelNames: ["action"],
+  labelNames: ["action", "actor"],
 });
 
 export function registerMetricsRoute(app: FastifyInstance) {

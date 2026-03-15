@@ -1,5 +1,4 @@
 import { createHash } from "node:crypto";
-import http from "node:http";
 import { Redis } from "ioredis";
 import { EventBus, withRetry } from "@sentinel/events";
 import { getDb, disconnectDb } from "@sentinel/db";
@@ -19,6 +18,7 @@ import {
   notificationDeliveryDuration,
   notificationRetryQueueDepth,
 } from "@sentinel/telemetry";
+import { createWorkerHealthServer } from "./worker-metrics.js";
 
 const logger = createLogger({ name: "notification-worker" });
 
@@ -289,13 +289,7 @@ if (process.env.NODE_ENV !== "test") {
   }, 5_000);
 
   const healthPort = parseInt(process.env.NOTIFICATION_WORKER_PORT ?? "9095", 10);
-  const healthServer = http.createServer((req, res) => {
-    if (req.url === "/health") {
-      res.writeHead(200, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ status: "ok", uptime: process.uptime() }));
-    } else { res.writeHead(404); res.end(); }
-  });
-  healthServer.listen(healthPort);
+  const healthServer = createWorkerHealthServer(healthPort);
   logger.info({ port: healthPort }, "Notification worker health server listening");
 
   const shutdown = async () => {
