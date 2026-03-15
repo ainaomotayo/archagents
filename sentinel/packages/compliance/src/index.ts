@@ -102,3 +102,6 @@ export { PageFooter } from "./reports/components/index.js";
 // Report Storage
 export { type ReportStorage, LocalReportStorage } from "./reports/storage.js";
 export { S3ReportStorage, type S3StorageConfig } from "./reports/s3-storage.js";
+
+// Wizard
+export * from "./wizard/index.js";
