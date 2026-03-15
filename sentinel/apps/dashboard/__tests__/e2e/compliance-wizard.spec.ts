@@ -6,7 +6,7 @@ test.describe("Compliance Wizard – List Page", () => {
   });
 
   test("page loads with heading and create button", async ({ page }) => {
-    await expect(page.getByRole("heading", { name: "Compliance Wizards" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Compliance Wizards", exact: true })).toBeVisible();
     await expect(page.getByText("Step-by-step EU AI Act compliance guidance")).toBeVisible();
     await expect(page.getByRole("link", { name: "Create Wizard" })).toBeVisible();
   });
@@ -40,7 +40,7 @@ test.describe("Compliance Wizard – List Page", () => {
 
 test.describe("Compliance Wizard – Create Page", () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto("/compliance/wizards/new");
+    await page.goto("/compliance/wizards/new", { waitUntil: "domcontentloaded" });
   });
 
   test("form renders with all fields", async ({ page }) => {
@@ -57,6 +57,10 @@ test.describe("Compliance Wizard – Create Page", () => {
   });
 
   test("submit with empty name shows validation error", async ({ page }) => {
+    await page.waitForLoadState("networkidle");
+    const nameInput = page.getByPlaceholder("e.g. Q1 2026 AI System Assessment");
+    await nameInput.pressSequentially("x", { delay: 50 });
+    await nameInput.press("Backspace");
     await page.getByRole("button", { name: "Create Wizard" }).click();
     await expect(page.getByText("Name is required")).toBeVisible();
   });
@@ -64,7 +68,7 @@ test.describe("Compliance Wizard – Create Page", () => {
   test("cancel link navigates back to wizard list", async ({ page }) => {
     await page.getByRole("link", { name: "Cancel" }).click();
     await page.waitForURL("**/compliance/wizards");
-    await expect(page.getByRole("heading", { name: "Compliance Wizards" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Compliance Wizards", exact: true })).toBeVisible();
   });
 
   test("create button text and disabled state", async ({ page }) => {

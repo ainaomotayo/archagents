@@ -9,7 +9,7 @@ import { StepHeader } from "./StepHeader";
 import { StepFooter } from "./StepFooter";
 import { GenericStepForm } from "./GenericStepForm";
 import { ProgressSummary } from "./ProgressSummary";
-import { updateStep, completeStep, skipStep } from "@/lib/wizard-api";
+import { updateStep, completeStep, skipStep, fetchWizard } from "@/lib/wizard-api";
 
 interface WizardPageClientProps {
   wizard: Wizard;
@@ -98,14 +98,9 @@ export function WizardPageClient({ wizard: initialWizard }: WizardPageClientProp
     setSaving(true);
     try {
       await completeStep(wizard.id, currentCode);
-      setWizard((prev) => ({
-        ...prev,
-        steps: prev.steps.map((s) =>
-          s.controlCode === currentCode
-            ? { ...s, state: "completed" as const, completedAt: new Date().toISOString() }
-            : s
-        ),
-      }));
+      // Re-fetch the full wizard to get updated step states (unlocked dependents)
+      const updated = await fetchWizard(wizard.id);
+      setWizard(updated);
     } catch (err) {
       console.error("Failed to complete step", err);
     } finally {
@@ -117,14 +112,9 @@ export function WizardPageClient({ wizard: initialWizard }: WizardPageClientProp
     setSaving(true);
     try {
       await skipStep(wizard.id, currentCode, reason);
-      setWizard((prev) => ({
-        ...prev,
-        steps: prev.steps.map((s) =>
-          s.controlCode === currentCode
-            ? { ...s, state: "skipped" as const, skipReason: reason }
-            : s
-        ),
-      }));
+      // Re-fetch the full wizard to get updated step states (potentially unlocked dependents)
+      const updated = await fetchWizard(wizard.id);
+      setWizard(updated);
     } catch (err) {
       console.error("Failed to skip step", err);
     } finally {
