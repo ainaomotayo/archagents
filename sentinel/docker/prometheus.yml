@@ -1,8 +1,44 @@
 global:
   scrape_interval: 15s
+  evaluation_interval: 15s
+
+rule_files:
+  - /etc/prometheus/rules/*.yml
 
 scrape_configs:
   - job_name: sentinel-api
+    metrics_path: /metrics
     static_configs:
       - targets: ["api:8080"]
+        labels:
+          component: api
+
+  - job_name: sentinel-workers
     metrics_path: /metrics
+    static_configs:
+      - targets: ["assessor-worker:9092"]
+        labels: { component: worker, worker: assessor }
+      - targets: ["scheduler:9091"]
+        labels: { component: worker, worker: scheduler }
+      - targets: ["report-worker:9094"]
+        labels: { component: worker, worker: report }
+      - targets: ["notification-worker:9095"]
+        labels: { component: worker, worker: notification }
+      - targets: ["github-bridge:9093"]
+        labels: { component: worker, worker: github-bridge }
+
+  - job_name: sentinel-agents
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["agent-security:8081"]
+        labels: { component: agent, agent: security, tier: critical }
+      - targets: ["agent-dependency:8083"]
+        labels: { component: agent, agent: dependency, tier: critical }
+      - targets: ["agent-ip-license:8000"]
+        labels: { component: agent, agent: ip-license, tier: batch }
+      - targets: ["agent-quality:8000"]
+        labels: { component: agent, agent: quality, tier: batch }
+      - targets: ["agent-ai-detector:8000"]
+        labels: { component: agent, agent: ai-detector, tier: batch }
+      - targets: ["agent-policy:8000"]
+        labels: { component: agent, agent: policy, tier: batch }
