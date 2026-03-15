@@ -1,0 +1,52 @@
+# SENTINEL Scan - Azure Pipelines Integration Template
+#
+# Add this file to your repository root as azure-pipelines.yml
+# or include it via pipeline templates.
+#
+# Required pipeline variables (Settings > Pipelines > Library > Variable Group,
+# or inline under the pipeline Variables tab):
+#   - SENTINEL_API_URL: Your SENTINEL API endpoint (e.g. https://sentinel.example.com)
+#   - SENTINEL_API_KEY: Your SENTINEL API key (mark as secret)
+#   - SENTINEL_SECRET: Your HMAC shared secret (mark as secret)
+
+trigger:
+  branches:
+    include:
+      - '*'
+
+pr:
+  branches:
+    include:
+      - '*'
+
+pool:
+  vmImage: ubuntu-latest
+
+steps:
+  - checkout: self
+    fetchDepth: 0
+
+  - task: NodeTool@0
+    displayName: Setup Node.js
+    inputs:
+      versionSpec: '22.x'
+
+  - script: npm install -g @sentinel/cli
+    displayName: Install SENTINEL CLI
+
+  - script: |
+      if [ -n "$(System.PullRequest.PullRequestId)" ]; then
+        DIFF=$(git diff origin/$(System.PullRequest.TargetBranch)...HEAD)
+      else
+        DIFF=$(git diff HEAD~1 HEAD 2>/dev/null || echo "")
+      fi
+      if [ -z "$DIFF" ]; then
+        echo "No changes to scan."
+        exit 0
+      fi
+      echo "$DIFF" | sentinel ci --api-url $(SENTINEL_API_URL)
+    displayName: Run SENTINEL Scan
+    env:
+      SENTINEL_API_KEY: $(SENTINEL_API_KEY)
+      SENTINEL_SECRET: $(SENTINEL_SECRET)
+    timeoutInMinutes: 10
