@@ -37,7 +37,15 @@ export function createDebouncedScanner(
 
 export function activateScanTrigger(ctx: SentinelContext): void {
   const scanner = createDebouncedScanner(
-    (files) => handleTriggerScan(ctx.client, ctx.config().projectId, files),
+    (files) =>
+      vscode.window.withProgress(
+        {
+          location: vscode.ProgressLocation.Notification,
+          title: "Sentinel: Scanning...",
+          cancellable: false,
+        },
+        () => handleTriggerScan(ctx.client, ctx.config().projectId, files),
+      ),
     ctx.config().autoScanDebounceMs,
   );
 

@@ -17,6 +17,7 @@
       { "command": "sentinel.triggerScan", "title": "Sentinel: Trigger Scan" },
       { "command": "sentinel.refresh", "title": "Sentinel: Refresh Findings", "icon": "$(refresh)" },
       { "command": "sentinel.suppress", "title": "Sentinel: Suppress Finding", "icon": "$(eye-closed)" },
+      { "command": "sentinel.showFindings", "title": "Sentinel: Show Findings for File" },
       { "command": "sentinel.showFindingDetail", "title": "Sentinel: Show Finding Detail" }
     ],
     "viewsContainers": {

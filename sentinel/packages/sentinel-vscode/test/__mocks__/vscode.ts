@@ -96,6 +96,7 @@ export const window = {
   })),
   createTextEditorDecorationType: vi.fn(() => ({ dispose: vi.fn() })),
   onDidChangeActiveTextEditor: vi.fn(() => ({ dispose: () => {} })),
+  withProgress: async (_opts: any, task: any) => task({ report: () => {} }),
   activeTextEditor: undefined as any,
 };
 
@@ -143,6 +144,8 @@ export class Position {
 export class Selection {
   constructor(public anchor: any, public active: any) {}
 }
+
+export const ProgressLocation = { Notification: 15, SourceControl: 1, Window: 10 };
 
 export enum ViewColumn {
   Active = -1,
