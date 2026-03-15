@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 150">
+  <rect width="200" height="150" rx="8" fill="#1e1e2e"/>
+  <rect x="40" y="35" width="120" height="14" rx="3" fill="#f38ba8" opacity="0.8"/>
+  <rect x="40" y="55" width="120" height="14" rx="3" fill="#fab387" opacity="0.8"/>
+  <rect x="40" y="75" width="120" height="14" rx="3" fill="#f9e2af" opacity="0.6"/>
+  <text x="100" y="120" text-anchor="middle" fill="#cdd6f4" font-family="sans-serif" font-size="14">Explore Findings</text>
+</svg>
