@@ -8,6 +8,9 @@ import { test, expect, type Page } from "@playwright/test";
 import { createMockServer, resetState } from "./mock-wizard-api";
 import type { Server } from "http";
 
+// Force all tests in this file to run in a single worker (mock server binds port 8081).
+test.describe.configure({ mode: "serial" });
+
 let mockServer: Server;
 
 test.beforeAll(async () => {
