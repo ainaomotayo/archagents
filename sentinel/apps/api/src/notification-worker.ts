@@ -12,6 +12,7 @@ import {
   TopicTrie,
   type NotificationEvent,
 } from "@sentinel/notifications";
+import { buildDigestEmailHtml } from "@sentinel/compliance";
 import { createLogger, initTracing, shutdownTracing } from "@sentinel/telemetry";
 import {
   notificationDeliveriesTotal,
@@ -195,6 +196,51 @@ export async function processRetryQueue(deps: WorkerDeps): Promise<void> {
   }
 }
 
+export async function handleDigestEvent(
+  event: NotificationEvent,
+  deps: WorkerDeps & { dashboardUrl: string },
+): Promise<void> {
+  const { scheduleId, recipients, parameters } = event.payload as any;
+  if (!recipients || !Array.isArray(recipients) || recipients.length === 0) return;
+
+  // Read today's digest snapshot
+  const today = new Date();
+  today.setUTCHours(0, 0, 0, 0);
+  let snapshot = await deps.db.digestSnapshot.findFirst({
+    where: { orgId: event.orgId, snapshotDate: today },
+  });
+
+  if (!snapshot) {
+    // Fallback: try yesterday
+    const yesterday = new Date(today.getTime() - 86400000);
+    snapshot = await deps.db.digestSnapshot.findFirst({
+      where: { orgId: event.orgId, snapshotDate: yesterday },
+    });
+    if (!snapshot) return; // No snapshot available
+  }
+
+  const orgName = parameters?.orgName ?? event.orgId;
+  const html = buildDigestEmailHtml(orgName, snapshot.metrics, deps.dashboardUrl);
+
+  const emailAdapter = deps.registry.get("email");
+  if (!emailAdapter) return;
+
+  for (const recipient of recipients) {
+    await emailAdapter.deliver(
+      { channelType: "email", channelConfig: { to: [recipient], subject: "SENTINEL Weekly Digest — {{topic}}" } } as any,
+      { ...event, topic: "compliance.digest" },
+    );
+  }
+
+  // Update schedule status
+  if (scheduleId) {
+    await deps.db.reportSchedule.update({
+      where: { id: scheduleId },
+      data: { lastStatus: "delivered" },
+    }).catch(() => {});
+  }
+}
+
 // --- Main process (only when executed directly) ---
 
 if (process.env.NODE_ENV !== "test") {
@@ -226,9 +272,14 @@ if (process.env.NODE_ENV !== "test") {
     logger.info({ host: process.env.SMTP_HOST }, "Email adapter registered");
   }
 
+  const dashboardUrl = process.env.DASHBOARD_URL ?? "https://sentinel.example.com";
   const wrappedHandler = withRetry(redis, "sentinel.notifications", async (_id: string, data: Record<string, unknown>) => {
     const event = data as unknown as NotificationEvent;
-    await processNotificationEvent(event, { db, registry, redisPub });
+    if (event.topic === "compliance.digest_ready") {
+      await handleDigestEvent(event, { db, registry, redisPub, dashboardUrl });
+    } else {
+      await processNotificationEvent(event, { db, registry, redisPub });
+    }
   }, { maxRetries: 3, baseDelayMs: 1000 });
 
   eventBus.subscribe("sentinel.notifications", "notification-workers", `notif-${process.pid}`, wrappedHandler);
