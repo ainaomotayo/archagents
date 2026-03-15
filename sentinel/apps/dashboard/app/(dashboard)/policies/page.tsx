@@ -68,6 +68,11 @@ export default async function PoliciesPage() {
                 </div>
 
                 <div className="flex items-center gap-5">
+                  {(policy as any).format === "tree" || (policy as any).treeRules ? (
+                    <span className="rounded-full bg-accent/10 text-accent px-2 py-0.5 text-[10px] font-semibold">Visual</span>
+                  ) : (
+                    <span className="rounded-full bg-surface-1 text-text-tertiary px-2 py-0.5 text-[10px] font-semibold">YAML</span>
+                  )}
                   <span
                     className={`inline-flex items-center gap-1.5 rounded-md border px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wider ${
                       policy.enabled

@@ -76,6 +76,37 @@ export interface FindingCountByCategory {
   count: number;
 }
 
+// ── Compliance ────────────────────────────────────────────────────────
+
+export type ComplianceVerdict =
+  | "compliant"
+  | "partially_compliant"
+  | "needs_remediation"
+  | "non_compliant";
+
+export interface ControlScore {
+  controlCode: string;
+  controlName: string;
+  score: number; // 0.0–1.0
+  passing: number;
+  failing: number;
+  total: number;
+}
+
+export interface FrameworkScore {
+  frameworkSlug: string;
+  frameworkName: string;
+  score: number; // 0.0–1.0
+  verdict: ComplianceVerdict;
+  controlScores: ControlScore[];
+}
+
+export interface ComplianceTrendPoint {
+  date: string; // ISO 8601
+  score: number; // 0.0–1.0
+}
+
+
 // ── Approvals ─────────────────────────────────────────────────────────
 
 export type ApprovalStatus = "pending" | "escalated" | "approved" | "rejected" | "expired";

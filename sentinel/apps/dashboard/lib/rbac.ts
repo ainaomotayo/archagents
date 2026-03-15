@@ -32,6 +32,7 @@ export const ROUTE_PERMISSIONS: RoutePermission[] = [
   { path: "/findings", roles: ["admin", "manager", "dev"] },
   { path: "/ai-metrics", roles: ["admin", "manager", "dev", "viewer"] },
   { path: "/certificates", roles: ["admin", "manager", "dev", "viewer"] },
+  { path: "/compliance", roles: ["admin", "manager", "dev", "viewer"] },
   { path: "/", roles: ["admin", "manager", "dev", "viewer"] },
 ];
 
@@ -55,6 +56,8 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Charts", href: "/remediations/charts", icon: "chart" },
   { label: "AI Metrics", href: "/ai-metrics", icon: "cpu" },
   { label: "Certificates", href: "/certificates", icon: "shield" },
+  { label: "Gap Analysis", href: "/compliance/gap-analysis", icon: "grid" },
+  { label: "Attestations", href: "/compliance/attestations", icon: "clipboard-check" },
   { label: "Policies", href: "/policies", icon: "file-text" },
   { label: "Reports", href: "/reports", icon: "bar-chart" },
   { label: "Drift", href: "/drift", icon: "trending-up" },
