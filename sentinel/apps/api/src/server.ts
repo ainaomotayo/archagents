@@ -44,6 +44,7 @@ import { registerScimRoutes } from "./routes/scim.js";
 import { registerEncryptionAdminRoutes } from "./routes/encryption-admin.js";
 import { registerDomainRoutes } from "./routes/domain-verification.js";
 import { registerVcsWebhookRoutes } from "./routes/vcs-webhooks.js";
+import { registerVcsInstallationRoutes } from "./routes/vcs-installations.js";
 import { VcsProviderRegistry, GitHubProvider, GitLabProvider, BitbucketProvider, AzureDevOpsProvider } from "@sentinel/vcs";
 import { DekCache, EnvelopeEncryption, LocalKmsProvider } from "@sentinel/security";
 
@@ -154,6 +155,9 @@ const webhookSecret = process.env.GITHUB_WEBHOOK_SECRET ?? "";
 if (webhookSecret) {
   registerWebhookRoutes(app, { eventBus, webhookSecret, db });
 }
+
+// --- VCS installation management routes ---
+registerVcsInstallationRoutes(app, { db });
 
 // --- Multi-VCS webhook routes ---
 const vcsRegistry = new VcsProviderRegistry();

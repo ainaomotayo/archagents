@@ -295,6 +295,49 @@ describe("pollForResult", () => {
     ).rejects.toThrow("Poll error: 500 Internal Server Error");
   });
 
+  it("uses exponential backoff intervals", async () => {
+    const delays: number[] = [];
+    const origSetTimeout = globalThis.setTimeout;
+    vi.spyOn(globalThis, "setTimeout").mockImplementation(((fn: Function, ms?: number) => {
+      if (ms && ms >= 500) delays.push(ms);
+      return origSetTimeout(fn, 0); // Execute immediately for speed
+    }) as any);
+
+    let callCount = 0;
+    const mockFetch = vi.fn(async () => {
+      callCount++;
+      if (callCount <= 4) {
+        return new Response(JSON.stringify({ status: "pending" }), { status: 200 });
+      }
+      return new Response(
+        JSON.stringify({ status: "full_pass", assessment: { status: "full_pass" } }),
+        { status: 200 },
+      );
+    });
+
+    await pollForResult("scan-backoff", {
+      apiUrl: "http://localhost",
+      timeout: 120,
+      secret: "test-secret",
+      fetchFn: mockFetch as any,
+    });
+
+    // Should have 4 delays (for the 4 pending responses)
+    expect(delays.length).toBe(4);
+    // Verify exponential progression (ignore jitter for ordering)
+    // Intervals should be approximately: 1000, 2000, 4000, 8000 (plus 0-500 jitter)
+    expect(delays[0]).toBeGreaterThanOrEqual(1000);
+    expect(delays[0]).toBeLessThanOrEqual(1500);
+    expect(delays[1]).toBeGreaterThanOrEqual(2000);
+    expect(delays[1]).toBeLessThanOrEqual(2500);
+    expect(delays[2]).toBeGreaterThanOrEqual(4000);
+    expect(delays[2]).toBeLessThanOrEqual(4500);
+    expect(delays[3]).toBeGreaterThanOrEqual(8000);
+    expect(delays[3]).toBeLessThanOrEqual(8500);
+
+    vi.restoreAllMocks();
+  });
+
   it("throws on timeout", async () => {
     // Always return pending — with timeout=0 it should time out immediately
     const fetch = mockFetch([

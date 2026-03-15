@@ -1,0 +1,32 @@
+{
+  "$schema": "http://json.schemastore.org/vss-extension",
+  "manifestVersion": 1,
+  "id": "sentinel-security-scan",
+  "version": "0.1.0",
+  "name": "SENTINEL Security Scan",
+  "description": "AI-powered code governance and compliance scanning for Azure Pipelines.",
+  "publisher": "sentinel-security",
+  "categories": ["Azure Pipelines"],
+  "targets": [
+    { "id": "Microsoft.VisualStudio.Services" }
+  ],
+  "icons": {
+    "default": "images/icon.png"
+  },
+  "content": {
+    "details": { "path": "overview.md" }
+  },
+  "files": [
+    { "path": "sentinel-scan" }
+  ],
+  "contributions": [
+    {
+      "id": "sentinel-scan-task",
+      "type": "ms.vss-distributed-task.task",
+      "targets": ["ms.vss-distributed-task.tasks"],
+      "properties": {
+        "name": "sentinel-scan"
+      }
+    }
+  ]
+}

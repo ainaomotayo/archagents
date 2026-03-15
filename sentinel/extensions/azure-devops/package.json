@@ -1,0 +1,12 @@
+{
+  "name": "sentinel-azure-devops-extension",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "build": "cd sentinel-scan && npm run build",
+    "package": "tfx extension create --manifest-globs vss-extension.json"
+  },
+  "devDependencies": {
+    "tfx-cli": "^0.17.0"
+  }
+}
