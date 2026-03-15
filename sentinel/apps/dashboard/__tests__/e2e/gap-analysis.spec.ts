@@ -1,0 +1,68 @@
+import { test, expect } from "@playwright/test";
+
+test.describe("Gap Analysis Page", () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto("/compliance/gap-analysis");
+  });
+
+  test("page loads with all components visible", async ({ page }) => {
+    // Page header
+    await expect(page.getByRole("heading", { name: "Gap Analysis" })).toBeVisible();
+
+    // Summary cards
+    await expect(page.getByText("Score")).toBeVisible();
+    await expect(page.getByText("Met")).toBeVisible();
+    await expect(page.getByText("Unmet")).toBeVisible();
+    await expect(page.getByText("Frameworks")).toBeVisible();
+
+    // Framework filter pills
+    await expect(page.getByRole("button", { name: "All" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "SOC 2 Type II" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "GDPR" })).toBeVisible();
+
+    // Heatmap grid
+    await expect(page.getByRole("grid", { name: "Compliance heatmap" })).toBeVisible();
+
+    // Detail panel placeholder
+    await expect(page.getByText("Click a cell to view control details")).toBeVisible();
+  });
+
+  test("clicking a cell shows control detail panel", async ({ page }) => {
+    // Click CC6.3 (System Operations - 55%, red cell)
+    await page.getByRole("button", { name: /CC6\.3.*System Operations.*55%/ }).click();
+
+    // Detail panel should show
+    await expect(page.getByRole("heading", { name: /CC6\.3.*System Operations/ })).toBeVisible();
+    await expect(page.getByText("SOC 2 Type II")).toBeVisible();
+    await expect(page.getByText("55%")).toBeVisible();
+    await expect(page.getByText("30-day trend")).toBeVisible();
+
+    // Findings link
+    await expect(page.getByRole("link", { name: /View.*findings/ })).toBeVisible();
+  });
+
+  test("framework filter shows only selected framework", async ({ page }) => {
+    // Click SLSA filter
+    await page.getByRole("button", { name: "SLSA v1.0" }).click();
+
+    // SLSA controls should be visible
+    await expect(page.getByRole("button", { name: /SL1.*Version Controlled.*100%/ })).toBeVisible();
+
+    // SOC2 controls should not be visible
+    await expect(page.getByRole("button", { name: /CC1\.1.*COSO Principle 1/ })).not.toBeVisible();
+  });
+
+  test("compliance redirect works", async ({ page }) => {
+    await page.goto("/compliance");
+    await page.waitForURL("**/compliance/gap-analysis");
+    await expect(page.getByRole("heading", { name: "Gap Analysis" })).toBeVisible();
+  });
+
+  test("refresh button exists and is clickable", async ({ page }) => {
+    const refreshBtn = page.getByRole("button", { name: /Refresh/ });
+    await expect(refreshBtn).toBeVisible();
+    await refreshBtn.click();
+    // Should show refreshing state
+    await expect(page.getByText("Refreshing...")).toBeVisible();
+  });
+});
