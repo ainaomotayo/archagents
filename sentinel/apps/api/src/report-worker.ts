@@ -19,6 +19,14 @@ import {
 import { renderReport } from "./report-renderer.js";
 import { createReportStorage } from "./report-storage-factory.js";
 
+// Environment variables:
+// REPORT_STORAGE - "s3" or "local" (default: "local")
+// REPORT_S3_BUCKET - S3 bucket name (required when REPORT_STORAGE=s3)
+// REPORT_S3_REGION - AWS region (default: "us-east-1")
+// REPORT_LOCAL_DIR - local directory for reports (default: ./data/reports)
+// PDF_EXPORT_ENABLED - "true" to enable PDF generation (default: disabled)
+// RENDER_TIMEOUT_MS - render timeout in ms (default: 60000)
+
 if (process.env.OTEL_EXPORTER_OTLP_ENDPOINT) {
   initTracing({ serviceName: "report-worker" });
 }
@@ -145,6 +153,11 @@ async function assembleAndGeneratePdf(orgId: string, type: string, frameworkId: 
 async function handleReportRequest(_id: string, data: Record<string, unknown>) {
   const { reportId, orgId, type, frameworkId, parameters, delivery } = data as any;
   logger.info({ reportId, type }, "Processing report request");
+
+  if (process.env.PDF_EXPORT_ENABLED !== "true") {
+    logger.info({ reportId }, "PDF export disabled, skipping");
+    return;
+  }
 
   try {
     await db.report.update({ where: { id: reportId }, data: { status: "generating" } });
