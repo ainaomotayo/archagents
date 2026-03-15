@@ -26,6 +26,8 @@ export const API_PERMISSIONS: EndpointPermission[] = [
   { method: "POST", path: "/v1/policies", roles: ["admin", "manager"] },
   { method: "PUT", path: "/v1/policies/:id", roles: ["admin", "manager"] },
   { method: "DELETE", path: "/v1/policies/:id", roles: ["admin"] },
+  { method: "POST", path: "/v1/policies/simulate", roles: ["admin", "manager", "developer"] },
+  { method: "POST", path: "/v1/policies/compile-yaml", roles: ["admin", "manager", "developer"] },
   { method: "GET", path: "/v1/audit", roles: ["admin", "manager"] },
   { method: "GET", path: "/v1/policies/:id/versions", roles: ["admin", "manager", "developer", "viewer"] },
   { method: "GET", path: "/v1/admin/dlq", roles: ["admin"] },

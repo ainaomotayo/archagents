@@ -54,8 +54,23 @@ export interface FindingInput {
   suppressed: boolean;
 }
 
-export const VALID_REPORT_TYPES = ["compliance_summary", "audit_evidence", "executive", "nist_profile", "hipaa_assessment"] as const;
+export const VALID_REPORT_TYPES = ["compliance_summary", "audit_evidence", "executive", "nist_profile", "hipaa_assessment", "digest"] as const;
 export type ReportType = (typeof VALID_REPORT_TYPES)[number];
+
+export interface DigestMetrics {
+  scanVolume: { total: number; weekOverWeek: number };
+  findingSummary: {
+    critical: number; high: number; medium: number; low: number;
+    weekOverWeek: { critical: number; high: number; medium: number; low: number };
+  };
+  frameworkScores: Array<{
+    slug: string; name: string; score: number; previousScore: number; delta: number;
+  }>;
+  attestationSummary: { total: number; attested: number; expired: number; expiringSoon: number };
+  remediationSummary: { open: number; inProgress: number; completed: number; avgResolutionHours: number };
+  aiMetrics: { aiRatio: number; avgProbability: number; weekOverWeek: number };
+  topFindings: Array<{ title: string; severity: string; count: number }>;
+}
 
 export const EVIDENCE_EVENT_TYPES = [
   "scan_completed",

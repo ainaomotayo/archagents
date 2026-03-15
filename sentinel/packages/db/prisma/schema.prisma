@@ -20,6 +20,7 @@ model Organization {
   projects       Project[]
   users          User[]
   policies       Policy[]
+  attestations   Attestation[]
   ssoConfigs     SsoConfig[]
   memberships    OrgMembership[]
   encryptionKeys   EncryptionKey[]
@@ -38,6 +39,8 @@ model Organization {
   remediationSnapshots        RemediationSnapshot[]
   aiMetricsSnapshots          AIMetricsSnapshot[]
   aiMetricsConfig             AIMetricsConfig?
+  reportSchedules             ReportSchedule[]
+  digestSnapshots             DigestSnapshot[]
 
   @@map("organizations")
 }
@@ -259,6 +262,8 @@ model Policy {
   projectId String?  @map("project_id") @db.Uuid
   name      String
   rules     Json
+  treeRules Json?    @map("tree_rules")
+  format    String   @default("yaml")
   version   Int      @default(1)
   createdBy String   @map("created_by")
   createdAt DateTime  @default(now()) @map("created_at")
@@ -278,6 +283,8 @@ model PolicyVersion {
   version    Int
   name       String
   rules      Json
+  treeRules  Json?    @map("tree_rules")
+  format     String   @default("yaml")
   changedBy  String   @map("changed_by")
   changedAt  DateTime @default(now()) @map("changed_at")
   changeType String   @map("change_type")
@@ -426,6 +433,72 @@ model GitHubInstallation {
   @@map("github_installations")
 }
 
+model Attestation {
+  id             String    @id @default(uuid()) @db.Uuid
+  orgId          String    @map("org_id") @db.Uuid
+  type           String
+  frameworkSlug  String    @map("framework_slug")
+  controlCode    String    @map("control_code")
+  title          String
+  description    String    @db.Text
+  score          Float
+  status         String    @default("draft")
+  scanId         String?   @map("scan_id") @db.Uuid
+  certificateId  String?   @map("certificate_id") @db.Uuid
+  snapshot       Json      @default("{}")
+  version        Int       @default(1)
+  validFrom      DateTime  @map("valid_from") @default(now())
+  validUntil     DateTime? @map("valid_until")
+  expiresAt      DateTime  @map("expires_at")
+  supersededById String?   @map("superseded_by_id") @db.Uuid
+  createdBy      String    @map("created_by")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  organization Organization          @relation(fields: [orgId], references: [id])
+  approvals    AttestationApproval[]
+  evidence     AttestationEvidence[]
+
+  @@index([orgId])
+  @@index([orgId, frameworkSlug, controlCode, status])
+  @@index([expiresAt])
+  @@map("attestations")
+}
+
+model AttestationApproval {
+  id            String    @id @default(uuid()) @db.Uuid
+  attestationId String    @map("attestation_id") @db.Uuid
+  stage         String
+  decision      String
+  comment       String?   @db.Text
+  decidedBy     String?   @map("decided_by")
+  decidedAt     DateTime? @map("decided_at")
+  createdAt     DateTime  @default(now()) @map("created_at")
+
+  attestation Attestation @relation(fields: [attestationId], references: [id])
+
+  @@index([attestationId])
+  @@index([decidedBy, decision])
+  @@map("attestation_approvals")
+}
+
+model AttestationEvidence {
+  id            String   @id @default(uuid()) @db.Uuid
+  attestationId String   @map("attestation_id") @db.Uuid
+  type          String
+  title         String
+  refId         String?  @map("ref_id")
+  url           String?
+  source        String?
+  metadata      Json     @default("{}")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  attestation Attestation @relation(fields: [attestationId], references: [id])
+
+  @@index([attestationId])
+  @@map("attestation_evidence")
+}
+
 model ComplianceFramework {
   id          String   @id @default(uuid()) @db.Uuid
   orgId       String?  @map("org_id") @db.Uuid
@@ -549,6 +622,44 @@ model Report {
 
   @@index([orgId])
   @@map("reports")
+}
+
+model ReportSchedule {
+  id              String    @id @default(uuid()) @db.Uuid
+  orgId           String    @map("org_id") @db.Uuid
+  name            String
+  reportType      String    @map("report_type")
+  frameworkId     String?   @map("framework_id") @db.Uuid
+  cronExpression  String    @map("cron_expression")
+  timezone        String    @default("UTC")
+  recipients      String[]
+  enabled         Boolean   @default(true)
+  nextRunAt       DateTime  @map("next_run_at") @db.Timestamptz
+  lastRunAt       DateTime? @map("last_run_at") @db.Timestamptz
+  lastStatus      String?   @map("last_status")
+  parameters      Json      @default("{}")
+  createdBy       String    @map("created_by")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  organization    Organization @relation(fields: [orgId], references: [id])
+
+  @@index([nextRunAt])
+  @@index([orgId])
+  @@map("report_schedules")
+}
+
+model DigestSnapshot {
+  id              String    @id @default(uuid()) @db.Uuid
+  orgId           String    @map("org_id") @db.Uuid
+  snapshotDate    DateTime  @map("snapshot_date") @db.Date
+  metrics         Json
+  createdAt       DateTime  @default(now()) @map("created_at")
+
+  organization    Organization @relation(fields: [orgId], references: [id])
+
+  @@unique([orgId, snapshotDate])
+  @@map("digest_snapshots")
 }
 
 // --- Human Escalation & Approval Workflows ---

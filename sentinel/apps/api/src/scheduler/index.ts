@@ -33,6 +33,8 @@ import { AIMetricsSnapshotJob } from "./jobs/ai-metrics-snapshot.js";
 import { AIMetricsRollupJob } from "./jobs/ai-metrics-rollup.js";
 import { AIMetricsAnomalyJob } from "./jobs/ai-metrics-anomaly.js";
 import { AIMetricsMonthlyRollupJob } from "./jobs/ai-metrics-monthly-rollup.js";
+import { ReportScheduleJob } from "./jobs/report-schedule.js";
+import { DigestSnapshotJob } from "./jobs/digest-snapshot.js";
 
 import { createAuditEventStore } from "../stores.js";
 
@@ -46,6 +48,7 @@ export { DualAuditLayer } from "./audit-layer.js";
 export { ScanLifecycleTracker } from "./lifecycle-tracker.js";
 export { OrgScheduleManager } from "./org-schedule-manager.js";
 export { JobRegistry } from "./job-registry.js";
+export { computeNextRun, validateCronExpression } from "./cron-utils.js";
 
 // --- SchedulerMetrics ---
 
@@ -246,6 +249,8 @@ export async function startScheduler(): Promise<void> {
     new AIMetricsRollupJob(),
     new AIMetricsMonthlyRollupJob(),
     new AIMetricsAnomalyJob(),
+    new ReportScheduleJob(),
+    new DigestSnapshotJob(),
   ];
   if (config.cveRescanEnabled) {
     allJobs.push(new CVERescanJob());

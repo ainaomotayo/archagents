@@ -41,7 +41,8 @@ class SentinelLspServerDescriptor(private val project: Project) : ProcessStreamC
                 .getPlugin(com.intellij.openapi.extensions.PluginId.getId(SentinelPlugin.ID))
                 ?.pluginPath
             if (pluginDir != null) {
-                val bundled = pluginDir.resolve("bin/sentinel-lsp-$platform")
+                val suffix = if (SystemInfo.isWindows) ".exe" else ""
+                val bundled = pluginDir.resolve("bin/sentinel-lsp-$platform$suffix")
                 if (bundled.toFile().exists()) {
                     val file = bundled.toFile()
                     if (SystemInfo.isUnix) file.setExecutable(true)

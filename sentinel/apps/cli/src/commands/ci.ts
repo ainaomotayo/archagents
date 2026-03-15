@@ -7,6 +7,7 @@ import type {
   SentinelDiffPayload,
 } from "@sentinel/shared";
 import { parseDiff } from "../git/diff.js";
+import { detectCiProvider } from "../ci-providers/index.js";
 
 // ── Options & types ────────────────────────────────────────────────
 
@@ -74,11 +75,12 @@ function detectLanguage(filePath: string): string {
 
 function buildPayload(rawDiff: string): SentinelDiffPayload {
   const diffFiles = parseDiff(rawDiff);
+  const ci = detectCiProvider();
   return {
-    projectId: process.env.SENTINEL_PROJECT_ID ?? "default",
-    commitHash: process.env.SENTINEL_COMMIT_HASH ?? process.env.GITHUB_SHA ?? "unknown",
-    branch: process.env.SENTINEL_BRANCH ?? process.env.GITHUB_REF_NAME ?? "unknown",
-    author: process.env.SENTINEL_AUTHOR ?? process.env.GITHUB_ACTOR ?? "unknown",
+    projectId: process.env.SENTINEL_PROJECT_ID ?? ci.projectId ?? "default",
+    commitHash: process.env.SENTINEL_COMMIT_HASH ?? process.env.SENTINEL_COMMIT ?? ci.commitHash ?? "unknown",
+    branch: process.env.SENTINEL_BRANCH ?? ci.branch ?? "unknown",
+    author: process.env.SENTINEL_AUTHOR ?? ci.author ?? "unknown",
     timestamp: new Date().toISOString(),
     files: diffFiles.map((f) => ({
       path: f.path,
@@ -131,7 +133,11 @@ export async function pollForResult(
 ): Promise<PollResult> {
   const fetchFn = options.fetchFn ?? globalThis.fetch;
   const deadline = Date.now() + options.timeout * 1000;
-  const POLL_INTERVAL_MS = 2000;
+  const INITIAL_INTERVAL_MS = 1000;
+  const BACKOFF_FACTOR = 2;
+  const MAX_INTERVAL_MS = 16000;
+  const MAX_JITTER_MS = 500;
+  let currentInterval = INITIAL_INTERVAL_MS;
 
   while (Date.now() < deadline) {
     const signature = signRequest("", options.secret);
@@ -156,8 +162,10 @@ export async function pollForResult(
       return data;
     }
 
-    // Wait before next poll
-    await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
+    // Wait before next poll (exponential backoff with jitter)
+    const jitter = Math.floor(Math.random() * MAX_JITTER_MS);
+    await new Promise((resolve) => setTimeout(resolve, currentInterval + jitter));
+    currentInterval = Math.min(currentInterval * BACKOFF_FACTOR, MAX_INTERVAL_MS);
   }
 
   throw new Error(`Scan timed out after ${options.timeout}s`);
