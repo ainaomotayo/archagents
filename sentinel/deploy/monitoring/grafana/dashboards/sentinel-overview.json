@@ -144,7 +144,7 @@
         "datasource": "Prometheus",
         "gridPos": { "h": 8, "w": 6, "x": 18, "y": 15 },
         "targets": [
-          { "expr": "sum(rate(sentinel_worker_certificates_issued_total[5m]) * 60)", "legendFormat": "certs/min" }
+          { "expr": "sum(rate(sentinel_api_certificates_issued_total[5m]) * 60)", "legendFormat": "certs/min" }
         ]
       },
       {

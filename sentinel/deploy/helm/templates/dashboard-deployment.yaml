@@ -20,8 +20,13 @@ spec:
     spec:
       securityContext:
         {{- include "sentinel.podSecurityContext" . | nindent 8 }}
+      priorityClassName: sentinel-critical
       {{- with .Values.global.imagePullSecrets }}
       imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.dashboard.topologySpreadConstraints }}
+      topologySpreadConstraints:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       containers:

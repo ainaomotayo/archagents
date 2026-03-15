@@ -32,8 +32,13 @@ spec:
           image: {{ include "sentinel.image" (dict "global" $.Values.global "repository" $.Values.api.image.repository "tag" ($.Values.api.image.tag | default $.Chart.AppVersion)) }}
           command:
             {{- toYaml $worker.command | nindent 12 }}
+          ports:
+            - name: metrics
+              containerPort: 9090
           env:
             {{- include "sentinel.commonEnv" $ | nindent 12 }}
+            - name: METRICS_PORT
+              value: "9090"
           resources:
             {{- toYaml $worker.resources | nindent 12 }}
           securityContext:

@@ -126,7 +126,7 @@
         "datasource": "Prometheus",
         "gridPos": { "h": 8, "w": 12, "x": 12, "y": 15 },
         "targets": [
-          { "expr": "sum by (agent) (rate(sentinel_agent_errors_total{agent=~\"$agent\"}[5m]))", "legendFormat": "{{ agent }}" }
+          { "expr": "sum by (agent) (rate(sentinel_agent_diffs_processed_total{agent=~\"$agent\", status=\"error\"}[5m]))", "legendFormat": "{{ agent }}" }
         ]
       },
       {

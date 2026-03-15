@@ -1,0 +1,85 @@
+{{- if .Values.samlJackson.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "sentinel.fullname" . }}-saml-jackson
+  labels:
+    {{- include "sentinel.labels" . | nindent 4 }}
+    app.kubernetes.io/component: saml-jackson
+spec:
+  replicas: {{ .Values.samlJackson.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "sentinel.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: saml-jackson
+  template:
+    metadata:
+      labels:
+        {{- include "sentinel.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: saml-jackson
+        sentinel.io/tier: standard
+    spec:
+      securityContext:
+        {{- include "sentinel.podSecurityContext" . | nindent 8 }}
+      {{- with .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: saml-jackson
+          image: {{ include "sentinel.image" (dict "global" .Values.global "repository" .Values.samlJackson.image.repository "tag" .Values.samlJackson.image.tag) }}
+          ports:
+            - name: http
+              containerPort: 5225
+          env:
+            - name: JACKSON_URL
+              value: "http://{{ include "sentinel.fullname" . }}-saml-jackson:5225"
+            - name: DB_ENGINE
+              value: sql
+            - name: DB_TYPE
+              value: postgres
+            - name: DB_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "sentinel.fullname" . }}-secrets
+                  key: database-url
+          readinessProbe:
+            httpGet:
+              path: /api/v1/health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /api/v1/health
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          resources:
+            {{- toYaml .Values.samlJackson.resources | nindent 12 }}
+          securityContext:
+            {{- include "sentinel.containerSecurityContext" . | nindent 12 }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "sentinel.fullname" . }}-saml-jackson
+  labels:
+    {{- include "sentinel.labels" . | nindent 4 }}
+    app.kubernetes.io/component: saml-jackson
+spec:
+  selector:
+    {{- include "sentinel.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: saml-jackson
+  ports:
+    - name: http
+      port: 5225
+      targetPort: http
+  type: ClusterIP
+{{- end }}

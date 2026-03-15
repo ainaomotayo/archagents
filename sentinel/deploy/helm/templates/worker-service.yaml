@@ -1,0 +1,21 @@
+{{- range $name, $worker := .Values.workers }}
+{{- if $worker.enabled }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "sentinel.fullname" $ }}-worker-{{ $name }}
+  labels:
+    {{- include "sentinel.labels" $ | nindent 4 }}
+    app.kubernetes.io/component: worker-{{ $name }}
+spec:
+  selector:
+    {{- include "sentinel.selectorLabels" $ | nindent 4 }}
+    app.kubernetes.io/component: worker-{{ $name }}
+  ports:
+    - name: metrics
+      port: 9090
+      targetPort: metrics
+  type: ClusterIP
+{{- end }}
+{{- end }}
