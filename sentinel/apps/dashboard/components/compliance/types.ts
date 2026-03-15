@@ -30,6 +30,13 @@ export function scoreToVerdict(score: number): string {
   return "Non-compliant";
 }
 
+export function scoreToVerdictEnum(score: number): ComplianceVerdict {
+  if (score >= 0.95) return "compliant";
+  if (score >= 0.80) return "partially_compliant";
+  if (score >= 0.60) return "needs_remediation";
+  return "non_compliant";
+}
+
 export function confidenceIndicator(total: number): number {
   return 1 - 1 / Math.sqrt(total + 1);
 }

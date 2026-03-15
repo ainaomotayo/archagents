@@ -5,7 +5,8 @@ import type { SelectedCell } from "./types";
 import type { ComplianceTrendPoint } from "@/lib/types";
 import { ScoreBadge } from "./ScoreBadge";
 import { TrendSparkline } from "./TrendSparkline";
-import { scoreToVerdict } from "./types";
+import { VerdictBadge } from "./VerdictBadge";
+import { scoreToVerdictEnum } from "./types";
 
 interface ControlDetailPanelProps {
   cell: SelectedCell | null;
@@ -62,9 +63,7 @@ export function ControlDetailPanel({ cell, getTrends }: ControlDetailPanelProps)
       <div className="mt-4 grid grid-cols-4 gap-3">
         <div>
           <p className="text-[10px] text-text-tertiary">Verdict</p>
-          <p className="text-[13px] font-semibold text-text-primary">
-            {scoreToVerdict(cell.score)}
-          </p>
+          <VerdictBadge verdict={scoreToVerdictEnum(cell.score)} />
         </div>
         <div>
           <p className="text-[10px] text-text-tertiary">Passing</p>
