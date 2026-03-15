@@ -30,6 +30,7 @@ import { buildDecisionTraceRoutes } from "./routes/decision-traces.js";
 import { buildBAARoutes } from "./routes/baa.js";
 import { buildAttestationRoutes } from "./routes/attestations.js";
 import { buildNotificationRuleRoutes } from "./routes/notification-rules.js";
+import { buildReportScheduleRoutes } from "./routes/report-schedules.js";
 import { HttpWebhookAdapter, SseManager } from "@sentinel/notifications";
 import { randomUUID } from "node:crypto";
 import { createScanStore, createAuditEventStore } from "./stores.js";
@@ -123,6 +124,7 @@ const attestationRoutes = buildAttestationRoutes({ db });
 const aiMetricsRoutes = buildAIMetricsRoutes({ db });
 const riskTrendRoutes = buildRiskTrendRoutes({ db });
 const decisionTraceRoutes = buildDecisionTraceRoutes({ db });
+const reportScheduleRoutes = buildReportScheduleRoutes({ db, eventBus });
 
 // --- Evidence upload service (stub S3 presigner until real provider is configured) ---
 const stubS3Presigner = {
@@ -1752,6 +1754,81 @@ app.get("/v1/reports/:id", { preHandler: authHook }, async (request, reply) => {
   });
   if (!report) { reply.code(404).send({ error: "Report not found" }); return; }
   return report;
+});
+
+// --- Report Schedules ---
+app.get("/v1/report-schedules", { preHandler: authHook }, async (request) => {
+  const orgId = (request as any).orgId ?? "default";
+  const { limit = "50", offset = "0" } = request.query as any;
+  const result = await reportScheduleRoutes.list(orgId, { limit: Number(limit), offset: Number(offset) });
+  return result;
+});
+
+app.get("/v1/report-schedules/:id", { preHandler: authHook }, async (request, reply) => {
+  const orgId = (request as any).orgId ?? "default";
+  const { id } = request.params as { id: string };
+  const schedule = await reportScheduleRoutes.get(orgId, id);
+  if (!schedule) { reply.code(404).send({ error: "Schedule not found" }); return; }
+  return schedule;
+});
+
+app.post("/v1/report-schedules", { preHandler: authHook }, async (request, reply) => {
+  const orgId = (request as any).orgId ?? "default";
+  const role = (request as any).role ?? "unknown";
+  if (!["admin", "manager", "service"].includes(role)) {
+    reply.code(403).send({ error: "Admin or manager role required" }); return;
+  }
+  try {
+    const schedule = await reportScheduleRoutes.create(orgId, request.body as any, (request as any).userId ?? role);
+    reply.code(201).send(schedule);
+  } catch (err: any) {
+    reply.code(400).send({ error: err.message });
+  }
+});
+
+app.put("/v1/report-schedules/:id", { preHandler: authHook }, async (request, reply) => {
+  const orgId = (request as any).orgId ?? "default";
+  const role = (request as any).role ?? "unknown";
+  if (!["admin", "manager", "service"].includes(role)) {
+    reply.code(403).send({ error: "Admin or manager role required" }); return;
+  }
+  const { id } = request.params as { id: string };
+  try {
+    const schedule = await reportScheduleRoutes.update(orgId, id, request.body as any);
+    return schedule;
+  } catch (err: any) {
+    reply.code(err.message.includes("not found") ? 404 : 400).send({ error: err.message });
+  }
+});
+
+app.delete("/v1/report-schedules/:id", { preHandler: authHook }, async (request, reply) => {
+  const orgId = (request as any).orgId ?? "default";
+  const role = (request as any).role ?? "unknown";
+  if (!["admin", "manager", "service"].includes(role)) {
+    reply.code(403).send({ error: "Admin or manager role required" }); return;
+  }
+  const { id } = request.params as { id: string };
+  try {
+    await reportScheduleRoutes.remove(orgId, id);
+    reply.code(204).send();
+  } catch (err: any) {
+    reply.code(404).send({ error: err.message });
+  }
+});
+
+app.post("/v1/report-schedules/:id/trigger", { preHandler: authHook }, async (request, reply) => {
+  const orgId = (request as any).orgId ?? "default";
+  const role = (request as any).role ?? "unknown";
+  if (!["admin", "manager", "service"].includes(role)) {
+    reply.code(403).send({ error: "Admin or manager role required" }); return;
+  }
+  const { id } = request.params as { id: string };
+  try {
+    const result = await reportScheduleRoutes.trigger(orgId, id);
+    return result;
+  } catch (err: any) {
+    reply.code(404).send({ error: err.message });
+  }
 });
 
 // --- Webhooks ---

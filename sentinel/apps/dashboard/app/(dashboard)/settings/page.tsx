@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useSession } from "next-auth/react";
 import { PageHeader } from "@/components/page-header";
-import { IconGlobe, IconUser, IconShield, IconActivity, IconBell, IconPlus, IconWrench, IconGithub } from "@/components/icons";
+import { IconGlobe, IconUser, IconShield, IconActivity, IconBell, IconPlus, IconWrench, IconGithub, IconCalendarEvent } from "@/components/icons";
 
 /* ─── Team Members Panel ─── */
 function TeamMembersPanel() {
@@ -409,6 +409,14 @@ export default function SettingsPage() {
           description="Configure remediation workflow stages and pipeline behavior."
           href="/settings/workflow"
           Icon={IconWrench}
+          animationDelay="0.3s"
+        />
+
+        <LinkSectionCard
+          title="Report Schedules"
+          description="Configure automated report delivery and digest schedules."
+          href="/settings/report-schedules"
+          Icon={IconCalendarEvent}
           animationDelay="0.3s"
         />
 

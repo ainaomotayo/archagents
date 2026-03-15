@@ -1,7 +1,9 @@
+import Link from "next/link";
 import { PageHeader } from "@/components/page-header";
 import { getComplianceScores, getComplianceTrends, getActiveAttestations } from "@/lib/api";
 import { GapAnalysisClient } from "@/components/compliance/GapAnalysisClient";
 import { RefreshButton } from "@/components/compliance/RefreshButton";
+import { ScheduledReportsWidget } from "@/components/compliance/ScheduledReportsWidget";
 
 export default async function GapAnalysisPage() {
   const [frameworks, attestationOverrides] = await Promise.all([
@@ -25,6 +27,8 @@ export default async function GapAnalysisPage() {
         description="Visual overview of compliance control coverage across frameworks"
         action={<RefreshButton />}
       />
+
+      <ScheduledReportsWidget />
 
       <GapAnalysisClient frameworks={frameworks} trendData={trendData} attestationOverrides={attestationOverrides} />
     </div>

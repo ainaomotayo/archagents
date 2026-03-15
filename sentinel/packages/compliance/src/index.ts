@@ -8,6 +8,7 @@ export type {
   FindingInput,
   ReportType,
   EvidenceEventType,
+  DigestMetrics,
 } from "./types.js";
 
 export { VALID_REPORT_TYPES, EVIDENCE_EVENT_TYPES } from "./types.js";
@@ -43,6 +44,7 @@ export { EvidenceService, type S3Presigner } from "./remediation/evidence-servic
 export { ChartsService } from "./remediation/charts-service.js";
 export { AutoFixService, type GitHubPRClient } from "./remediation/auto-fix-service.js";
 export { SyncHandler } from "./remediation/sync-handler.js";
+export { buildDigestEmailHtml } from "./reports/digest-email.js";
 
 // AI Metrics
 export { computeAIRatio, type FileSignal, type AIRatioResult } from "./ai-metrics/compute-ai-ratio.js";

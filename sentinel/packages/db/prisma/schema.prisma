@@ -39,6 +39,8 @@ model Organization {
   remediationSnapshots        RemediationSnapshot[]
   aiMetricsSnapshots          AIMetricsSnapshot[]
   aiMetricsConfig             AIMetricsConfig?
+  reportSchedules             ReportSchedule[]
+  digestSnapshots             DigestSnapshot[]
 
   @@map("organizations")
 }
@@ -557,6 +559,44 @@ model Report {
 
   @@index([orgId])
   @@map("reports")
+}
+
+model ReportSchedule {
+  id              String    @id @default(uuid()) @db.Uuid
+  orgId           String    @map("org_id") @db.Uuid
+  name            String
+  reportType      String    @map("report_type")
+  frameworkId     String?   @map("framework_id") @db.Uuid
+  cronExpression  String    @map("cron_expression")
+  timezone        String    @default("UTC")
+  recipients      String[]
+  enabled         Boolean   @default(true)
+  nextRunAt       DateTime  @map("next_run_at") @db.Timestamptz
+  lastRunAt       DateTime? @map("last_run_at") @db.Timestamptz
+  lastStatus      String?   @map("last_status")
+  parameters      Json      @default("{}")
+  createdBy       String    @map("created_by")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  organization    Organization @relation(fields: [orgId], references: [id])
+
+  @@index([nextRunAt])
+  @@index([orgId])
+  @@map("report_schedules")
+}
+
+model DigestSnapshot {
+  id              String    @id @default(uuid()) @db.Uuid
+  orgId           String    @map("org_id") @db.Uuid
+  snapshotDate    DateTime  @map("snapshot_date") @db.Date
+  metrics         Json
+  createdAt       DateTime  @default(now()) @map("created_at")
+
+  organization    Organization @relation(fields: [orgId], references: [id])
+
+  @@unique([orgId, snapshotDate])
+  @@map("digest_snapshots")
 }
 
 // --- Human Escalation & Approval Workflows ---
