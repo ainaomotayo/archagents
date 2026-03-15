@@ -45,6 +45,7 @@ import { registerScimRoutes } from "./routes/scim.js";
 import { registerEncryptionAdminRoutes } from "./routes/encryption-admin.js";
 import { registerDomainRoutes } from "./routes/domain-verification.js";
 import { registerJitRoutes } from "./routes/jit-provision.js";
+import { registerSessionRoutes } from "./routes/sessions.js";
 import { registerVcsWebhookRoutes } from "./routes/vcs-webhooks.js";
 import { registerVcsInstallationRoutes } from "./routes/vcs-installations.js";
 import { VcsProviderRegistry, GitHubProvider, GitLabProvider, BitbucketProvider, AzureDevOpsProvider } from "@sentinel/vcs";
@@ -1961,6 +1962,7 @@ registerSamlMetadataRoute(app);  // Public, no auth
 registerOrgMembershipRoutes(app, authHook);
 registerScimRoutes(app);  // Uses own SCIM auth
 registerJitRoutes(app);  // Public, called by NextAuth signIn callback
+registerSessionRoutes(app);  // Public, called by NextAuth jwt callback + signIn event
 // --- Encryption wiring ---
 dekCache = new DekCache();
 const kms = new LocalKmsProvider();
