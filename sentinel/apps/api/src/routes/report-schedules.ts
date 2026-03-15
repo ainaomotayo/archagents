@@ -6,7 +6,7 @@ import {
 
 interface ReportScheduleRouteDeps {
   db: any;
-  eventBus: { publish: (stream: string, payload: any) => Promise<void> };
+  eventBus: { publish: (stream: string, payload: any) => Promise<string | void> };
 }
 
 interface ListParams {
