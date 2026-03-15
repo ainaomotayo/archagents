@@ -5,7 +5,7 @@ export function createStatusBar(): vscode.StatusBarItem {
   const item = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100);
   item.text = "$(shield) Sentinel";
   item.tooltip = "Sentinel Security";
-  item.command = "sentinel.refresh";
+  item.command = "workbench.action.showCommands";
   item.show();
   return item;
 }
@@ -24,7 +24,7 @@ export function updateStatusBar(
       item.text = counts.length > 0
         ? `$(shield) Sentinel: ${counts.join(", ")}`
         : "$(shield) Sentinel";
-      item.tooltip = "Sentinel Security — Connected";
+      item.tooltip = `Sentinel Security — Connected\nFindings: ${criticalCount} critical, ${highCount} high\nLast sync: ${new Date().toLocaleTimeString()}`;
       item.backgroundColor = undefined;
       break;
     }
