@@ -313,6 +313,8 @@ export default function SsoSettingsPage() {
         );
       })}
 
+      <SessionPolicyEditor />
+
       {!showForm ? (
         <button
           onClick={() => setShowForm(true)}
@@ -495,6 +497,100 @@ export default function SsoSettingsPage() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function SessionPolicyEditor() {
+  const [policy, setPolicy] = useState({
+    maxSessionDurationMinutes: 480,
+    idleTimeoutMinutes: 60,
+    maxConcurrentSessions: 5,
+  });
+  const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    fetch("/api/v1/org/settings")
+      .then((r) => r.ok ? r.json() : null)
+      .then((d) => {
+        if (d?.sessionPolicy) {
+          setPolicy({
+            maxSessionDurationMinutes: d.sessionPolicy.maxSessionDurationMinutes ?? 480,
+            idleTimeoutMinutes: d.sessionPolicy.idleTimeoutMinutes ?? 60,
+            maxConcurrentSessions: d.sessionPolicy.maxConcurrentSessions ?? 5,
+          });
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  const save = async () => {
+    setSaved(false);
+    const res = await fetch("/api/v1/org/settings", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sessionPolicy: policy }),
+    });
+    if (res.ok) setSaved(true);
+  };
+
+  return (
+    <div style={{ border: "1px solid #e5e7eb", borderRadius: 8, padding: "1.5rem", marginTop: "2rem" }}>
+      <h2 style={{ fontSize: "1.1rem", fontWeight: 600, marginBottom: "0.5rem" }}>Session Policy</h2>
+      <p style={{ color: "#6b7280", fontSize: "0.875rem", marginBottom: "1rem" }}>
+        Configure session lifecycle enforcement for SSO users.
+      </p>
+      <div style={{ display: "grid", gap: "1rem", maxWidth: 400 }}>
+        <label>
+          Max Session Duration (minutes)
+          <input
+            type="number"
+            min={15}
+            max={1440}
+            value={policy.maxSessionDurationMinutes}
+            onChange={(e) => setPolicy({ ...policy, maxSessionDurationMinutes: parseInt(e.target.value) || 480 })}
+            style={inputStyle}
+          />
+        </label>
+        <label>
+          Idle Timeout (minutes)
+          <input
+            type="number"
+            min={5}
+            max={480}
+            value={policy.idleTimeoutMinutes}
+            onChange={(e) => setPolicy({ ...policy, idleTimeoutMinutes: parseInt(e.target.value) || 60 })}
+            style={inputStyle}
+          />
+        </label>
+        <label>
+          Max Concurrent Sessions
+          <input
+            type="number"
+            min={1}
+            max={50}
+            value={policy.maxConcurrentSessions}
+            onChange={(e) => setPolicy({ ...policy, maxConcurrentSessions: parseInt(e.target.value) || 5 })}
+            style={inputStyle}
+          />
+        </label>
+        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <button
+            onClick={save}
+            style={{
+              padding: "8px 16px",
+              borderRadius: 6,
+              background: "#2563eb",
+              color: "#fff",
+              cursor: "pointer",
+              border: "none",
+            }}
+          >
+            Save Policy
+          </button>
+          {saved && <span style={{ color: "#16a34a", fontSize: "0.875rem" }}>Saved</span>}
+        </div>
+      </div>
     </div>
   );
 }
