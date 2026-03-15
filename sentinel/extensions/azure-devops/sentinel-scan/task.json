@@ -1,0 +1,69 @@
+{
+  "$schema": "https://raw.githubusercontent.com/Microsoft/azure-pipelines-task-lib/master/tasks.schema.json",
+  "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "name": "SentinelScan",
+  "friendlyName": "SENTINEL Security Scan",
+  "description": "Run SENTINEL AI-powered security and compliance scan on your code changes.",
+  "helpMarkDown": "[Learn more](https://sentinel.archagents.dev/docs/azure-devops)",
+  "category": "Utility",
+  "author": "SENTINEL",
+  "version": { "Major": 1, "Minor": 0, "Patch": 0 },
+  "instanceNameFormat": "SENTINEL Scan",
+  "inputs": [
+    {
+      "name": "apiUrl",
+      "type": "string",
+      "label": "SENTINEL API URL",
+      "required": true,
+      "helpMarkDown": "The URL of your SENTINEL API instance."
+    },
+    {
+      "name": "apiKey",
+      "type": "string",
+      "label": "API Key",
+      "required": true,
+      "helpMarkDown": "Your SENTINEL API key. Use a secret variable."
+    },
+    {
+      "name": "secret",
+      "type": "string",
+      "label": "HMAC Secret",
+      "required": true,
+      "helpMarkDown": "Your SENTINEL HMAC shared secret. Use a secret variable."
+    },
+    {
+      "name": "timeout",
+      "type": "string",
+      "label": "Timeout (seconds)",
+      "required": false,
+      "defaultValue": "120",
+      "helpMarkDown": "Maximum time to wait for scan results."
+    },
+    {
+      "name": "outputFormat",
+      "type": "pickList",
+      "label": "Output Format",
+      "required": false,
+      "defaultValue": "summary",
+      "options": {
+        "summary": "Summary",
+        "json": "JSON",
+        "sarif": "SARIF"
+      },
+      "helpMarkDown": "Format for scan results output."
+    },
+    {
+      "name": "failOnFindings",
+      "type": "boolean",
+      "label": "Fail on Findings",
+      "required": false,
+      "defaultValue": "true",
+      "helpMarkDown": "Fail the task if security findings are detected."
+    }
+  ],
+  "execution": {
+    "Node16": {
+      "target": "dist/index.js"
+    }
+  }
+}
