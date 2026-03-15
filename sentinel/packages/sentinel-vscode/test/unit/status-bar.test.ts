@@ -27,4 +27,17 @@ describe("StatusBar", () => {
     expect(item.text).toContain("auth error");
     expect(item.backgroundColor).toBeDefined();
   });
+
+  it("click opens command palette", () => {
+    const item = createStatusBar();
+    expect(item.command).toBe("workbench.action.showCommands");
+  });
+
+  it("connected tooltip includes finding count and sync time", () => {
+    const item = createStatusBar();
+    updateStatusBar(item, "connected", 2, 5);
+    expect(item.tooltip).toContain("2 critical");
+    expect(item.tooltip).toContain("5 high");
+    expect(item.tooltip).toContain("Last sync");
+  });
 });

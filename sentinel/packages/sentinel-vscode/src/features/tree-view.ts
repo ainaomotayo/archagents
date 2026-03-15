@@ -128,12 +128,12 @@ export function extractFindingsFromDiagnostics(diagnostics: vscode.Diagnostic[])
   return findings;
 }
 
-export function activateTreeView(ctx: SentinelContext): FindingsTreeProvider {
+export function activateTreeView(ctx: SentinelContext): { provider: FindingsTreeProvider; treeView: vscode.TreeView<TreeNode> } {
   const provider = new FindingsTreeProvider();
   const treeView = vscode.window.createTreeView("sentinelFindings", {
     treeDataProvider: provider,
     showCollapseAll: true,
   });
   ctx.subscriptions.push(treeView);
-  return provider;
+  return { provider, treeView };
 }
