@@ -596,7 +596,6 @@ model DigestSnapshot {
   organization    Organization @relation(fields: [orgId], references: [id])
 
   @@unique([orgId, snapshotDate])
-  @@index([orgId, snapshotDate])
   @@map("digest_snapshots")
 }
 
