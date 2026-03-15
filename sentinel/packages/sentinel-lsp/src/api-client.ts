@@ -91,4 +91,8 @@ export class SentinelApiClient {
   async getScanStatus(scanId: string): Promise<{ scanId: string; status: string }> {
     return this.request("GET", `/v1/scans/${scanId}`);
   }
+
+  async getFindingDetail(findingId: string): Promise<Record<string, unknown>> {
+    return this.request("GET", `/v1/findings/${findingId}?include=history,compliance,trace,related`);
+  }
 }

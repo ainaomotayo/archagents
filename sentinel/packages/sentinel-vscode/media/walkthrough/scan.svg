@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 150">
+  <rect width="200" height="150" rx="8" fill="#1e1e2e"/>
+  <circle cx="100" cy="60" r="30" fill="#a6e3a1" opacity="0.8"/>
+  <polygon points="90,45 90,75 115,60" fill="#1e1e2e"/>
+  <text x="100" y="120" text-anchor="middle" fill="#cdd6f4" font-family="sans-serif" font-size="14">Trigger Scan</text>
+</svg>
