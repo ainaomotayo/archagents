@@ -244,6 +244,16 @@ export const authOptions: AuthOptions = {
                 return false;
               }
             }
+
+            // JIT provision if org detected
+            if (data.orgId) {
+              const { tryJitProvision } = await import("./auth-jit.js");
+              await tryJitProvision(
+                { email: profile.email as string, name: (profile as any).name, sub: (profile as any).sub ?? "" },
+                account.provider,
+                data.orgId,
+              );
+            }
           }
         } catch {
           // Fail-open if discovery API is unavailable
