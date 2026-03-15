@@ -9,6 +9,7 @@ import {
 
 import type { SentinelContext, SentinelConfig, Severity } from "./context.js";
 import { defaultConfig } from "./context.js";
+import { activateStatusBar } from "./features/status-bar.js";
 
 let client: LanguageClient | undefined;
 
@@ -67,7 +68,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   };
 
   // Feature modules will be activated here in subsequent tasks:
-  // activateStatusBar(ctx);
+  activateStatusBar(ctx);
   // activateTreeView(ctx);
   // activateGutterIcons(ctx);
   // activateCommands(ctx);

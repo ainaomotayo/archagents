@@ -1,52 +1,53 @@
-export const TreeItemCollapsibleState = { None: 0, Collapsed: 1, Expanded: 2 };
-export const ThemeIcon = class { constructor(public id: string) {} };
-export const ThemeColor = class { constructor(public id: string) {} };
-export const Uri = {
-  file: (p: string) => ({ fsPath: p, scheme: "file", toString: () => `file://${p}` }),
-  parse: (s: string) => ({ fsPath: s.replace("file://", ""), scheme: "file", toString: () => s }),
-};
-export const EventEmitter = class {
-  event = () => {};
-  fire() {}
-  dispose() {}
-};
-export const StatusBarAlignment = { Left: 1, Right: 2 };
-export const workspace = {
-  getConfiguration: () => ({
-    get: (key: string, def: unknown) => def,
-  }),
-  onDidSaveTextDocument: () => ({ dispose: () => {} }),
-  createFileSystemWatcher: () => ({ dispose: () => {} }),
-};
+import { vi } from "vitest";
+
+export class ThemeColor {
+  constructor(public id: string) {}
+}
+
+export enum StatusBarAlignment {
+  Left = 1,
+  Right = 2,
+}
+
+function createMockStatusBarItem(): any {
+  return {
+    text: "",
+    tooltip: "",
+    command: undefined,
+    backgroundColor: undefined,
+    alignment: StatusBarAlignment.Left,
+    priority: 0,
+    show: vi.fn(),
+    hide: vi.fn(),
+    dispose: vi.fn(),
+  };
+}
+
 export const window = {
-  createStatusBarItem: () => ({
-    text: "", tooltip: "", command: "", backgroundColor: undefined,
-    show: () => {}, hide: () => {}, dispose: () => {},
+  createStatusBarItem: vi.fn((_alignment?: StatusBarAlignment, _priority?: number) => {
+    const item = createMockStatusBarItem();
+    item.alignment = _alignment ?? StatusBarAlignment.Left;
+    item.priority = _priority ?? 0;
+    return item;
   }),
-  createTreeView: (_id: string, opts: Record<string, unknown>) => ({
-    ...opts, badge: undefined, dispose: () => {},
-  }),
-  showInputBox: async () => undefined,
-  showInformationMessage: async () => undefined,
-  showWarningMessage: async () => undefined,
-  createWebviewPanel: () => ({
-    webview: { html: "", onDidReceiveMessage: () => ({ dispose: () => {} }), asWebviewUri: (u: unknown) => u, cspSource: "" },
-    onDidDispose: () => ({ dispose: () => {} }),
-    reveal: () => {},
-    dispose: () => {},
-  }),
+  createOutputChannel: vi.fn(() => ({
+    appendLine: vi.fn(),
+    append: vi.fn(),
+    clear: vi.fn(),
+    show: vi.fn(),
+    hide: vi.fn(),
+    dispose: vi.fn(),
+  })),
 };
-export const commands = {
-  registerCommand: (_cmd: string, _cb: (...args: unknown[]) => unknown) => ({ dispose: () => {} }),
-  executeCommand: async () => undefined,
+
+export const workspace = {
+  getConfiguration: vi.fn(() => ({
+    get: vi.fn((_key: string, defaultValue: any) => defaultValue),
+  })),
+  createFileSystemWatcher: vi.fn(),
 };
-export const env = {
-  openExternal: async () => true,
-};
-export const ViewColumn = { One: 1, Two: 2, Beside: -2 };
-export const DiagnosticSeverity = { Error: 0, Warning: 1, Information: 2, Hint: 3 };
-export const MarkdownString = class {
-  value = "";
-  constructor(v?: string) { this.value = v ?? ""; }
-  appendMarkdown(s: string) { this.value += s; return this; }
+
+export const Uri = {
+  file: (path: string) => ({ scheme: "file", path }),
+  parse: (value: string) => ({ scheme: "file", path: value }),
 };
