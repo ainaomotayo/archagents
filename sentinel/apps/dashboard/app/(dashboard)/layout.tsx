@@ -1,13 +1,21 @@
 import { Sidebar } from "@/components/sidebar";
 import { Header } from "@/components/header";
 import { NAV_ITEMS } from "@/lib/rbac";
+import { getApprovalStats } from "@/lib/api";
 
-export default function DashboardLayout({
+export default async function DashboardLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const visibleItems = NAV_ITEMS;
+  const stats = await getApprovalStats();
+  const pendingCount = stats.pending + stats.escalated;
+
+  const visibleItems = NAV_ITEMS.map((item) =>
+    item.href === "/approvals" && pendingCount > 0
+      ? { ...item, badge: pendingCount }
+      : item,
+  );
 
   return (
     <div className="flex h-screen overflow-hidden bg-surface-0">

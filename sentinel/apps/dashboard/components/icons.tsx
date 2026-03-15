@@ -222,6 +222,14 @@ export function IconGrid(props: React.SVGProps<SVGSVGElement>) {
   );
 }
 
+export function IconWrench(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg {...iconProps} {...props}>
+      <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />
+    </svg>
+  );
+}
+
 export function IconClipboardCheck(props: React.SVGProps<SVGSVGElement>) {
   return (
     <svg {...iconProps} {...props}>
@@ -242,6 +250,16 @@ export function IconShieldCheck2(props: React.SVGProps<SVGSVGElement>) {
   );
 }
 
+export function IconCpu(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <rect x="4" y="4" width="16" height="16" rx="2" />
+      <rect x="9" y="9" width="6" height="6" />
+      <path d="M15 2v2M15 20v2M2 15h2M2 9h2M20 15h2M20 9h2M9 2v2M9 20v2" />
+    </svg>
+  );
+}
+
 export const ICON_MAP: Record<string, React.ComponentType<React.SVGProps<SVGSVGElement>>> = {
   home: IconHome,
   folder: IconFolder,
@@ -254,4 +272,8 @@ export const ICON_MAP: Record<string, React.ComponentType<React.SVGProps<SVGSVGE
   settings: IconSettings,
   grid: IconGrid,
   "clipboard-check": IconClipboardCheck,
+  "check-circle": IconCheckCircle,
+  wrench: IconWrench,
+  chart: IconBarChart,
+  cpu: IconCpu,
 };

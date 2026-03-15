@@ -9,9 +9,10 @@ interface NavItemProps {
   href: string;
   icon: string;
   collapsed?: boolean;
+  badge?: number;
 }
 
-export function NavItem({ label, href, icon, collapsed }: NavItemProps) {
+export function NavItem({ label, href, icon, collapsed, badge }: NavItemProps) {
   const pathname = usePathname();
   const isActive =
     pathname === href || (href !== "/" && pathname.startsWith(href + "/"));
@@ -43,6 +44,16 @@ export function NavItem({ label, href, icon, collapsed }: NavItemProps) {
         ) : null}
       </span>
       {!collapsed && label}
+      {badge != null && badge > 0 && (
+        <span
+          className={`ml-auto flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[9px] font-bold ${
+            collapsed ? "absolute right-0.5 top-0.5 h-3 min-w-3 text-[7px]" : ""
+          } bg-status-fail text-text-inverse`}
+          aria-label={`${badge} pending`}
+        >
+          {badge}
+        </span>
+      )}
     </Link>
   );
 }

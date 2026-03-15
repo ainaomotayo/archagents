@@ -140,13 +140,62 @@ services:
     depends_on:
       redis:
         condition: service_healthy
+      postgres:
+        condition: service_healthy
     environment:
+      DATABASE_URL: postgresql://sentinel:sentinel_dev@postgres:5432/sentinel
       REDIS_URL: redis://redis:6379
       SELF_SCAN_ENABLED: ${SELF_SCAN_ENABLED:-true}
+      SCHEDULER_LEASE_TTL: ${SCHEDULER_LEASE_TTL:-15000}
+      SCAN_TIMEOUT_MS: ${SCAN_TIMEOUT_MS:-300000}
       SCHEDULER_PORT: "9091"
     command: ["node", "apps/api/dist/scheduler.js"]
     healthcheck:
       test: ["CMD", "node", "docker/healthcheck.js", "9091"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  report-worker:
+    build:
+      context: .
+      dockerfile: docker/api.Dockerfile
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://sentinel:sentinel_dev@postgres:5432/sentinel
+      REDIS_URL: redis://redis:6379
+      SENTINEL_SECRET: dev-secret-change-in-production
+      CLOUD_PROVIDER: ${CLOUD_PROVIDER:-}
+      ARCHIVE_BUCKET: ${ARCHIVE_BUCKET:-}
+      ARCHIVE_PREFIX: ${ARCHIVE_PREFIX:-sentinel}
+      REPORT_WORKER_PORT: "9094"
+    command: ["node", "apps/api/dist/report-worker.js"]
+    healthcheck:
+      test: ["CMD", "node", "docker/healthcheck.js", "9094"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  notification-worker:
+    build:
+      context: .
+      dockerfile: docker/api.Dockerfile
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://sentinel:sentinel_dev@postgres:5432/sentinel
+      REDIS_URL: redis://redis:6379
+      NOTIFICATION_WORKER_PORT: "9095"
+    command: ["node", "apps/api/dist/notification-worker.js"]
+    healthcheck:
+      test: ["CMD", "node", "docker/healthcheck.js", "9095"]
       interval: 30s
       timeout: 5s
       retries: 3

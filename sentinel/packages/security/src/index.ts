@@ -67,3 +67,15 @@ export { AzureArchiveProvider } from "./archive-azure.js";
 export { AzureKmsKeyStore } from "./kms-azure.js";
 
 export { buildRetentionQuery, runRetentionCleanup, DEFAULT_RETENTION_DAYS } from "./data-retention.js";
+
+export { ProviderHealthMonitor, type ProviderStatus } from "./provider-health.js";
+
+export { AuthRateLimiter, type RateLimitConfig, type RateLimitResult } from "./auth-rate-limit.js";
+
+export type { KmsProvider } from "./kms-provider.js";
+export { LocalKmsProvider } from "./kms-local.js";
+export { AwsKmsProvider } from "./kms-aws-provider.js";
+export { GcpKmsProvider } from "./kms-gcp-provider.js";
+export { AzureKmsProvider } from "./kms-azure-provider.js";
+export { DekCache, type DekCacheOptions } from "./dek-cache.js";
+export { EnvelopeEncryption } from "./envelope.js";

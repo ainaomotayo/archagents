@@ -26,7 +26,11 @@ export const ROUTE_PERMISSIONS: RoutePermission[] = [
   { path: "/reports", roles: ["admin", "manager"] },
   { path: "/drift", roles: ["admin", "manager", "dev"] },
   { path: "/projects", roles: ["admin", "manager", "dev"] },
+  { path: "/remediations/charts", roles: ["admin", "manager", "dev"] },
+  { path: "/remediations", roles: ["admin", "manager"] },
+  { path: "/approvals", roles: ["admin", "manager"] },
   { path: "/findings", roles: ["admin", "manager", "dev"] },
+  { path: "/ai-metrics", roles: ["admin", "manager", "dev", "viewer"] },
   { path: "/certificates", roles: ["admin", "manager", "dev", "viewer"] },
   { path: "/compliance", roles: ["admin", "manager", "dev", "viewer"] },
   { path: "/", roles: ["admin", "manager", "dev", "viewer"] },
@@ -40,12 +44,17 @@ export interface NavItem {
   label: string;
   href: string;
   icon: string;
+  badge?: number;
 }
 
 export const NAV_ITEMS: NavItem[] = [
   { label: "Overview", href: "/", icon: "home" },
   { label: "Projects", href: "/projects", icon: "folder" },
   { label: "Findings", href: "/findings", icon: "search" },
+  { label: "Approvals", href: "/approvals", icon: "check-circle" },
+  { label: "Remediations", href: "/remediations", icon: "wrench" },
+  { label: "Charts", href: "/remediations/charts", icon: "chart" },
+  { label: "AI Metrics", href: "/ai-metrics", icon: "cpu" },
   { label: "Certificates", href: "/certificates", icon: "shield" },
   { label: "Gap Analysis", href: "/compliance/gap-analysis", icon: "grid" },
   { label: "Attestations", href: "/compliance/attestations", icon: "clipboard-check" },

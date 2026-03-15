@@ -1,6 +1,6 @@
 """Tests for policy inheritance and merge logic."""
 
-from sentinel_policy.merge import merge_policies, merge_policies_from_yaml
+from sentinel_policy.merge import merge_hierarchy, merge_policies, merge_policies_from_yaml
 from sentinel_policy.parser import PolicyConfig, PolicyRule
 
 
@@ -105,3 +105,39 @@ rules:
         assert len(config.rules) == 1
         assert config.rules[0].severity == "high"
         assert "exec" in config.rules[0].targets
+
+
+class TestMergeHierarchy:
+    def test_5_level_override(self):
+        """Most specific level wins."""
+        org = PolicyConfig(version="1", rules=[_make_rule("r1", severity="low")])
+        team = PolicyConfig(version="1", rules=[_make_rule("r1", severity="medium")])
+        repo = PolicyConfig(version="1", rules=[_make_rule("r1", severity="high")])
+        dirp = PolicyConfig(version="1", rules=[])
+        filep = PolicyConfig(version="1", rules=[_make_rule("r1", severity="critical")])
+
+        merged = merge_hierarchy(org, team, repo, dirp, filep)
+        assert len(merged.rules) == 1
+        assert merged.rules[0].severity == "critical"
+
+    def test_3_level_hierarchy(self):
+        """Intermediate levels can add rules."""
+        org = PolicyConfig(version="1", rules=[_make_rule("org-rule")])
+        team = PolicyConfig(version="1", rules=[_make_rule("team-rule")])
+        repo = PolicyConfig(version="1", rules=[_make_rule("repo-rule")])
+
+        merged = merge_hierarchy(org, team, repo)
+        names = [r.name for r in merged.rules]
+        assert "org-rule" in names
+        assert "team-rule" in names
+        assert "repo-rule" in names
+
+    def test_single_level(self):
+        org = PolicyConfig(version="1", rules=[_make_rule("r1")])
+        merged = merge_hierarchy(org)
+        assert len(merged.rules) == 1
+        assert merged.rules[0].name == "r1"
+
+    def test_empty_hierarchy(self):
+        merged = merge_hierarchy()
+        assert len(merged.errors) > 0

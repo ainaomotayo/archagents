@@ -1,0 +1,56 @@
+rules:
+  - id: hipaa-hardcoded-credentials-python
+    patterns:
+      - pattern-either:
+          - pattern: password = "..."
+          - pattern: api_key = "..."
+          - pattern: secret = "..."
+    message: >-
+      Hardcoded credential detected — violates HIPAA access control
+      requirements
+    severity: ERROR
+    languages: [python]
+    metadata:
+      category: vulnerability/auth-weakness
+      hipaa: "§164.312(d)"
+      cwe:
+        - "CWE-798: Use of Hard-coded Credentials"
+
+  - id: hipaa-hardcoded-credentials-js
+    patterns:
+      - pattern-either:
+          - pattern: |
+              const password = "..."
+          - pattern: |
+              const apiKey = "..."
+          - pattern: |
+              const secret = "..."
+    message: >-
+      Hardcoded credential detected — violates HIPAA access control
+      requirements
+    severity: ERROR
+    languages: [javascript, typescript]
+    metadata:
+      category: vulnerability/auth-weakness
+      hipaa: "§164.312(d)"
+      cwe:
+        - "CWE-798: Use of Hard-coded Credentials"
+
+  - id: hipaa-missing-auth-check
+    patterns:
+      - pattern: |
+          app.$METHOD($PATH, async (req, res) => {
+            ...
+          })
+      - pattern-not: |
+          app.$METHOD($PATH, { preHandler: $AUTH }, async (req, res) => {
+            ...
+          })
+    message: >-
+      Route handler without authentication preHandler — HIPAA requires
+      access controls
+    severity: WARNING
+    languages: [javascript, typescript]
+    metadata:
+      category: vulnerability/auth-weakness
+      hipaa: "§164.312(a)(1)"

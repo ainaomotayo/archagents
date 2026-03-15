@@ -17,10 +17,28 @@ model Organization {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  projects     Project[]
-  users        User[]
-  policies     Policy[]
-  attestations Attestation[]
+  projects       Project[]
+  users          User[]
+  policies       Policy[]
+  attestations   Attestation[]
+  ssoConfigs     SsoConfig[]
+  memberships    OrgMembership[]
+  encryptionKeys   EncryptionKey[]
+  apiKeys          ApiKey[]
+  scimSyncState    ScimSyncState?
+  approvalPolicies ApprovalPolicy[]
+  approvalGates      ApprovalGate[]
+  approvalDecisions  ApprovalDecision[]
+  controlAttestations        ControlAttestation[]
+  remediationItems           RemediationItem[]
+  evidenceAttachments        EvidenceAttachment[]
+  businessAssociateAgreements BusinessAssociateAgreement[]
+  vcsInstallations            VcsInstallation[]
+  integrationConfigs          IntegrationConfig[]
+  workflowConfig              WorkflowConfig?
+  remediationSnapshots        RemediationSnapshot[]
+  aiMetricsSnapshots          AIMetricsSnapshot[]
+  aiMetricsConfig             AIMetricsConfig?
 
   @@map("organizations")
 }
@@ -36,8 +54,10 @@ model Project {
   createdAt     DateTime @default(now()) @map("created_at")
   updatedAt     DateTime @updatedAt @map("updated_at")
 
-  organization Organization @relation(fields: [orgId], references: [id])
-  scans        Scan[]
+  organization  Organization    @relation(fields: [orgId], references: [id])
+  scans         Scan[]
+  approvalGates ApprovalGate[]
+  aiMetricsSnapshots AIMetricsSnapshot[]
 
   @@index([orgId])
   @@map("projects")
@@ -57,12 +77,14 @@ model Scan {
   triggerType String?   @map("trigger_type")
   triggerMeta Json      @default("{}") @map("trigger_meta")
   startedAt   DateTime  @default(now()) @map("started_at")
-  completedAt DateTime? @map("completed_at")
+  completedAt    DateTime? @map("completed_at")
+  approvalStatus String?       @map("approval_status")
 
-  project      Project       @relation(fields: [projectId], references: [id])
+  project        Project       @relation(fields: [projectId], references: [id])
   findings     Finding[]
-  agentResults AgentResult[]
-  certificate  Certificate?
+  agentResults  AgentResult[]
+  certificate   Certificate?
+  approvalGates ApprovalGate[]
 
   @@index([projectId, startedAt(sort: Desc)])
   @@index([commitHash])
@@ -93,10 +115,39 @@ model Finding {
   createdAt    DateTime  @default(now()) @map("created_at")
 
   scan Scan @relation(fields: [scanId], references: [id])
+  remediationItems RemediationItem[]
+  decisionTrace   DecisionTrace?
 
   @@index([scanId, severity])
   @@index([orgId])
   @@map("findings")
+}
+
+model DecisionTrace {
+  id              String    @id @default(uuid()) @db.Uuid
+  findingId       String    @unique @map("finding_id") @db.Uuid
+  orgId           String    @map("org_id") @db.Uuid
+  scanId          String    @map("scan_id") @db.Uuid
+
+  toolName        String?   @map("tool_name")
+  modelVersion    String?   @map("model_version")
+  promptHash      String?   @map("prompt_hash")
+  promptCategory  String?   @map("prompt_category")
+
+  overallScore    Float     @map("overall_score")
+  signals         Json      @map("signals")
+
+  declaredTool    String?   @map("declared_tool")
+  declaredModel   String?   @map("declared_model")
+  enrichedAt      DateTime? @map("enriched_at")
+
+  createdAt       DateTime  @default(now()) @map("created_at")
+
+  finding         Finding   @relation(fields: [findingId], references: [id])
+
+  @@index([orgId, toolName])
+  @@index([scanId])
+  @@map("decision_traces")
 }
 
 model Certificate {
@@ -113,6 +164,8 @@ model Certificate {
   expiresAt        DateTime  @map("expires_at")
   revokedAt        DateTime? @map("revoked_at")
   revocationReason String?   @map("revocation_reason")
+  approvedBy       String?   @map("approved_by")
+  approvedAt       DateTime? @map("approved_at")
 
   scan Scan @relation(fields: [scanId], references: [id])
 
@@ -198,18 +251,107 @@ model AuditEvent {
 }
 
 model User {
-  id           String   @id @default(uuid()) @db.Uuid
-  orgId        String   @map("org_id") @db.Uuid
-  email        String   @unique
-  name         String
-  role         String   @default("dev")
-  authProvider String   @default("github") @map("auth_provider")
-  createdAt    DateTime @default(now()) @map("created_at")
+  id            String    @id @default(uuid()) @db.Uuid
+  orgId         String    @map("org_id") @db.Uuid
+  email         String    @unique
+  name          String
+  role          String    @default("dev")
+  authProvider  String    @default("github") @map("auth_provider")
+  emailVerified Boolean   @default(false) @map("email_verified")
+  externalId    String?   @map("external_id")
+  lastLoginAt   DateTime? @map("last_login_at")
+  createdAt     DateTime  @default(now()) @map("created_at")
 
   organization Organization @relation(fields: [orgId], references: [id])
+  memberships  OrgMembership[]
 
   @@index([orgId])
+  @@index([externalId])
   @@map("users")
+}
+
+// --- P10: Enterprise SSO + Encryption ---
+
+model SsoConfig {
+  id           String   @id @default(uuid()) @db.Uuid
+  orgId        String   @map("org_id") @db.Uuid
+  provider     String
+  displayName  String   @map("display_name")
+  clientId     String   @map("client_id")
+  clientSecret String   @map("client_secret")
+  issuerUrl    String?  @map("issuer_url")
+  samlMetadata String?  @map("saml_metadata") @db.Text
+  scimToken    String?  @map("scim_token")
+  settings     Json     @default("{}")
+  enabled      Boolean  @default(true)
+  enforced     Boolean  @default(false)
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+  organization Organization @relation(fields: [orgId], references: [id])
+  @@unique([orgId, provider])
+  @@map("sso_configs")
+}
+
+model OrgMembership {
+  id        String   @id @default(uuid()) @db.Uuid
+  orgId     String   @map("org_id") @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  role      String   @default("viewer")
+  source    String   @default("manual")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  organization Organization @relation(fields: [orgId], references: [id])
+  user         User         @relation(fields: [userId], references: [id])
+  @@unique([orgId, userId])
+  @@index([userId])
+  @@map("org_memberships")
+}
+
+model EncryptionKey {
+  id           String    @id @default(uuid()) @db.Uuid
+  orgId        String    @map("org_id") @db.Uuid
+  purpose      String
+  wrappedDek   Bytes     @map("wrapped_dek")
+  kekId        String    @map("kek_id")
+  kekProvider  String    @map("kek_provider")
+  version      Int       @default(1)
+  active       Boolean   @default(true)
+  rotatedAt    DateTime? @map("rotated_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  organization Organization @relation(fields: [orgId], references: [id])
+  @@index([orgId, purpose, active])
+  @@map("encryption_keys")
+}
+
+model ApiKey {
+  id         String    @id @default(uuid()) @db.Uuid
+  orgId      String    @map("org_id") @db.Uuid
+  name       String
+  keyHash    String    @map("key_hash")
+  keySalt    String    @map("key_salt")
+  keyPrefix  String    @map("key_prefix")
+  role       String    @default("service")
+  expiresAt  DateTime? @map("expires_at")
+  lastUsedAt DateTime? @map("last_used_at")
+  revokedAt  DateTime? @map("revoked_at")
+  createdAt  DateTime  @default(now()) @map("created_at")
+  organization Organization @relation(fields: [orgId], references: [id])
+  @@index([keyPrefix])
+  @@map("api_keys")
+}
+
+model ScimSyncState {
+  id           String   @id @default(uuid()) @db.Uuid
+  orgId        String   @unique @map("org_id") @db.Uuid
+  lastSyncAt   DateTime @map("last_sync_at")
+  usersCreated Int      @default(0) @map("users_created")
+  usersUpdated Int      @default(0) @map("users_updated")
+  usersDeleted Int      @default(0) @map("users_deleted")
+  status       String   @default("idle")
+  errorDetail  String?  @map("error_detail")
+  createdAt    DateTime @default(now()) @map("created_at")
+  organization Organization @relation(fields: [orgId], references: [id])
+  @@map("scim_sync_states")
 }
 
 model GitHubInstallation {
@@ -290,4 +432,563 @@ model AttestationEvidence {
 
   @@index([attestationId])
   @@map("attestation_evidence")
+}
+
+model ComplianceFramework {
+  id          String   @id @default(uuid()) @db.Uuid
+  orgId       String?  @map("org_id") @db.Uuid
+  slug        String
+  name        String
+  version     String
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  controls    ComplianceControl[]
+  assessments ComplianceAssessment[]
+  snapshots   ComplianceSnapshot[]
+
+  @@unique([orgId, slug])
+  @@map("compliance_frameworks")
+}
+
+model ComplianceControl {
+  id          String   @id @default(uuid()) @db.Uuid
+  frameworkId String   @map("framework_id") @db.Uuid
+  code        String
+  name        String
+  description String?
+  weight      Float    @default(1.0)
+  matchRules  Json     @default("[]") @map("match_rules")
+
+  framework   ComplianceFramework      @relation(fields: [frameworkId], references: [id])
+  overrides   ComplianceControlOverride[]
+
+  @@unique([frameworkId, code])
+  @@map("compliance_controls")
+}
+
+model ComplianceControlOverride {
+  id         String   @id @default(uuid()) @db.Uuid
+  orgId      String   @map("org_id") @db.Uuid
+  controlId  String   @map("control_id") @db.Uuid
+  matchRules Json?    @map("match_rules")
+  weight     Float?
+  enabled    Boolean  @default(true)
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  control    ComplianceControl @relation(fields: [controlId], references: [id])
+
+  @@unique([orgId, controlId])
+  @@map("compliance_control_overrides")
+}
+
+model ComplianceAssessment {
+  id            String   @id @default(uuid()) @db.Uuid
+  orgId         String   @map("org_id") @db.Uuid
+  frameworkId   String   @map("framework_id") @db.Uuid
+  scanId        String?  @map("scan_id") @db.Uuid
+  score         Float
+  verdict       String
+  controlScores Json     @map("control_scores")
+  assessedAt    DateTime @default(now()) @map("assessed_at")
+
+  framework     ComplianceFramework @relation(fields: [frameworkId], references: [id])
+
+  @@index([orgId, frameworkId])
+  @@map("compliance_assessments")
+}
+
+model ComplianceSnapshot {
+  id               String   @id @default(uuid()) @db.Uuid
+  orgId            String   @map("org_id") @db.Uuid
+  frameworkId      String   @map("framework_id") @db.Uuid
+  date             DateTime @db.Date
+  score            Float
+  controlBreakdown Json     @map("control_breakdown")
+
+  framework        ComplianceFramework @relation(fields: [frameworkId], references: [id])
+
+  @@unique([orgId, frameworkId, date])
+  @@map("compliance_snapshots")
+}
+
+model EvidenceRecord {
+  id        String   @id @default(uuid()) @db.Uuid
+  orgId     String   @map("org_id") @db.Uuid
+  scanId    String?  @map("scan_id") @db.Uuid
+  type      String
+  data      Json
+  hash      String
+  prevHash  String?  @map("prev_hash")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([orgId, createdAt])
+  @@map("evidence_records")
+}
+
+model OssFingerprint {
+  hash           String   @id
+  sourceUrl      String   @map("source_url")
+  packageName    String   @map("package_name")
+  packageVersion String?  @map("package_version")
+  ecosystem      String
+  spdxLicense    String?  @map("spdx_license")
+  filePath       String?  @map("file_path")
+  lineStart      Int?     @map("line_start")
+  lineEnd        Int?     @map("line_end")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  @@index([packageName, ecosystem])
+  @@index([spdxLicense])
+  @@map("oss_fingerprints")
+}
+
+model Report {
+  id          String    @id @default(uuid()) @db.Uuid
+  orgId       String    @map("org_id") @db.Uuid
+  type        String
+  frameworkId String?   @map("framework_id") @db.Uuid
+  status      String    @default("pending")
+  parameters  Json      @default("{}")
+  fileUrl     String?   @map("file_url")
+  fileHash    String?   @map("file_hash")
+  requestedBy String?   @map("requested_by")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  completedAt DateTime? @map("completed_at")
+
+  @@index([orgId])
+  @@map("reports")
+}
+
+// --- Human Escalation & Approval Workflows ---
+
+model ApprovalPolicy {
+  id                 String   @id @default(uuid()) @db.Uuid
+  orgId              String   @map("org_id") @db.Uuid
+  projectId          String?  @map("project_id") @db.Uuid
+  name               String
+  enabled            Boolean  @default(true)
+  priority           Int      @default(0)
+  strategyType       String   @map("strategy_type")
+  config             Json
+  assigneeRole       String   @default("manager") @map("assignee_role")
+  slaHours           Int      @default(24) @map("sla_hours")
+  escalateAfterHours Int      @default(48) @map("escalate_after_hours")
+  expiryAction       String   @default("reject") @map("expiry_action")
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
+
+  organization  Organization    @relation(fields: [orgId], references: [id])
+  approvalGates ApprovalGate[]
+
+  @@index([orgId, enabled])
+  @@map("approval_policies")
+}
+
+model ApprovalGate {
+  id              String    @id @default(uuid()) @db.Uuid
+  orgId           String    @map("org_id") @db.Uuid
+  scanId          String    @map("scan_id") @db.Uuid
+  projectId       String    @map("project_id") @db.Uuid
+  policyId        String?   @map("policy_id") @db.Uuid
+  status          String    @default("pending")
+  gateType        String    @map("gate_type")
+  triggerCriteria Json      @map("trigger_criteria")
+  priority        Int       @default(50)
+  assignedRole    String?   @map("assigned_role")
+  assignedTo      String?   @map("assigned_to")
+  requestedAt     DateTime  @default(now()) @map("requested_at")
+  requestedBy     String    @map("requested_by")
+  expiresAt       DateTime  @map("expires_at")
+  escalatesAt     DateTime? @map("escalates_at")
+  expiryAction    String    @default("reject") @map("expiry_action")
+  decidedAt       DateTime? @map("decided_at")
+
+  scan         Scan               @relation(fields: [scanId], references: [id])
+  project      Project            @relation(fields: [projectId], references: [id])
+  organization Organization       @relation(fields: [orgId], references: [id])
+  policy       ApprovalPolicy?    @relation(fields: [policyId], references: [id])
+  decisions    ApprovalDecision[]
+
+  @@index([orgId, status])
+  @@index([scanId], map: "idx_approval_gate_scan")
+  @@index([orgId, status, priority], map: "idx_approval_queue")
+  @@index([expiresAt])
+  @@map("approval_gates")
+}
+
+model ApprovalDecision {
+  id            String   @id @default(uuid()) @db.Uuid
+  gateId        String   @map("gate_id") @db.Uuid
+  orgId         String   @map("org_id") @db.Uuid
+  decidedBy     String   @map("decided_by")
+  decision      String
+  justification String
+  decidedAt     DateTime @default(now()) @map("decided_at")
+
+  gate         ApprovalGate @relation(fields: [gateId], references: [id])
+  organization Organization @relation(fields: [orgId], references: [id])
+
+  @@index([gateId])
+  @@index([orgId, decidedAt])
+  @@map("approval_decisions")
+}
+
+// --- P7: Webhooks & Notifications ---
+
+model WebhookEndpoint {
+  id          String   @id @default(uuid()) @db.Uuid
+  orgId       String   @map("org_id") @db.Uuid
+  name        String
+  url         String
+  channelType String   @map("channel_type")
+  secret      String
+  topics      String[]
+  headers     Json     @default("{}")
+  enabled     Boolean  @default(true)
+  createdBy   String?  @map("created_by")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @default(now()) @updatedAt @map("updated_at")
+
+  deliveries WebhookDelivery[]
+
+  @@index([orgId, enabled])
+  @@map("webhook_endpoints")
+}
+
+model WebhookDelivery {
+  id          String    @id @default(uuid()) @db.Uuid
+  endpointId  String    @map("endpoint_id") @db.Uuid
+  orgId       String    @map("org_id") @db.Uuid
+  topic       String
+  payload     Json
+  status      String    @default("pending")
+  httpStatus  Int?      @map("http_status")
+  attempt     Int       @default(1)
+  maxAttempts Int       @default(5) @map("max_attempts")
+  nextRetryAt DateTime? @map("next_retry_at")
+  lastError   String?   @map("last_error")
+  deliveredAt DateTime? @map("delivered_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  idempotencyKey String?   @unique @map("idempotency_key")
+
+  endpoint WebhookEndpoint @relation(fields: [endpointId], references: [id], onDelete: Cascade)
+
+  @@index([status, nextRetryAt])
+  @@index([orgId, createdAt(sort: Desc)])
+  @@index([endpointId, createdAt(sort: Desc)])
+  @@map("webhook_deliveries")
+}
+
+model NotificationRule {
+  id            String   @id @default(uuid()) @db.Uuid
+  orgId         String   @map("org_id") @db.Uuid
+  name          String
+  topics        String[]
+  condition     Json?
+  channelType   String   @map("channel_type")
+  channelConfig Json     @default("{}") @map("channel_config")
+  enabled       Boolean  @default(true)
+  createdBy     String?  @map("created_by")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  @@index([orgId, enabled])
+  @@map("notification_rules")
+}
+
+// --- Compliance Attestation & Remediation ---
+
+model ControlAttestation {
+  id              String    @id @default(uuid()) @db.Uuid
+  orgId           String    @map("org_id") @db.Uuid
+  frameworkSlug   String    @map("framework_slug")
+  controlCode     String    @map("control_code")
+  attestedBy      String    @map("attested_by")
+  attestationType String    @map("attestation_type")
+  justification   String
+  evidenceUrls    String[]  @map("evidence_urls")
+  validFrom       DateTime  @map("valid_from")
+  expiresAt       DateTime  @map("expires_at")
+  revokedAt       DateTime? @map("revoked_at")
+  revokedBy       String?   @map("revoked_by")
+  revokedReason   String?   @map("revoked_reason")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  history      AttestationHistory[]
+  organization Organization @relation(fields: [orgId], references: [id])
+
+  @@unique([orgId, frameworkSlug, controlCode])
+  @@index([orgId, expiresAt])
+  @@map("control_attestations")
+}
+
+model AttestationHistory {
+  id             String   @id @default(uuid()) @db.Uuid
+  attestationId  String   @map("attestation_id") @db.Uuid
+  action         String
+  actorId        String   @map("actor_id")
+  previousState  Json?    @map("previous_state")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  attestation ControlAttestation @relation(fields: [attestationId], references: [id])
+
+  @@index([attestationId])
+  @@map("attestation_history")
+}
+
+model RemediationItem {
+  id               String    @id @default(uuid()) @db.Uuid
+  orgId            String    @map("org_id") @db.Uuid
+  frameworkSlug    String?   @map("framework_slug")
+  controlCode      String?   @map("control_code")
+  title            String
+  description      String
+  status           String    @default("open")
+  priority         String    @default("medium")
+  assignedTo       String?   @map("assigned_to")
+  dueDate          DateTime? @map("due_date") @db.Timestamptz
+  completedAt      DateTime? @map("completed_at") @db.Timestamptz
+  completedBy      String?   @map("completed_by")
+  evidenceNotes    String?   @map("evidence_notes")
+  linkedFindingIds String[]  @map("linked_finding_ids")
+  createdBy        String    @map("created_by")
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt        DateTime  @updatedAt @map("updated_at") @db.Timestamptz
+
+  parentId         String?   @map("parent_id") @db.Uuid
+  findingId        String?   @map("finding_id") @db.Uuid
+  itemType         String    @default("compliance") @map("item_type")
+  priorityScore    Int       @default(0) @map("priority_score")
+  externalRef      String?   @map("external_ref")
+
+  parent              RemediationItem?    @relation("RemediationTree", fields: [parentId], references: [id])
+  children            RemediationItem[]   @relation("RemediationTree")
+  finding             Finding?            @relation(fields: [findingId], references: [id])
+  organization        Organization        @relation(fields: [orgId], references: [id])
+  evidenceAttachments EvidenceAttachment[]
+
+  @@index([orgId, status, priorityScore], map: "idx_remediation_queue")
+  @@index([orgId, dueDate], map: "idx_remediation_due")
+  @@index([orgId, itemType, status], map: "idx_remediation_type_status")
+  @@index([parentId], map: "idx_remediation_parent")
+  @@index([findingId], map: "idx_remediation_finding")
+  @@map("remediation_items")
+}
+
+model IntegrationConfig {
+  id        String   @id @default(uuid()) @db.Uuid
+  orgId     String   @map("org_id") @db.Uuid
+  provider  String
+  config    Json
+  enabled   Boolean  @default(true)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  organization Organization @relation(fields: [orgId], references: [id])
+
+  @@unique([orgId, provider])
+  @@map("integration_configs")
+}
+
+model WorkflowConfig {
+  id            String   @id @default(uuid()) @db.Uuid
+  orgId         String   @map("org_id") @db.Uuid
+  skipStages    String[] @map("skip_stages")
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt     DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  organization Organization @relation(fields: [orgId], references: [id])
+
+  @@unique([orgId])
+  @@map("workflow_configs")
+}
+
+model BusinessAssociateAgreement {
+  id              String    @id @default(uuid()) @db.Uuid
+  orgId           String    @map("org_id") @db.Uuid
+  vendorName      String    @map("vendor_name")
+  vendorContact   String    @map("vendor_contact")
+  agreementDate   DateTime  @map("agreement_date")
+  expiresAt       DateTime  @map("expires_at")
+  documentUrl     String?   @map("document_url")
+  status          String    @default("active")
+  coveredServices String[]  @map("covered_services")
+  reviewedBy      String    @map("reviewed_by")
+  reviewedAt      DateTime  @map("reviewed_at")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  organization Organization @relation(fields: [orgId], references: [id])
+
+  @@index([orgId, status])
+  @@map("business_associate_agreements")
+}
+
+// --- VCS Installation (Multi-Provider) ---
+
+model VcsInstallation {
+  id             String   @id @default(uuid()) @db.Uuid
+  orgId          String   @map("org_id") @db.Uuid
+  provider       String                            // "github" | "gitlab" | "bitbucket" | "azure_devops"
+  installationId String   @map("installation_id")  // provider-specific ID (string for all)
+  owner          String                            // org/group/workspace
+  repo           String?                           // null = org-level installation
+  displayName    String?  @map("display_name")
+  webhookSecret  String?  @map("webhook_secret")
+  active         Boolean  @default(true)
+  permissions    Json     @default("{}")
+  metadata       Json     @default("{}")           // provider-specific config
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  organization   Organization              @relation(fields: [orgId], references: [id])
+  githubExt      VcsInstallationGitHub?
+  gitlabExt      VcsInstallationGitLab?
+  bitbucketExt   VcsInstallationBitbucket?
+  azureDevOpsExt VcsInstallationAzureDevOps?
+
+  @@unique([provider, installationId])
+  @@index([orgId, provider])
+  @@index([provider, owner])
+  @@map("vcs_installations")
+}
+
+model VcsInstallationGitHub {
+  id                String @id @default(uuid()) @db.Uuid
+  vcsInstallationId String @unique @map("vcs_installation_id") @db.Uuid
+  appId             String @map("app_id")
+  numericInstallId  Int    @map("numeric_install_id")
+  privateKey        String @map("private_key")
+
+  vcsInstallation VcsInstallation @relation(fields: [vcsInstallationId], references: [id], onDelete: Cascade)
+
+  @@map("vcs_installation_github")
+}
+
+model VcsInstallationGitLab {
+  id                String @id @default(uuid()) @db.Uuid
+  vcsInstallationId String @unique @map("vcs_installation_id") @db.Uuid
+  gitlabUrl         String @map("gitlab_url")
+  accessToken       String @map("access_token")
+  tokenType         String @map("token_type")
+
+  vcsInstallation VcsInstallation @relation(fields: [vcsInstallationId], references: [id], onDelete: Cascade)
+
+  @@map("vcs_installation_gitlab")
+}
+
+model VcsInstallationBitbucket {
+  id                String @id @default(uuid()) @db.Uuid
+  vcsInstallationId String @unique @map("vcs_installation_id") @db.Uuid
+  workspace         String
+  clientKey         String @map("client_key")
+  sharedSecret      String @map("shared_secret")
+
+  vcsInstallation VcsInstallation @relation(fields: [vcsInstallationId], references: [id], onDelete: Cascade)
+
+  @@map("vcs_installation_bitbucket")
+}
+
+model VcsInstallationAzureDevOps {
+  id                String @id @default(uuid()) @db.Uuid
+  vcsInstallationId String @unique @map("vcs_installation_id") @db.Uuid
+  organizationUrl   String @map("organization_url")
+  projectName       String @map("project_name")
+  pat               String
+
+  vcsInstallation VcsInstallation @relation(fields: [vcsInstallationId], references: [id], onDelete: Cascade)
+
+  @@map("vcs_installation_azure_devops")
+}
+
+// --- Evidence Attachments ---
+
+model EvidenceAttachment {
+  id            String   @id @default(uuid()) @db.Uuid
+  orgId         String   @map("org_id") @db.Uuid
+  remediationId String   @map("remediation_id") @db.Uuid
+  fileName      String   @map("file_name")
+  fileSize      Int      @map("file_size")
+  mimeType      String   @map("mime_type")
+  s3Key         String   @map("s3_key")
+  uploadedBy    String   @map("uploaded_by")
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  remediation  RemediationItem @relation(fields: [remediationId], references: [id], onDelete: Cascade)
+  organization Organization    @relation(fields: [orgId], references: [id])
+
+  @@index([remediationId])
+  @@index([orgId])
+  @@map("evidence_attachments")
+}
+
+model RemediationSnapshot {
+  id                String   @id @default(uuid()) @db.Uuid
+  orgId             String   @map("org_id") @db.Uuid
+  snapshotDate      DateTime @map("snapshot_date") @db.Date
+  scope             String   @default("org")
+  scopeValue        String?  @map("scope_value")
+  openCount         Int      @map("open_count")
+  inProgressCount   Int      @map("in_progress_count")
+  completedCount    Int      @map("completed_count")
+  acceptedRiskCount Int      @map("accepted_risk_count")
+  avgResolutionHours Float?  @map("avg_resolution_hours")
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  organization Organization @relation(fields: [orgId], references: [id])
+
+  @@unique([orgId, snapshotDate, scope, scopeValue])
+  @@index([orgId, scope, snapshotDate])
+  @@map("remediation_snapshots")
+}
+
+// --- AI Code Metrics ---
+
+model AIMetricsSnapshot {
+  id                String    @id @default(uuid()) @db.Uuid
+  orgId             String    @map("org_id") @db.Uuid
+  projectId         String?   @map("project_id") @db.Uuid
+  snapshotDate      DateTime  @map("snapshot_date") @db.Date
+  granularity       String    @default("daily")
+
+  totalFiles        Int       @map("total_files")
+  aiFiles           Int       @map("ai_files")
+  totalLoc          Int       @map("total_loc")
+  aiLoc             Int       @map("ai_loc")
+  aiRatio           Float     @map("ai_ratio")
+  aiInfluenceScore  Float     @map("ai_influence_score")
+
+  avgProbability    Float     @map("avg_probability")
+  medianProbability Float     @map("median_probability")
+  p95Probability    Float     @map("p95_probability")
+
+  toolBreakdown     Json      @default("[]") @map("tool_breakdown")
+  complianceGaps    Json      @default("{}") @map("compliance_gaps")
+
+  scanCount         Int       @map("scan_count")
+  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz
+
+  organization      Organization @relation(fields: [orgId], references: [id])
+  project           Project?     @relation(fields: [projectId], references: [id])
+
+  @@unique([orgId, projectId, snapshotDate, granularity])
+  @@index([orgId, granularity, snapshotDate(sort: Desc)])
+  @@index([projectId, granularity, snapshotDate(sort: Desc)])
+  @@map("ai_metrics_snapshots")
+}
+
+model AIMetricsConfig {
+  id                String   @id @default(uuid()) @db.Uuid
+  orgId             String   @unique @map("org_id") @db.Uuid
+  threshold         Float    @default(0.50)
+  strictMode        Boolean  @default(false) @map("strict_mode")
+  alertEnabled      Boolean  @default(false) @map("alert_enabled")
+  alertMaxRatio     Float?   @map("alert_max_ratio")
+  alertSpikeStdDev  Float    @default(2.0) @map("alert_spike_std_dev")
+  alertNewTool      Boolean  @default(true) @map("alert_new_tool")
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt         DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  organization      Organization @relation(fields: [orgId], references: [id])
+  @@map("ai_metrics_configs")
 }

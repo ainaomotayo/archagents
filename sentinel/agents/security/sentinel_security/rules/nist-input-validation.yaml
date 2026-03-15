@@ -1,0 +1,24 @@
+rules:
+  - id: nist-ai-unvalidated-input
+    patterns:
+      - pattern-either:
+          - pattern: model.predict($INPUT)
+          - pattern: model($INPUT)
+          - pattern: pipeline(..., $INPUT, ...)
+      - pattern-not-inside: |
+          $VALIDATED = validate($INPUT)
+          ...
+      - pattern-not-inside: |
+          if not isinstance($INPUT, ...):
+            ...
+          ...
+    message: >-
+      AI model receives unvalidated input — NIST AI RMF requires input
+      validation for security
+    severity: WARNING
+    languages: [python]
+    metadata:
+      category: vulnerability/ai-input-validation
+      nist: "MS-2.5"
+      cwe:
+        - "CWE-20: Improper Input Validation"

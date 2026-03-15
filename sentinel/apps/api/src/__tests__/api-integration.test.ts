@@ -145,6 +145,9 @@ vi.mock("@sentinel/db", () => {
     getDb: () => tenant,
     disconnectDb: vi.fn(),
     withTenant: vi.fn(async (_db: any, _orgId: string, fn: any) => fn(tenant)),
+    initEncryption: vi.fn(),
+    setCurrentOrgId: vi.fn(),
+    PrismaClient: vi.fn(),
   };
 });
 

@@ -70,4 +70,77 @@ describe("RBAC enforcement", () => {
     expect(isAuthorized("viewer", "GET", "/v1/policies/:id/versions")).toBe(true);
     expect(isAuthorized("service", "GET", "/v1/policies/:id/versions")).toBe(false);
   });
+
+  it("viewer can read compliance scores but not create frameworks", () => {
+    expect(isAuthorized("viewer", "GET", "/v1/compliance/scores")).toBe(true);
+    expect(isAuthorized("viewer", "GET", "/v1/compliance/frameworks")).toBe(true);
+    expect(isAuthorized("viewer", "POST", "/v1/compliance/frameworks")).toBe(false);
+  });
+
+  it("only admin can create/update/delete compliance frameworks", () => {
+    expect(isAuthorized("admin", "POST", "/v1/compliance/frameworks")).toBe(true);
+    expect(isAuthorized("admin", "PUT", "/v1/compliance/frameworks/:id")).toBe(true);
+    expect(isAuthorized("admin", "DELETE", "/v1/compliance/frameworks/:id")).toBe(true);
+    expect(isAuthorized("manager", "POST", "/v1/compliance/frameworks")).toBe(false);
+  });
+
+  it("admin and manager can override controls", () => {
+    expect(isAuthorized("admin", "POST", "/v1/compliance/controls/:id/override")).toBe(true);
+    expect(isAuthorized("manager", "POST", "/v1/compliance/controls/:id/override")).toBe(true);
+    expect(isAuthorized("developer", "POST", "/v1/compliance/controls/:id/override")).toBe(false);
+  });
+
+  it("only admin can verify evidence chain", () => {
+    expect(isAuthorized("admin", "GET", "/v1/evidence/verify")).toBe(true);
+    expect(isAuthorized("manager", "GET", "/v1/evidence/verify")).toBe(false);
+  });
+
+  it("admin and manager can manage reports", () => {
+    expect(isAuthorized("admin", "POST", "/v1/reports")).toBe(true);
+    expect(isAuthorized("manager", "GET", "/v1/reports")).toBe(true);
+    expect(isAuthorized("developer", "POST", "/v1/reports")).toBe(false);
+  });
+
+  it("developer can run live assessments", () => {
+    expect(isAuthorized("developer", "GET", "/v1/compliance/assess/:frameworkId")).toBe(true);
+    expect(isAuthorized("viewer", "GET", "/v1/compliance/assess/:frameworkId")).toBe(false);
+  });
+
+  it("only admin can create/update/delete webhooks", () => {
+    expect(isAuthorized("admin", "POST", "/v1/webhooks")).toBe(true);
+    expect(isAuthorized("admin", "PUT", "/v1/webhooks/:id")).toBe(true);
+    expect(isAuthorized("admin", "DELETE", "/v1/webhooks/:id")).toBe(true);
+    expect(isAuthorized("manager", "POST", "/v1/webhooks")).toBe(false);
+    expect(isAuthorized("developer", "POST", "/v1/webhooks")).toBe(false);
+  });
+
+  it("admin and manager can list webhooks and deliveries", () => {
+    expect(isAuthorized("admin", "GET", "/v1/webhooks")).toBe(true);
+    expect(isAuthorized("manager", "GET", "/v1/webhooks")).toBe(true);
+    expect(isAuthorized("admin", "GET", "/v1/webhooks/:id")).toBe(true);
+    expect(isAuthorized("manager", "GET", "/v1/webhooks/:id")).toBe(true);
+    expect(isAuthorized("admin", "GET", "/v1/webhooks/:id/deliveries")).toBe(true);
+    expect(isAuthorized("developer", "GET", "/v1/webhooks")).toBe(false);
+  });
+
+  it("admin can test webhook endpoints", () => {
+    expect(isAuthorized("admin", "POST", "/v1/webhooks/:id/test")).toBe(true);
+    expect(isAuthorized("manager", "POST", "/v1/webhooks/:id/test")).toBe(false);
+  });
+
+  it("admin and manager can manage notification rules", () => {
+    expect(isAuthorized("admin", "POST", "/v1/notifications/rules")).toBe(true);
+    expect(isAuthorized("manager", "POST", "/v1/notifications/rules")).toBe(true);
+    expect(isAuthorized("admin", "GET", "/v1/notifications/rules")).toBe(true);
+    expect(isAuthorized("admin", "DELETE", "/v1/notifications/rules/:id")).toBe(true);
+    expect(isAuthorized("developer", "POST", "/v1/notifications/rules")).toBe(false);
+  });
+
+  it("all authenticated users can access SSE stream", () => {
+    expect(isAuthorized("admin", "GET", "/v1/events/stream")).toBe(true);
+    expect(isAuthorized("manager", "GET", "/v1/events/stream")).toBe(true);
+    expect(isAuthorized("developer", "GET", "/v1/events/stream")).toBe(true);
+    expect(isAuthorized("viewer", "GET", "/v1/events/stream")).toBe(true);
+    expect(isAuthorized("service", "GET", "/v1/events/stream")).toBe(true);
+  });
 });

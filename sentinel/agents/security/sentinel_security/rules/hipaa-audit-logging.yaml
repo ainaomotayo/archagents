@@ -1,0 +1,37 @@
+rules:
+  - id: hipaa-missing-audit-log
+    patterns:
+      - pattern: |
+          app.$METHOD($ROUTE, ..., async ($REQ, $RES) => {
+            ...
+            $DB.$MODEL.update(...)
+            ...
+          })
+      - pattern-not: |
+          app.$METHOD($ROUTE, ..., async ($REQ, $RES) => {
+            ...
+            auditLog.append(...)
+            ...
+          })
+      - pattern-not: |
+          app.$METHOD($ROUTE, ..., async ($REQ, $RES) => {
+            ...
+            audit.log(...)
+            ...
+          })
+      - pattern-not: |
+          app.$METHOD($ROUTE, ..., async ($REQ, $RES) => {
+            ...
+            logger.audit(...)
+            ...
+          })
+    message: >-
+      Data mutation endpoint missing audit log entry — HIPAA requires
+      audit controls (§164.312(b))
+    severity: WARNING
+    languages: [javascript, typescript]
+    metadata:
+      category: vulnerability/audit-gap
+      hipaa: "§164.312(b)"
+      cwe:
+        - "CWE-778: Insufficient Logging"

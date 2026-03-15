@@ -134,3 +134,52 @@ def test_cache_set_handles_redis_error():
     cache = ReviewCache(redis_mock)
     # Should not raise
     asyncio.run(cache.set("hash", []))
+
+
+# ---------------------------------------------------------------------------
+# Core cache backend
+# ---------------------------------------------------------------------------
+
+def test_core_cache_get():
+    """ReviewCache can use agent_core.cache.RedisCache as backend."""
+    finding = _sample_finding()
+    core_mock = AsyncMock()
+    core_mock.get.return_value = [_finding_to_dict(finding)]
+
+    cache = ReviewCache.from_core_cache(core_mock)
+    result = asyncio.run(cache.get("hash123"))
+
+    assert result is not None
+    assert len(result) == 1
+    assert result[0].title == "SQL Injection"
+    core_mock.get.assert_called_once_with("hash123")
+
+
+def test_core_cache_set():
+    """ReviewCache delegates set to core cache when available."""
+    core_mock = AsyncMock()
+    cache = ReviewCache.from_core_cache(core_mock)
+    finding = _sample_finding()
+
+    asyncio.run(cache.set("hash123", [finding], ttl_days=7))
+
+    core_mock.set.assert_called_once()
+    call_args = core_mock.set.call_args
+    assert call_args[0][0] == "hash123"
+    assert call_args[1]["ttl_seconds"] == 7 * 86400
+
+
+def test_core_cache_miss():
+    core_mock = AsyncMock()
+    core_mock.get.return_value = None
+    cache = ReviewCache.from_core_cache(core_mock)
+    result = asyncio.run(cache.get("miss"))
+    assert result is None
+
+
+def test_core_cache_error_returns_none():
+    core_mock = AsyncMock()
+    core_mock.get.side_effect = ConnectionError("down")
+    cache = ReviewCache.from_core_cache(core_mock)
+    result = asyncio.run(cache.get("hash"))
+    assert result is None

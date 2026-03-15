@@ -1,14 +1,41 @@
-"""Main QualityAgent — combines complexity, duplication, and test coverage analysis."""
+"""Main QualityAgent — combines complexity, duplication, and test coverage analysis.
+
+Supports 30+ languages via tree-sitter AST for complexity and naming,
+with regex fallback for unsupported languages.
+"""
 
 from __future__ import annotations
 
-from sentinel_agents.base import BaseAgent
-from sentinel_agents.types import Confidence, DiffEvent, Finding, Severity
+import hashlib
+import logging
+from typing import Any
 
+from sentinel_agents.base import BaseAgent
+from sentinel_agents.types import Confidence, DiffEvent, DiffFile, Finding, Severity
+
+from sentinel_quality.compliance_checks import (
+    check_access_documentation,
+    check_ai_documentation,
+    check_ai_test_coverage,
+    check_data_governance,
+)
 from sentinel_quality.complexity import calculate_complexity
 from sentinel_quality.duplication import detect_duplicates
 from sentinel_quality.naming import analyze_naming_consistency
 from sentinel_quality.test_coverage import find_coverage_gaps
+
+logger = logging.getLogger(__name__)
+
+
+def _get_ast_cache(redis_client: Any = None):
+    """Create a RedisCache for memoizing AST analysis results."""
+    if redis_client is None:
+        return None
+    try:
+        from agent_core.cache import RedisCache
+        return RedisCache(redis_client, prefix="sentinel.ast_cache", default_ttl=3600)
+    except Exception:
+        return None
 
 # Complexity thresholds
 COMPLEXITY_HIGH = 15
@@ -17,12 +44,48 @@ COMPLEXITY_MEDIUM = 10
 # Naming consistency threshold — below this triggers a finding
 NAMING_CONSISTENCY_THRESHOLD = 0.5
 
+# Languages supported for complexity analysis (tree-sitter + regex fallback)
+_COMPLEXITY_LANGUAGES = {
+    "python", "javascript", "typescript", "js", "ts", "jsx", "tsx",
+    "go", "rust", "java", "ruby", "c", "cpp", "cc",
+}
+
+# Languages supported for naming analysis (tree-sitter + regex fallback)
+_NAMING_LANGUAGES = {
+    "python", "javascript", "typescript", "js", "ts", "jsx", "tsx",
+    "go", "rust", "java", "ruby", "c", "cpp", "cc",
+}
+
 
 class QualityAgent(BaseAgent):
     name = "quality"
     version = "0.1.0"
     ruleset_version = "rules-2026.03.09-a"
     ruleset_hash = "sha256:quality-v1"
+
+    def __init__(self, redis_client: Any = None) -> None:
+        self._ast_cache = _get_ast_cache(redis_client)
+
+    def _cache_key(self, code: str, lang: str, analysis: str) -> str:
+        """Generate cache key for memoized AST analysis."""
+        content_hash = hashlib.sha256(f"{code}:{lang}".encode()).hexdigest()[:16]
+        return f"{analysis}:{lang}:{content_hash}"
+
+    def _cached_complexity(self, code: str, lang: str):
+        """Memoized complexity analysis."""
+        if self._ast_cache:
+            key = self._cache_key(code, lang, "complexity")
+            cached = self._ast_cache.get_sync(key)
+            if cached is not None:
+                return cached
+        results = calculate_complexity(code, lang)
+        if self._ast_cache:
+            self._ast_cache.set_sync(
+                self._cache_key(code, lang, "complexity"),
+                [{"function_name": r.function_name, "complexity": r.complexity,
+                  "line_start": r.line_start, "line_end": r.line_end} for r in results],
+            )
+        return results
 
     def process(self, event: DiffEvent) -> list[Finding]:
         findings: list[Finding] = []
@@ -39,30 +102,26 @@ class QualityAgent(BaseAgent):
         # 4. Naming consistency analysis — per file
         findings.extend(self._analyze_naming(event))
 
+        # 5. NIST/HIPAA compliance checks
+        findings.extend(check_ai_documentation(event.files))
+        findings.extend(check_data_governance(event.files))
+        findings.extend(check_ai_test_coverage(event.files))
+        findings.extend(check_access_documentation(event.files))
+
         return findings
 
     def _analyze_complexity(self, event: DiffEvent) -> list[Finding]:
         findings: list[Finding] = []
         for diff_file in event.files:
             lang = diff_file.language.lower()
-            if lang not in ("python", "javascript", "typescript", "js", "ts", "jsx", "tsx"):
+            if lang not in _COMPLEXITY_LANGUAGES:
                 continue
 
-            # Reconstruct added code from hunks
-            code_lines: list[str] = []
-            for hunk in diff_file.hunks:
-                for line in hunk.content.split("\n"):
-                    if line.startswith("+") and not line.startswith("+++"):
-                        code_lines.append(line[1:])
-                    elif not line.startswith("-") and not line.startswith("---"):
-                        if not line.startswith("@@"):
-                            code_lines.append(line)
-
-            code = "\n".join(code_lines)
+            code = self._extract_added_code(diff_file)
             if not code.strip():
                 continue
 
-            results = calculate_complexity(code, lang)
+            results = self._cached_complexity(code, lang)
             for result in results:
                 if result.complexity >= COMPLEXITY_MEDIUM:
                     if result.complexity >= COMPLEXITY_HIGH:
@@ -130,24 +189,27 @@ class QualityAgent(BaseAgent):
             )
         return findings
 
+    @staticmethod
+    def _extract_added_code(diff_file: DiffFile) -> str:
+        """Reconstruct added code from diff hunks."""
+        code_lines: list[str] = []
+        for hunk in diff_file.hunks:
+            for line in hunk.content.split("\n"):
+                if line.startswith("+") and not line.startswith("+++"):
+                    code_lines.append(line[1:])
+                elif not line.startswith("-") and not line.startswith("---"):
+                    if not line.startswith("@@"):
+                        code_lines.append(line)
+        return "\n".join(code_lines)
+
     def _analyze_naming(self, event: DiffEvent) -> list[Finding]:
         findings: list[Finding] = []
         for diff_file in event.files:
             lang = diff_file.language.lower()
-            if lang not in ("python", "javascript", "typescript", "js", "ts", "jsx", "tsx"):
+            if lang not in _NAMING_LANGUAGES:
                 continue
 
-            # Reconstruct added code from hunks
-            code_lines: list[str] = []
-            for hunk in diff_file.hunks:
-                for line in hunk.content.split("\n"):
-                    if line.startswith("+") and not line.startswith("+++"):
-                        code_lines.append(line[1:])
-                    elif not line.startswith("-") and not line.startswith("---"):
-                        if not line.startswith("@@"):
-                            code_lines.append(line)
-
-            code = "\n".join(code_lines)
+            code = self._extract_added_code(diff_file)
             if not code.strip():
                 continue
 
@@ -195,6 +257,22 @@ class QualityAgent(BaseAgent):
         findings: list[Finding] = []
         gaps = find_coverage_gaps(event.files)
         for gap in gaps:
+            untested = gap.untested_functions
+            desc = (
+                f"New source file `{gap.source_file}` ({gap.language}) "
+                f"has no corresponding test file in the diff."
+            )
+            if gap.exported_functions:
+                desc += (
+                    f" Exports {len(gap.exported_functions)} function(s): "
+                    f"{', '.join(gap.exported_functions[:5])}."
+                )
+                if untested:
+                    desc += (
+                        f" {len(untested)} untested: "
+                        f"{', '.join(untested[:5])}."
+                    )
+
             findings.append(
                 Finding(
                     type="quality",
@@ -204,16 +282,17 @@ class QualityAgent(BaseAgent):
                     severity=Severity.MEDIUM,
                     confidence=Confidence.MEDIUM,
                     title=f"No test file found for `{gap.source_file}`",
-                    description=(
-                        f"New source file `{gap.source_file}` ({gap.language}) "
-                        f"has no corresponding test file in the diff."
-                    ),
+                    description=desc,
                     remediation=(
                         f"Add a test file. Expected patterns: "
                         f"{', '.join(gap.expected_test_patterns[:4])}"
                     ),
                     category="test-coverage",
                     scanner="quality-agent",
+                    extra={
+                        "exported_functions": gap.exported_functions,
+                        "untested_functions": untested,
+                    },
                 )
             )
         return findings

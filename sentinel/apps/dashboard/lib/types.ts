@@ -55,6 +55,7 @@ export interface Finding {
   codeSnippet: string;
   remediation: string;
   createdAt: string;
+  agentName: string;
 }
 
 export interface Certificate {
@@ -103,4 +104,245 @@ export interface FrameworkScore {
 export interface ComplianceTrendPoint {
   date: string; // ISO 8601
   score: number; // 0.0–1.0
+}
+
+
+// ── Approvals ─────────────────────────────────────────────────────────
+
+export type ApprovalStatus = "pending" | "escalated" | "approved" | "rejected" | "expired";
+export type GateType = "risk_threshold" | "category_block" | "license_review" | "always_review";
+export type ExpiryAction = "reject" | "approve";
+
+export interface ApprovalDecision {
+  id: string;
+  decidedBy: string;
+  decision: "approve" | "reject";
+  justification: string;
+  decidedAt: string;
+}
+
+export interface ApprovalGate {
+  id: string;
+  scanId: string;
+  projectId: string;
+  projectName: string;
+  status: ApprovalStatus;
+  gateType: GateType;
+  triggerCriteria: Record<string, unknown>;
+  priority: number;
+  assignedRole: string | null;
+  assignedTo: string | null;
+  requestedAt: string;
+  requestedBy: string;
+  expiresAt: string;
+  escalatesAt: string | null;
+  expiryAction: ExpiryAction;
+  decidedAt: string | null;
+  scan: {
+    commitHash: string;
+    branch: string;
+    riskScore: number;
+    findingCount: number;
+  };
+  decisions: ApprovalDecision[];
+}
+
+export interface ApprovalStats {
+  pending: number;
+  escalated: number;
+  decidedToday: number;
+  avgDecisionTimeHours: number;
+  expiringSoon: number;
+}
+
+// ── Remediation ──────────────────────────────────────────────────────
+
+export interface RemediationItem {
+  id: string;
+  orgId: string;
+  frameworkSlug: string | null;
+  controlCode: string | null;
+  title: string;
+  description: string;
+  status: string;
+  priority: string;
+  assignedTo: string | null;
+  dueDate: string | null;
+  completedAt: string | null;
+  completedBy: string | null;
+  evidenceNotes: string | null;
+  linkedFindingIds: string[];
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+  parentId: string | null;
+  findingId: string | null;
+  itemType: string;
+  priorityScore: number;
+  externalRef: string | null;
+  children?: RemediationItem[];
+}
+
+export interface RemediationStats {
+  open: number;
+  inProgress: number;
+  overdue: number;
+  completed: number;
+  acceptedRisk: number;
+  avgResolutionDays: number;
+  slaCompliance: number;
+}
+
+// ── Evidence ─────────────────────────────────────────────────────────
+
+export interface EvidenceAttachment {
+  id: string;
+  remediationId: string;
+  fileName: string;
+  fileSize: number;
+  mimeType: string;
+  s3Key: string;
+  uploadedBy: string;
+  createdAt: string;
+}
+
+// ── Charts ───────────────────────────────────────────────────────────
+
+export interface BurndownDataPoint {
+  date: string;
+  open: number;
+  inProgress: number;
+}
+
+export interface VelocityDataPoint {
+  week: string;
+  completed: number;
+}
+
+export interface AgingDataPoint {
+  bucket: string;
+  critical: number;
+  high: number;
+  medium: number;
+  low: number;
+}
+
+export interface SlaDataPoint {
+  date: string;
+  compliance: number;
+}
+
+// ── AI Metrics ──────────────────────────────────────────
+export interface AIMetricsStats {
+  hasData: boolean;
+  stats: {
+    aiRatio: number;
+    aiFiles: number;
+    totalFiles: number;
+    aiLoc: number;
+    totalLoc: number;
+    aiInfluenceScore: number;
+    avgProbability: number;
+    medianProbability: number;
+    p95Probability: number;
+  };
+  toolBreakdown: AIToolBreakdownEntry[];
+}
+
+export interface AIToolBreakdownEntry {
+  tool: string;
+  confirmedFiles: number;
+  estimatedFiles: number;
+  totalLoc: number;
+  percentage: number;
+}
+
+export interface AITrendPoint {
+  date: string;
+  aiRatio: number;
+  aiInfluenceScore: number;
+  scanCount: number;
+}
+
+export interface AITrendResult {
+  points: AITrendPoint[];
+  momChange: number;
+  movingAvg7d: number;
+  movingAvg30d: number;
+}
+
+export interface AIProjectMetric {
+  projectId: string;
+  projectName: string;
+  aiRatio: number;
+  aiInfluenceScore: number;
+  aiFiles: number;
+  totalFiles: number;
+}
+
+export interface AIProjectComparison {
+  projectIds: string[];
+  days: number;
+  series: Record<string, { date: string; aiRatio: number; aiInfluenceScore: number }[]>;
+}
+
+export interface AIAnomalyAlert {
+  type: "threshold_exceeded" | "spike_detected" | "new_tool";
+  projectId?: string;
+  projectName?: string;
+  detail: string;
+  severity: "warning" | "critical";
+  detectedAt: string;
+}
+
+export interface AIMetricsConfig {
+  threshold: number;
+  strictMode: boolean;
+  alertEnabled: boolean;
+  alertMaxRatio: number | null;
+  alertSpikeStdDev: number;
+  alertNewTool: boolean;
+}
+
+// Risk Trend
+export interface RiskTrendPoint {
+  date: string;
+  score: number;
+}
+
+export interface ProjectRiskTrend {
+  points: RiskTrendPoint[];
+  direction: "up" | "down" | "flat";
+  changePercent: number;
+}
+
+export interface RiskTrendResult {
+  trends: Record<string, ProjectRiskTrend>;
+  meta: {
+    days: number;
+    generatedAt: string;
+  };
+}
+
+// Decision Trace
+export interface DecisionTraceSignal {
+  weight: number;
+  rawValue: number;
+  probability: number;
+  contribution: number;
+  detail: Record<string, unknown>;
+}
+
+export interface DecisionTrace {
+  id: string;
+  findingId: string;
+  toolName: string | null;
+  modelVersion: string | null;
+  promptHash: string | null;
+  promptCategory: string | null;
+  overallScore: number;
+  signals: Record<string, DecisionTraceSignal>;
+  declaredTool: string | null;
+  declaredModel: string | null;
+  enrichedAt: string | null;
 }

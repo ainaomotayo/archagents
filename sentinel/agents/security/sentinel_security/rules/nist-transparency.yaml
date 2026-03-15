@@ -1,0 +1,35 @@
+rules:
+  - id: nist-ai-undocumented-model
+    patterns:
+      - pattern-either:
+          - pattern: model.predict(...)
+          - pattern: model.generate(...)
+          - pattern: pipeline($MODEL, ...)
+      - pattern-not-inside: |
+          # Model: ...
+          ...
+    message: >-
+      AI model call without documentation comment — NIST AI RMF requires
+      transparency
+    severity: WARNING
+    languages: [python]
+    metadata:
+      category: vulnerability/ai-transparency
+      nist: "MS-2.8"
+
+  - id: nist-ai-no-version-tracking
+    patterns:
+      - pattern-either:
+          - pattern: from transformers import $CLASS
+          - pattern: import openai
+      - pattern-not-inside: |
+          $MODEL_VERSION = "..."
+          ...
+    message: >-
+      AI library imported without version tracking — NIST requires AI
+      system transparency
+    severity: INFO
+    languages: [python]
+    metadata:
+      category: vulnerability/ai-transparency
+      nist: "MS-2.8"

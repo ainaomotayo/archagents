@@ -1,0 +1,49 @@
+"use server";
+
+import { revalidatePath } from "next/cache";
+
+export async function submitDecision(
+  gateId: string,
+  decision: "approve" | "reject",
+  justification: string,
+) {
+  const { apiPost } = await import("@/lib/api-client");
+  try {
+    await apiPost(`/v1/approvals/${gateId}/decide`, { decision, justification });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (msg.includes("400")) {
+      throw new Error("Validation error: please ensure your justification is at least 10 characters.");
+    }
+    if (msg.includes("403")) {
+      throw new Error("You do not have permission to decide on this gate.");
+    }
+    if (msg.includes("404")) {
+      throw new Error("This approval gate no longer exists. It may have been deleted.");
+    }
+    if (msg.includes("409")) {
+      throw new Error("This gate has already been decided. Refresh to see the latest state.");
+    }
+    throw err;
+  }
+  revalidatePath("/approvals");
+  revalidatePath(`/approvals/${gateId}`);
+}
+
+export async function reassignGate(gateId: string, assignedTo: string) {
+  const { reassignApprovalGate } = await import("@/lib/api");
+  try {
+    await reassignApprovalGate(gateId, assignedTo);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (msg.includes("404")) {
+      throw new Error("This approval gate no longer exists.");
+    }
+    if (msg.includes("409")) {
+      throw new Error("Cannot reassign a gate that has already been decided.");
+    }
+    throw err;
+  }
+  revalidatePath("/approvals");
+  revalidatePath(`/approvals/${gateId}`);
+}

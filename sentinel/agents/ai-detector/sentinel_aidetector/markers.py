@@ -2,12 +2,21 @@
 
 Scans code content for comments, metadata, and patterns that indicate AI tool usage
 (Copilot, Cursor, Claude, ChatGPT, etc.).
+
+Uses tree-sitter AST (via agent_core) for comment extraction on supported languages,
+with regex line-scanning fallback.
 """
 
 from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+
+# Languages supported by agent_core tree-sitter
+_AST_LANGUAGES = {
+    "python", "javascript", "typescript", "js", "ts", "jsx", "tsx",
+    "go", "rust", "java", "ruby", "c", "cpp", "cc",
+}
 
 
 @dataclass
@@ -49,11 +58,49 @@ _MARKER_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
 ]
 
 
-def detect_markers(content: str) -> list[MarkerMatch]:
+def detect_markers(content: str, language: str = "") -> list[MarkerMatch]:
     """Scan content for AI tool markers.
 
-    Returns a list of MarkerMatch instances for every pattern match found.
+    Uses AST comment extraction for supported languages (more precise),
+    falls back to regex line scanning.
     """
+    lang = language.lower()
+    if lang in _AST_LANGUAGES:
+        try:
+            return _detect_markers_ast(content, lang)
+        except Exception:
+            pass
+    return _detect_markers_regex(content)
+
+
+def _detect_markers_ast(content: str, language: str) -> list[MarkerMatch]:
+    """Extract comments via tree-sitter AST and scan for markers."""
+    from agent_core.analysis.treesitter import parse_code, extract_comments
+
+    lang_map = {"js": "javascript", "ts": "typescript", "jsx": "javascript", "cc": "cpp"}
+    normalized = lang_map.get(language, language)
+
+    root = parse_code(content, normalized)
+    comments = extract_comments(root)
+
+    matches: list[MarkerMatch] = []
+    for comment in comments:
+        text = comment.text
+        for tool, pattern in _MARKER_PATTERNS:
+            if pattern.search(text):
+                matches.append(
+                    MarkerMatch(
+                        tool=tool,
+                        pattern=pattern.pattern,
+                        line_number=comment.line_start,
+                        line_content=text.strip(),
+                    )
+                )
+    return matches
+
+
+def _detect_markers_regex(content: str) -> list[MarkerMatch]:
+    """Regex fallback: scan every line for markers."""
     matches: list[MarkerMatch] = []
     lines = content.split("\n")
 

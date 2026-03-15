@@ -21,6 +21,50 @@ servers:
   - url: https://api-staging.sentinel.example.com
     description: Staging
 
+tags:
+  - name: Scans
+    description: Submit code diffs for scanning and monitor scan progress
+  - name: Findings
+    description: View and manage security findings from scans
+  - name: Certificates
+    description: Compliance certificates issued for passing scans
+  - name: Projects
+    description: Project management and per-project findings
+  - name: Policies
+    description: Compliance policy configuration and versioning
+  - name: Audit
+    description: Immutable, hash-chained audit log queries
+  - name: Compliance
+    description: Compliance frameworks, assessments, and trend tracking
+  - name: Evidence
+    description: Chain of custody evidence records
+  - name: Reports
+    description: Compliance report generation
+  - name: Webhooks
+    description: Outbound webhook endpoint management and delivery history
+  - name: Notifications
+    description: Notification rule configuration for event-driven alerts
+  - name: Events
+    description: Real-time event streaming via Server-Sent Events
+  - name: GitHub
+    description: Inbound GitHub webhook handling
+  - name: API Keys
+    description: API key management for programmatic access
+  - name: SSO
+    description: Enterprise SSO identity provider configuration
+  - name: Memberships
+    description: Organization membership and role management
+  - name: SCIM
+    description: SCIM 2.0 user and group provisioning (RFC 7644)
+  - name: Domains
+    description: Domain ownership verification for SSO enforcement
+  - name: Auth
+    description: Login discovery and SAML service provider metadata
+  - name: Admin
+    description: Administrative operations including DLQ monitoring, key rotation, and crypto-shred
+  - name: System
+    description: Health checks and Prometheus metrics
+
 paths:
   /v1/scans:
     get:
@@ -286,6 +330,55 @@ paths:
       responses:
         "200":
           description: Finding details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Finding"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Finding not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    patch:
+      operationId: updateFinding
+      summary: Update a finding
+      description: |
+        Update finding status or suppress a finding. Suppressed findings are
+        excluded from future risk score calculations.
+      tags: [Findings]
+      security:
+        - hmacAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Finding ID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                status:
+                  type: string
+                suppressed:
+                  type: boolean
+                suppressedBy:
+                  type: string
+      responses:
+        "200":
+          description: Updated finding
           content:
             application/json:
               schema:
@@ -816,92 +909,42 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
-  /v1/policies/simulate:
-    post:
-      operationId: simulatePolicy
-      summary: Simulate a policy tree
-      description: |
-        Evaluate a policy tree against a sample input and return the simulation result
-        with match status, execution trace, and matched actions.
+  /v1/policies/{id}/versions:
+    get:
+      operationId: listPolicyVersions
+      summary: List policy versions
+      description: Retrieve the version history of a policy.
       tags: [Policies]
       security:
         - hmacAuth: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [tree, input]
-              properties:
-                tree:
-                  $ref: "#/components/schemas/GroupNode"
-                input:
-                  $ref: "#/components/schemas/PolicySimulationInput"
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Policy ID
       responses:
         "200":
-          description: Simulation result
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/SimulationResult"
-        "400":
-          description: Invalid tree or input
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-        "401":
-          description: Unauthorized
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-
-  /v1/policies/compile-yaml:
-    post:
-      operationId: compilePolicyYaml
-      summary: Compile a policy tree to YAML
-      description: |
-        Validate a policy tree and compile it to a YAML representation.
-        Returns validation issues and the compiled YAML string.
-      tags: [Policies]
-      security:
-        - hmacAuth: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [tree]
-              properties:
-                tree:
-                  $ref: "#/components/schemas/GroupNode"
-      responses:
-        "200":
-          description: Compilation result
+          description: Policy version history
           content:
             application/json:
               schema:
                 type: object
                 properties:
-                  valid:
-                    type: boolean
-                  yaml:
-                    type: string
-                  issues:
+                  versions:
                     type: array
                     items:
-                      $ref: "#/components/schemas/ValidationIssue"
-        "400":
-          description: Invalid tree
+                      $ref: "#/components/schemas/PolicyVersion"
+        "401":
+          description: Unauthorized
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-        "401":
-          description: Unauthorized
+        "404":
+          description: Policy not found
           content:
             application/json:
               schema:
@@ -1013,6 +1056,1886 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+
+  /v1/compliance/frameworks:
+    get:
+      operationId: listComplianceFrameworks
+      summary: List compliance frameworks
+      description: List all available compliance frameworks (built-in and custom).
+      tags: [Compliance]
+      security:
+        - hmacAuth: []
+      responses:
+        "200":
+          description: List of compliance frameworks
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  frameworks:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/ComplianceFramework"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    post:
+      operationId: createComplianceFramework
+      summary: Create a compliance framework
+      description: Create a custom compliance framework.
+      tags: [Compliance]
+      security:
+        - hmacAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ComplianceFrameworkInput"
+      responses:
+        "201":
+          description: Framework created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ComplianceFramework"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Slug conflicts with a built-in framework
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /v1/compliance/frameworks/{id}:
+    get:
+      operationId: getComplianceFramework
+      summary: Get a compliance framework
+      description: Retrieve a single compliance framework by ID.
+      tags: [Compliance]
+      security:
+        - hmacAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Framework ID
+      responses:
+        "200":
+          description: Framework details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ComplianceFramework"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Framework not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    put:
+      operationId: updateComplianceFramework
+      summary: Update a compliance framework
+      description: Update an existing custom compliance framework. Built-in frameworks cannot be modified.
+      tags: [Compliance]
+      security:
+        - hmacAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Framework ID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ComplianceFrameworkInput"
+      responses:
+        "200":
+          description: Framework updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ComplianceFramework"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Cannot modify a built-in framework
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Framework not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      operationId: deleteComplianceFramework
+      summary: Delete a compliance framework
+      description: Delete a custom compliance framework. Built-in frameworks cannot be deleted.
+      tags: [Compliance]
+      security:
+        - hmacAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Framework ID
+      responses:
+        "204":
+          description: Framework deleted
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Cannot delete a built-in framework
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Framework not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /v1/compliance/controls/{id}/override:
+    post:
+      operationId: createControlOverride
+      summary: Create a control override
+      description: Override the default behaviour of a compliance control.
+      tags: [Compliance]
+      security:
+        - hmacAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Control ID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                matchRules:
+                  type: array
+                  items:
+                    type: object
+                weight:
+                  type: number
+                enabled:
+                  type: boolean
+      responses:
+        "200":
+          description: Override created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  controlId:
+                    type: string
+                  override:
+                    type: object
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Control not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      operationId: deleteControlOverride
+      summary: Delete a control override
+      description: Remove the override from a compliance control, restoring default behaviour.
+      tags: [Compliance]
+      security:
+        - hmacAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Control ID
+      responses:
+        "204":
+          description: Override removed
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Control not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /v1/compliance/assess/{frameworkId}:
+    get:
+      operationId: assessCompliance
+      summary: Assess compliance
+      description: Run a compliance assessment against a specific framework.
+      tags: [Compliance]
+      security:
+        - hmacAuth: []
+      parameters:
+        - name: frameworkId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Framework ID
+      responses:
+        "200":
+          description: Compliance assessment result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ComplianceAssessment"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Framework not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /v1/compliance/scores:
+    get:
+      operationId: getComplianceScores
+      summary: Get compliance scores
+      description: Retrieve current compliance scores across all frameworks.
+      tags: [Compliance]
+      security:
+        - hmacAuth: []
+      responses:
+        "200":
+          description: Compliance scores
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  scores:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/ComplianceSnapshot"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /v1/compliance/trends/{frameworkId}:
+    get:
+      operationId: getComplianceTrends
+      summary: Get compliance trends
+      description: Retrieve compliance score trends over time for a specific framework.
+      tags: [Compliance]
+      security:
+        - hmacAuth: []
+      parameters:
+        - name: frameworkId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Framework ID
+      responses:
+        "200":
+          description: Compliance trend data
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  trends:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/ComplianceSnapshot"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Framework not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /v1/evidence:
+    get:
+      operationId: listEvidence
+      summary: List evidence records
+      description: List evidence records with pagination support.
+      tags: [Evidence]
+      security:
+        - hmacAuth: []
+      parameters:
+        - $ref: "#/components/parameters/LimitParam"
+        - $ref: "#/components/parameters/OffsetParam"
+      responses:
+        "200":
+          description: Paginated list of evidence records
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/EvidenceRecord"
+                  total:
+                    type: integer
+                  limit:
+                    type: integer
+                  offset:
+                    type: integer
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /v1/evidence/{id}:
+    get:
+      operationId: getEvidence
+      summary: Get an evidence record
+      description: Retrieve a single evidence record by ID.
+      tags: [Evidence]
+      security:
+        - hmacAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Evidence record ID
+      responses:
+        "200":
+          description: Evidence record details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EvidenceRecord"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Evidence record not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /v1/evidence/verify:
+    get:
+      operationId: verifyEvidenceChain
+      summary: Verify evidence chain
+      description: Verify the integrity of the hash-chained evidence log.
+      tags: [Evidence]
+      security:
+        - hmacAuth: []
+      responses:
+        "200":
+          description: Evidence chain verification result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  valid:
+                    type: boolean
+                  totalRecords:
+                    type: integer
+                  details:
+                    type: object
+                    additionalProperties: true
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /v1/reports:
+    post:
+      operationId: generateReport
+      summary: Generate a report
+      description: Queue a new report for generation.
+      tags: [Reports]
+      security:
+        - hmacAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReportRequest"
+      responses:
+        "202":
+          description: Report generation accepted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Report"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    get:
+      operationId: listReports
+      summary: List reports
+      description: List generated reports with pagination.
+      tags: [Reports]
+      security:
+        - hmacAuth: []
+      parameters:
+        - $ref: "#/components/parameters/LimitParam"
+        - $ref: "#/components/parameters/OffsetParam"
+      responses:
+        "200":
+          description: Paginated list of reports
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Report"
+                  total:
+                    type: integer
+                  limit:
+                    type: integer
+                  offset:
+                    type: integer
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /v1/reports/{id}:
+    get:
+      operationId: getReport
+      summary: Get a report
+      description: Retrieve a single report by ID.
+      tags: [Reports]
+      security:
+        - hmacAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Report ID
+      responses:
+        "200":
+          description: Report details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Report"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Report not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /v1/webhooks:
+    post:
+      operationId: createWebhook
+      summary: Create a webhook endpoint
+      description: |
+        Register a new webhook endpoint to receive event notifications.
+      tags: [Webhooks]
+      security:
+        - hmacAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WebhookInput"
+      responses:
+        "201":
+          description: Webhook created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WebhookEndpoint"
+        "400":
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    get:
+      operationId: listWebhooks
+      summary: List webhook endpoints
+      description: |
+        List all registered webhook endpoints for the organisation.
+      tags: [Webhooks]
+      security:
+        - hmacAuth: []
+      responses:
+        "200":
+          description: List of webhook endpoints
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  endpoints:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/WebhookEndpoint"
+                  total:
+                    type: integer
+
+  /v1/webhooks/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      operationId: getWebhook
+      summary: Get a webhook endpoint
+      tags: [Webhooks]
+      security:
+        - hmacAuth: []
+      responses:
+        "200":
+          description: Webhook endpoint details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WebhookEndpoint"
+        "404":
+          description: Webhook not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    put:
+      operationId: updateWebhook
+      summary: Update a webhook endpoint
+      tags: [Webhooks]
+      security:
+        - hmacAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WebhookInput"
+      responses:
+        "200":
+          description: Webhook updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WebhookEndpoint"
+        "404":
+          description: Webhook not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      operationId: deleteWebhook
+      summary: Delete a webhook endpoint
+      tags: [Webhooks]
+      security:
+        - hmacAuth: []
+      responses:
+        "204":
+          description: Webhook deleted
+        "404":
+          description: Webhook not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /v1/webhooks/{id}/deliveries:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      operationId: listWebhookDeliveries
+      summary: List webhook deliveries
+      description: |
+        List delivery attempts for a specific webhook endpoint.
+      tags: [Webhooks]
+      security:
+        - hmacAuth: []
+      responses:
+        "200":
+          description: List of deliveries
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  deliveries:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/WebhookDelivery"
+                  total:
+                    type: integer
+        "404":
+          description: Webhook not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /v1/webhooks/{id}/test:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      operationId: testWebhook
+      summary: Send a test event to a webhook
+      description: |
+        Sends a test event to the specified webhook endpoint and returns the result.
+      tags: [Webhooks]
+      security:
+        - hmacAuth: []
+      responses:
+        "200":
+          description: Test delivery result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  statusCode:
+                    type: integer
+                  message:
+                    type: string
+                  event:
+                    type: object
+        "404":
+          description: Webhook not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /v1/notifications/rules:
+    post:
+      operationId: createNotificationRule
+      summary: Create a notification rule
+      description: |
+        Create a rule that triggers notifications when matching events occur.
+      tags: [Notifications]
+      security:
+        - hmacAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NotificationRuleInput"
+      responses:
+        "201":
+          description: Notification rule created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NotificationRule"
+        "400":
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    get:
+      operationId: listNotificationRules
+      summary: List notification rules
+      tags: [Notifications]
+      security:
+        - hmacAuth: []
+      responses:
+        "200":
+          description: List of notification rules
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  rules:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/NotificationRule"
+                  total:
+                    type: integer
+
+  /v1/notifications/rules/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    delete:
+      operationId: deleteNotificationRule
+      summary: Delete a notification rule
+      tags: [Notifications]
+      security:
+        - hmacAuth: []
+      responses:
+        "204":
+          description: Notification rule deleted
+        "404":
+          description: Notification rule not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /v1/events/stream:
+    get:
+      operationId: subscribeEvents
+      summary: Subscribe to server-sent events
+      description: |
+        Opens a server-sent events (SSE) stream for real-time event notifications.
+      tags: [Events]
+      security:
+        - hmacAuth: []
+      parameters:
+        - name: topics
+          in: query
+          schema:
+            type: string
+            default: "scan.*,finding.*"
+          description: Comma-separated list of topic patterns to subscribe to
+      responses:
+        "200":
+          description: SSE event stream
+          content:
+            text/event-stream:
+              schema:
+                type: string
+
+  /webhooks/github:
+    post:
+      operationId: handleGithubWebhook
+      summary: Handle inbound GitHub webhook
+      description: |
+        Receives webhook events from GitHub. Authenticates using GitHub's
+        HMAC-SHA256 signature verification (x-hub-signature-256 header).
+        This endpoint does not use SENTINEL's standard HMAC auth.
+      tags: [GitHub]
+      parameters:
+        - name: x-hub-signature-256
+          in: header
+          required: true
+          schema:
+            type: string
+          description: HMAC-SHA256 signature of the payload
+        - name: x-github-event
+          in: header
+          required: true
+          schema:
+            type: string
+          description: The GitHub event type (e.g. push, pull_request)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        "202":
+          description: Webhook accepted for processing
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+        "200":
+          description: Event ignored (not actionable)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+        "401":
+          description: Invalid signature
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /v1/api-keys:
+    post:
+      operationId: createApiKey
+      summary: Create an API key
+      description: |
+        Generate a new API key for programmatic access. The full key value
+        is returned only once in the response.
+      tags: [API Keys]
+      security:
+        - hmacAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name:
+                  type: string
+                  minLength: 1
+                role:
+                  type: string
+                  enum: [admin, manager, developer, viewer, service]
+                  default: service
+                expiresAt:
+                  type: string
+                  format: date-time
+      responses:
+        "201":
+          description: API key created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiKeyCreated"
+        "400":
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    get:
+      operationId: listApiKeys
+      summary: List API keys
+      tags: [API Keys]
+      security:
+        - hmacAuth: []
+      responses:
+        "200":
+          description: List of API keys
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  apiKeys:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/ApiKey"
+
+  /v1/api-keys/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    delete:
+      operationId: revokeApiKey
+      summary: Revoke an API key
+      tags: [API Keys]
+      security:
+        - hmacAuth: []
+      responses:
+        "204":
+          description: API key revoked
+        "404":
+          description: API key not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /v1/sso-configs:
+    get:
+      operationId: listSsoConfigs
+      summary: List SSO configurations
+      tags: [SSO]
+      security:
+        - hmacAuth: []
+      responses:
+        "200":
+          description: List of SSO configurations
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ssoConfigs:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/SsoConfig"
+    post:
+      operationId: createSsoConfig
+      summary: Create an SSO configuration
+      tags: [SSO]
+      security:
+        - hmacAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SsoConfigInput"
+      responses:
+        "201":
+          description: SSO configuration created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SsoConfig"
+        "400":
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /v1/sso-configs/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      operationId: getSsoConfig
+      summary: Get an SSO configuration
+      description: Retrieve a single SSO configuration by ID.
+      tags: [SSO]
+      security:
+        - hmacAuth: []
+      responses:
+        "200":
+          description: SSO configuration details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SsoConfig"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: SSO configuration not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    put:
+      operationId: updateSsoConfig
+      summary: Update an SSO configuration
+      tags: [SSO]
+      security:
+        - hmacAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SsoConfigInput"
+      responses:
+        "200":
+          description: SSO configuration updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SsoConfig"
+        "404":
+          description: SSO configuration not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      operationId: deleteSsoConfig
+      summary: Delete an SSO configuration
+      tags: [SSO]
+      security:
+        - hmacAuth: []
+      responses:
+        "204":
+          description: SSO configuration deleted
+        "404":
+          description: SSO configuration not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /v1/sso-configs/{id}/scim-token:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      operationId: generateScimToken
+      summary: Generate a SCIM bearer token
+      description: |
+        Generates a new SCIM bearer token for the given SSO configuration.
+        The token is used to authenticate SCIM provisioning requests.
+      tags: [SSO]
+      security:
+        - hmacAuth: []
+      responses:
+        "200":
+          description: SCIM token generated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  scimToken:
+                    type: string
+                  message:
+                    type: string
+        "404":
+          description: SSO configuration not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /v1/memberships:
+    get:
+      operationId: listMemberships
+      summary: List organisation memberships
+      tags: [Memberships]
+      security:
+        - hmacAuth: []
+      responses:
+        "200":
+          description: List of memberships
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  memberships:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Membership"
+    post:
+      operationId: createMembership
+      summary: Add a member to the organisation
+      tags: [Memberships]
+      security:
+        - hmacAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [userId]
+              properties:
+                userId:
+                  type: string
+                  format: uuid
+                role:
+                  type: string
+                  enum: [admin, manager, developer, viewer, service]
+                  default: viewer
+      responses:
+        "201":
+          description: Membership created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Membership"
+        "400":
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /v1/memberships/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    put:
+      operationId: updateMembership
+      summary: Update a membership role
+      tags: [Memberships]
+      security:
+        - hmacAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [role]
+              properties:
+                role:
+                  type: string
+                  enum: [admin, manager, developer, viewer, service]
+      responses:
+        "200":
+          description: Membership updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Membership"
+        "400":
+          description: Cannot demote self from admin
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Membership not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      operationId: deleteMembership
+      summary: Remove a member from the organisation
+      tags: [Memberships]
+      security:
+        - hmacAuth: []
+      responses:
+        "204":
+          description: Membership removed
+        "400":
+          description: Cannot remove own membership
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Membership not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /v1/scim/v2/ServiceProviderConfig:
+    get:
+      operationId: getScimServiceProviderConfig
+      summary: SCIM Service Provider Configuration
+      description: |
+        Returns the SCIM service provider configuration, including supported
+        features and authentication schemes. Public endpoint.
+      tags: [SCIM]
+      responses:
+        "200":
+          description: SCIM service provider configuration
+          content:
+            application/scim+json:
+              schema:
+                $ref: "#/components/schemas/ScimServiceProviderConfig"
+
+  /v1/scim/v2/Schemas:
+    get:
+      operationId: getScimSchemas
+      summary: SCIM Schemas
+      description: |
+        Returns the supported SCIM schemas. Public endpoint.
+      tags: [SCIM]
+      responses:
+        "200":
+          description: SCIM schemas
+          content:
+            application/scim+json:
+              schema:
+                type: array
+                items:
+                  type: object
+
+  /v1/scim/v2/ResourceTypes:
+    get:
+      operationId: getScimResourceTypes
+      summary: SCIM Resource Types
+      description: |
+        Returns the supported SCIM resource types. Public endpoint.
+      tags: [SCIM]
+      responses:
+        "200":
+          description: SCIM resource types
+          content:
+            application/scim+json:
+              schema:
+                type: array
+                items:
+                  type: object
+
+  /v1/scim/v2/Users:
+    post:
+      operationId: createScimUser
+      summary: Create a SCIM user
+      tags: [SCIM]
+      security:
+        - scimBearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/scim+json:
+            schema:
+              $ref: "#/components/schemas/ScimUserInput"
+      responses:
+        "201":
+          description: SCIM user created
+          content:
+            application/scim+json:
+              schema:
+                $ref: "#/components/schemas/ScimUser"
+        "400":
+          description: Invalid input
+          content:
+            application/scim+json:
+              schema:
+                $ref: "#/components/schemas/ScimError"
+        "409":
+          description: User already exists
+          content:
+            application/scim+json:
+              schema:
+                $ref: "#/components/schemas/ScimError"
+    get:
+      operationId: listScimUsers
+      summary: List SCIM users
+      tags: [SCIM]
+      security:
+        - scimBearerAuth: []
+      parameters:
+        - name: startIndex
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: count
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 100
+        - name: filter
+          in: query
+          schema:
+            type: string
+          description: "SCIM filter expression (e.g. userName eq \"user@example.com\")"
+      responses:
+        "200":
+          description: SCIM user list
+          content:
+            application/scim+json:
+              schema:
+                $ref: "#/components/schemas/ScimListResponse"
+
+  /v1/scim/v2/Users/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      operationId: getScimUser
+      summary: Get a SCIM user
+      tags: [SCIM]
+      security:
+        - scimBearerAuth: []
+      responses:
+        "200":
+          description: SCIM user
+          content:
+            application/scim+json:
+              schema:
+                $ref: "#/components/schemas/ScimUser"
+        "404":
+          description: User not found
+          content:
+            application/scim+json:
+              schema:
+                $ref: "#/components/schemas/ScimError"
+    patch:
+      operationId: patchScimUser
+      summary: Patch a SCIM user
+      tags: [SCIM]
+      security:
+        - scimBearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/scim+json:
+            schema:
+              $ref: "#/components/schemas/ScimPatchOp"
+      responses:
+        "200":
+          description: SCIM user updated
+          content:
+            application/scim+json:
+              schema:
+                $ref: "#/components/schemas/ScimUser"
+        "404":
+          description: User not found
+          content:
+            application/scim+json:
+              schema:
+                $ref: "#/components/schemas/ScimError"
+    put:
+      operationId: replaceScimUser
+      summary: Replace a SCIM user
+      tags: [SCIM]
+      security:
+        - scimBearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/scim+json:
+            schema:
+              $ref: "#/components/schemas/ScimUserInput"
+      responses:
+        "200":
+          description: SCIM user replaced
+          content:
+            application/scim+json:
+              schema:
+                $ref: "#/components/schemas/ScimUser"
+        "404":
+          description: User not found
+          content:
+            application/scim+json:
+              schema:
+                $ref: "#/components/schemas/ScimError"
+    delete:
+      operationId: deleteScimUser
+      summary: Delete a SCIM user
+      tags: [SCIM]
+      security:
+        - scimBearerAuth: []
+      responses:
+        "204":
+          description: SCIM user deleted
+        "404":
+          description: User not found
+          content:
+            application/scim+json:
+              schema:
+                $ref: "#/components/schemas/ScimError"
+
+  /v1/scim/v2/Groups:
+    post:
+      operationId: createScimGroup
+      summary: Create a SCIM group
+      tags: [SCIM]
+      security:
+        - scimBearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/scim+json:
+            schema:
+              $ref: "#/components/schemas/ScimGroupInput"
+      responses:
+        "201":
+          description: SCIM group created
+          content:
+            application/scim+json:
+              schema:
+                $ref: "#/components/schemas/ScimGroup"
+        "400":
+          description: Invalid input
+          content:
+            application/scim+json:
+              schema:
+                $ref: "#/components/schemas/ScimError"
+    get:
+      operationId: listScimGroups
+      summary: List SCIM groups
+      tags: [SCIM]
+      security:
+        - scimBearerAuth: []
+      parameters:
+        - name: startIndex
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: count
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 100
+        - name: filter
+          in: query
+          schema:
+            type: string
+          description: SCIM filter expression
+      responses:
+        "200":
+          description: SCIM group list
+          content:
+            application/scim+json:
+              schema:
+                $ref: "#/components/schemas/ScimListResponse"
+
+  /v1/scim/v2/Groups/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      operationId: getScimGroup
+      summary: Get a SCIM group
+      tags: [SCIM]
+      security:
+        - scimBearerAuth: []
+      responses:
+        "200":
+          description: SCIM group
+          content:
+            application/scim+json:
+              schema:
+                $ref: "#/components/schemas/ScimGroup"
+        "404":
+          description: Group not found
+          content:
+            application/scim+json:
+              schema:
+                $ref: "#/components/schemas/ScimError"
+    patch:
+      operationId: patchScimGroup
+      summary: Patch a SCIM group
+      tags: [SCIM]
+      security:
+        - scimBearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/scim+json:
+            schema:
+              $ref: "#/components/schemas/ScimPatchOp"
+      responses:
+        "200":
+          description: SCIM group updated
+          content:
+            application/scim+json:
+              schema:
+                $ref: "#/components/schemas/ScimGroup"
+        "404":
+          description: Group not found
+          content:
+            application/scim+json:
+              schema:
+                $ref: "#/components/schemas/ScimError"
+    put:
+      operationId: replaceScimGroup
+      summary: Replace a SCIM group
+      tags: [SCIM]
+      security:
+        - scimBearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/scim+json:
+            schema:
+              $ref: "#/components/schemas/ScimGroupInput"
+      responses:
+        "200":
+          description: SCIM group replaced
+          content:
+            application/scim+json:
+              schema:
+                $ref: "#/components/schemas/ScimGroup"
+        "404":
+          description: Group not found
+          content:
+            application/scim+json:
+              schema:
+                $ref: "#/components/schemas/ScimError"
+    delete:
+      operationId: deleteScimGroup
+      summary: Delete a SCIM group
+      tags: [SCIM]
+      security:
+        - scimBearerAuth: []
+      responses:
+        "204":
+          description: SCIM group deleted
+        "404":
+          description: Group not found
+          content:
+            application/scim+json:
+              schema:
+                $ref: "#/components/schemas/ScimError"
+
+  /v1/domains:
+    get:
+      operationId: listDomains
+      summary: List verified and pending domains
+      tags: [Domains]
+      security:
+        - hmacAuth: []
+      responses:
+        "200":
+          description: Domain lists
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  verifiedDomains:
+                    type: array
+                    items:
+                      type: string
+                  pendingDomains:
+                    type: array
+                    items:
+                      type: string
+    post:
+      operationId: addDomain
+      summary: Add a domain for verification
+      tags: [Domains]
+      security:
+        - hmacAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [domain]
+              properties:
+                domain:
+                  type: string
+      responses:
+        "201":
+          description: Domain added with verification instructions
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  domain:
+                    type: string
+                  verificationToken:
+                    type: string
+                    description: "DNS TXT record value (sentinel-verify=...)"
+                  instructions:
+                    type: string
+        "400":
+          description: Invalid domain format
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /v1/domains/{domain}/verify:
+    parameters:
+      - name: domain
+        in: path
+        required: true
+        schema:
+          type: string
+    post:
+      operationId: verifyDomain
+      summary: Verify domain ownership via DNS
+      tags: [Domains]
+      security:
+        - hmacAuth: []
+      responses:
+        "200":
+          description: Domain verified
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  domain:
+                    type: string
+                  verified:
+                    type: boolean
+        "404":
+          description: Domain not in pending list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: DNS verification failed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /v1/domains/{domain}:
+    parameters:
+      - name: domain
+        in: path
+        required: true
+        schema:
+          type: string
+    delete:
+      operationId: removeDomain
+      summary: Remove a domain
+      tags: [Domains]
+      security:
+        - hmacAuth: []
+      responses:
+        "204":
+          description: Domain removed
+        "404":
+          description: Domain not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /v1/admin/rotate-keys:
+    post:
+      operationId: rotateEncryptionKeys
+      summary: Rotate encryption keys
+      description: |
+        Triggers rotation of all organisation encryption keys. Requires admin role.
+      tags: [Admin]
+      security:
+        - hmacAuth: []
+      responses:
+        "200":
+          description: Keys rotated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                  keyCount:
+                    type: integer
+
+  /v1/admin/crypto-shred:
+    post:
+      operationId: cryptoShred
+      summary: Crypto-shred organisation data
+      description: |
+        Permanently destroys all encryption keys for the organisation, rendering
+        all encrypted data irrecoverable. Requires confirmation of the org ID.
+      tags: [Admin]
+      security:
+        - hmacAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [confirmOrgId]
+              properties:
+                confirmOrgId:
+                  type: string
+                  format: uuid
+                  description: Must match the authenticated organisation ID
+      responses:
+        "200":
+          description: Crypto-shred completed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                  orgId:
+                    type: string
+                  keysDestroyed:
+                    type: integer
+        "400":
+          description: Org ID mismatch
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /v1/auth/discovery:
+    get:
+      operationId: discoverAuthProviders
+      summary: Discover authentication providers for an email
+      description: |
+        Returns the available authentication providers for a given email address,
+        based on domain verification and SSO configuration. Public endpoint.
+      tags: [Auth]
+      parameters:
+        - name: email
+          in: query
+          required: true
+          schema:
+            type: string
+            format: email
+            maxLength: 254
+          description: User email address to look up providers for
+      responses:
+        "200":
+          description: Auth providers for the email domain
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  orgId:
+                    type: string
+                  orgName:
+                    type: string
+                  enforced:
+                    type: boolean
+                  providers:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id:
+                          type: string
+                        name:
+                          type: string
+                        enforced:
+                          type: boolean
+        "400":
+          description: Invalid email
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /v1/saml/metadata:
+    get:
+      operationId: getSamlMetadata
+      summary: Get SAML service provider metadata
+      description: |
+        Returns the SAML SP metadata XML document. Public endpoint used by
+        identity providers during SAML configuration.
+      tags: [Auth]
+      responses:
+        "200":
+          description: SAML metadata XML
+          content:
+            application/xml:
+              schema:
+                type: string
 
   /health:
     get:
@@ -1424,103 +3347,6 @@ components:
               value:
                 type: string
 
-    GroupNode:
-      type: object
-      required: [id, type, operator, children]
-      properties:
-        id:
-          type: string
-        type:
-          type: string
-          enum: [group]
-        operator:
-          type: string
-          enum: [AND, OR, NOT]
-        children:
-          type: array
-          items:
-            oneOf:
-              - $ref: "#/components/schemas/GroupNode"
-              - $ref: "#/components/schemas/ConditionNode"
-              - $ref: "#/components/schemas/ActionNode"
-
-    ConditionNode:
-      type: object
-      required: [id, type, conditionType, config]
-      properties:
-        id:
-          type: string
-        type:
-          type: string
-          enum: [condition]
-        conditionType:
-          type: string
-        config:
-          type: object
-
-    ActionNode:
-      type: object
-      required: [id, type, actionType, config]
-      properties:
-        id:
-          type: string
-        type:
-          type: string
-          enum: [action]
-        actionType:
-          type: string
-        config:
-          type: object
-
-    PolicySimulationInput:
-      type: object
-      properties:
-        severity:
-          type: string
-        category:
-          type: string
-        riskScore:
-          type: number
-        branch:
-          type: string
-        license:
-          type: string
-
-    SimulationResult:
-      type: object
-      required: [match, trace, matchedActions]
-      properties:
-        match:
-          type: boolean
-        trace:
-          type: array
-          items:
-            type: object
-            required: [nodeId, match]
-            properties:
-              nodeId:
-                type: string
-              match:
-                type: boolean
-              shortCircuited:
-                type: boolean
-        matchedActions:
-          type: array
-          items:
-            $ref: "#/components/schemas/ActionNode"
-
-    ValidationIssue:
-      type: object
-      required: [nodeId, level, message]
-      properties:
-        nodeId:
-          type: string
-        level:
-          type: string
-          enum: [error, warning]
-        message:
-          type: string
-
     AuditEvent:
       type: object
       required: [id, timestamp, actor, action, resource, detail, eventHash]
@@ -1654,6 +3480,634 @@ components:
         details:
           description: Additional error context
 
+    EvidenceRecord:
+      type: object
+      required: [id, orgId, type, data, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        orgId:
+          type: string
+        type:
+          type: string
+        data:
+          type: object
+          additionalProperties: true
+        hash:
+          type: string
+        previousHash:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+
+    ReportRequest:
+      type: object
+      required: [type]
+      properties:
+        type:
+          type: string
+        frameworkId:
+          type: string
+        parameters:
+          type: object
+          additionalProperties: true
+
+    Report:
+      type: object
+      required: [id, orgId, type, status]
+      properties:
+        id:
+          type: string
+          format: uuid
+        orgId:
+          type: string
+        type:
+          type: string
+        status:
+          type: string
+          enum: [pending, generating, completed, failed]
+        data:
+          type: object
+          additionalProperties: true
+        createdAt:
+          type: string
+          format: date-time
+
+    ComplianceFramework:
+      type: object
+      required: [id, slug, name, version]
+      properties:
+        id:
+          type: string
+          format: uuid
+        slug:
+          type: string
+        name:
+          type: string
+        version:
+          type: string
+        builtIn:
+          type: boolean
+        controls:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+              name:
+                type: string
+              description:
+                type: string
+              weight:
+                type: number
+
+    ComplianceFrameworkInput:
+      type: object
+      required: [slug, name]
+      properties:
+        slug:
+          type: string
+        name:
+          type: string
+        version:
+          type: string
+        controls:
+          type: array
+          items:
+            type: object
+
+    ComplianceAssessment:
+      type: object
+      properties:
+        frameworkId:
+          type: string
+        frameworkSlug:
+          type: string
+        score:
+          type: number
+          minimum: 0
+          maximum: 100
+        status:
+          type: string
+          enum: [compliant, non-compliant, partial]
+        controlResults:
+          type: array
+          items:
+            type: object
+            properties:
+              controlId:
+                type: string
+              status:
+                type: string
+              score:
+                type: number
+        assessedAt:
+          type: string
+          format: date-time
+
+    ComplianceSnapshot:
+      type: object
+      properties:
+        frameworkId:
+          type: string
+        score:
+          type: number
+        status:
+          type: string
+        snapshotAt:
+          type: string
+          format: date-time
+
+    PolicyVersion:
+      type: object
+      required: [id, policyId, version, rules, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        policyId:
+          type: string
+          format: uuid
+        version:
+          type: integer
+        rules:
+          type: array
+          items:
+            type: object
+        createdAt:
+          type: string
+          format: date-time
+
+    WebhookInput:
+      type: object
+      required: [name, url, channelType, topics]
+      properties:
+        name:
+          type: string
+        url:
+          type: string
+          format: uri
+        channelType:
+          type: string
+        topics:
+          type: array
+          items:
+            type: string
+        headers:
+          type: object
+          additionalProperties:
+            type: string
+
+    WebhookEndpoint:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        url:
+          type: string
+          format: uri
+        channelType:
+          type: string
+        topics:
+          type: array
+          items:
+            type: string
+        secret:
+          type: string
+          description: Shared secret for HMAC verification; shown only on creation
+        headers:
+          type: object
+          additionalProperties:
+            type: string
+        createdAt:
+          type: string
+          format: date-time
+
+    WebhookDelivery:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        endpointId:
+          type: string
+          format: uuid
+        topic:
+          type: string
+        statusCode:
+          type: integer
+        success:
+          type: boolean
+        attemptCount:
+          type: integer
+        deliveredAt:
+          type: string
+          format: date-time
+
+    NotificationRuleInput:
+      type: object
+      required: [name, topics, channelType, channelConfig]
+      properties:
+        name:
+          type: string
+        topics:
+          type: array
+          items:
+            type: string
+        condition:
+          type: object
+        channelType:
+          type: string
+          enum: [email, slack, http]
+        channelConfig:
+          type: object
+
+    NotificationRule:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        topics:
+          type: array
+          items:
+            type: string
+        condition:
+          type: object
+        channelType:
+          type: string
+          enum: [email, slack, http]
+        channelConfig:
+          type: object
+        createdAt:
+          type: string
+          format: date-time
+
+    ApiKeyCreated:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        key:
+          type: string
+          description: The full API key value; shown only once on creation
+        prefix:
+          type: string
+        name:
+          type: string
+        role:
+          type: string
+          enum: [admin, manager, developer, viewer, service]
+        expiresAt:
+          type: string
+          format: date-time
+
+    ApiKey:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        keyPrefix:
+          type: string
+        role:
+          type: string
+          enum: [admin, manager, developer, viewer, service]
+        expiresAt:
+          type: string
+          format: date-time
+        lastUsedAt:
+          type: string
+          format: date-time
+        revokedAt:
+          type: string
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+
+    SsoConfig:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        provider:
+          type: string
+          enum: [oidc, saml, github, gitlab, google, microsoft]
+        displayName:
+          type: string
+        issuerUrl:
+          type: string
+        enabled:
+          type: boolean
+        enforced:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    SsoConfigInput:
+      type: object
+      required: [provider, displayName, clientId, clientSecret]
+      properties:
+        provider:
+          type: string
+          enum: [oidc, saml, github, gitlab, google, microsoft]
+        displayName:
+          type: string
+        clientId:
+          type: string
+        clientSecret:
+          type: string
+        issuerUrl:
+          type: string
+        samlMetadata:
+          type: string
+        enforced:
+          type: boolean
+          default: false
+
+    Membership:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        orgId:
+          type: string
+          format: uuid
+        userId:
+          type: string
+          format: uuid
+        role:
+          type: string
+          enum: [admin, manager, developer, viewer, service]
+        user:
+          type: object
+          properties:
+            id:
+              type: string
+              format: uuid
+            email:
+              type: string
+            name:
+              type: string
+
+    ScimServiceProviderConfig:
+      type: object
+      properties:
+        schemas:
+          type: array
+          items:
+            type: string
+        patch:
+          type: object
+          properties:
+            supported:
+              type: boolean
+        bulk:
+          type: object
+          properties:
+            supported:
+              type: boolean
+        filter:
+          type: object
+          properties:
+            supported:
+              type: boolean
+            maxResults:
+              type: integer
+        changePassword:
+          type: object
+          properties:
+            supported:
+              type: boolean
+        sort:
+          type: object
+          properties:
+            supported:
+              type: boolean
+        etag:
+          type: object
+          properties:
+            supported:
+              type: boolean
+        authenticationSchemes:
+          type: array
+          items:
+            type: object
+
+    ScimUser:
+      type: object
+      properties:
+        schemas:
+          type: array
+          items:
+            type: string
+        id:
+          type: string
+          format: uuid
+        userName:
+          type: string
+        externalId:
+          type: string
+        name:
+          type: object
+          properties:
+            formatted:
+              type: string
+            givenName:
+              type: string
+            familyName:
+              type: string
+        emails:
+          type: array
+          items:
+            type: object
+            properties:
+              value:
+                type: string
+              primary:
+                type: boolean
+        active:
+          type: boolean
+        meta:
+          type: object
+          properties:
+            resourceType:
+              type: string
+            created:
+              type: string
+              format: date-time
+            lastModified:
+              type: string
+              format: date-time
+
+    ScimUserInput:
+      type: object
+      required: [schemas, userName]
+      properties:
+        schemas:
+          type: array
+          items:
+            type: string
+        userName:
+          type: string
+        externalId:
+          type: string
+        name:
+          type: object
+          properties:
+            givenName:
+              type: string
+            familyName:
+              type: string
+        emails:
+          type: array
+          items:
+            type: object
+            properties:
+              value:
+                type: string
+              primary:
+                type: boolean
+        groups:
+          type: array
+          items:
+            type: object
+            properties:
+              display:
+                type: string
+              value:
+                type: string
+
+    ScimGroup:
+      type: object
+      properties:
+        schemas:
+          type: array
+          items:
+            type: string
+        id:
+          type: string
+          format: uuid
+        displayName:
+          type: string
+        members:
+          type: array
+          items:
+            type: object
+            properties:
+              value:
+                type: string
+              display:
+                type: string
+        meta:
+          type: object
+          properties:
+            resourceType:
+              type: string
+
+    ScimGroupInput:
+      type: object
+      required: [schemas, displayName]
+      properties:
+        schemas:
+          type: array
+          items:
+            type: string
+        displayName:
+          type: string
+        members:
+          type: array
+          items:
+            type: object
+            properties:
+              value:
+                type: string
+
+    ScimPatchOp:
+      type: object
+      properties:
+        schemas:
+          type: array
+          items:
+            type: string
+        Operations:
+          type: array
+          items:
+            type: object
+            properties:
+              op:
+                type: string
+                enum: [add, remove, replace]
+              path:
+                type: string
+              value: {}
+
+    ScimError:
+      type: object
+      required: [schemas, detail, status]
+      properties:
+        schemas:
+          type: array
+          items:
+            type: string
+        detail:
+          type: string
+        status:
+          type: string
+
+    ScimListResponse:
+      type: object
+      properties:
+        schemas:
+          type: array
+          items:
+            type: string
+        totalResults:
+          type: integer
+        startIndex:
+          type: integer
+        itemsPerPage:
+          type: integer
+        Resources:
+          type: array
+          items:
+            type: object
+
+  parameters:
+    LimitParam:
+      name: limit
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 50
+    OffsetParam:
+      name: offset
+      in: query
+      schema:
+        type: integer
+        minimum: 0
+        default: 0
+
   securitySchemes:
     hmacAuth:
       type: apiKey
@@ -1662,3 +4116,9 @@ components:
       description: |
         HMAC-SHA256 signature of the request body using the shared secret.
         Format: sha256=<hex-encoded-signature>
+    scimBearerAuth:
+      type: http
+      scheme: bearer
+      description: |
+        SCIM bearer token generated via POST /v1/sso-configs/{id}/scim-token.
+        Format: Authorization: Bearer scim_{token}

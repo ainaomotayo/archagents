@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useSession } from "next-auth/react";
 import { PageHeader } from "@/components/page-header";
-import { IconGlobe, IconUser, IconShield, IconActivity, IconBell, IconPlus } from "@/components/icons";
+import { IconGlobe, IconUser, IconShield, IconActivity, IconBell, IconPlus, IconWrench } from "@/components/icons";
 
 /* ─── Team Members Panel ─── */
 function TeamMembersPanel() {
@@ -389,11 +389,27 @@ export default function SettingsPage() {
         </SectionCard>
 
         <LinkSectionCard
+          title="Single Sign-On"
+          description="Configure OIDC, SAML, and other SSO providers for your organization."
+          href="/settings/sso"
+          Icon={IconShield}
+          animationDelay="0.2s"
+        />
+
+        <LinkSectionCard
+          title="Workflow Pipeline"
+          description="Configure remediation workflow stages and pipeline behavior."
+          href="/settings/workflow"
+          Icon={IconWrench}
+          animationDelay="0.25s"
+        />
+
+        <LinkSectionCard
           title="Audit & Compliance"
           description="Data retention, export settings, and compliance configuration."
           href="/audit"
           Icon={IconActivity}
-          animationDelay="0.2s"
+          animationDelay="0.3s"
         />
       </div>
     </div>

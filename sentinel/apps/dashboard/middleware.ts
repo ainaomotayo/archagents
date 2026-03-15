@@ -51,6 +51,7 @@ export const config = {
     "/reports/:path*",
     "/audit/:path*",
     "/drift/:path*",
+    "/approvals/:path*",
     "/settings/:path*",
   ],
 };

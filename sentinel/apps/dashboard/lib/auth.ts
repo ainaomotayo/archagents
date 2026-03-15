@@ -11,6 +11,7 @@ import type { JWT } from "next-auth/jwt";
 import GitHubProvider from "next-auth/providers/github";
 import GitLabProvider from "next-auth/providers/gitlab";
 import type { Role } from "./rbac";
+import { AuthRateLimiter, ProviderHealthMonitor } from "@sentinel/security";
 
 /**
  * Extend the default NextAuth types so `session.user.role` is
@@ -59,7 +60,8 @@ export function resolveRole(username: string | undefined | null): Role {
 
 /**
  * Build the list of OAuth providers based on which env vars are set.
- * This allows zero-config: only providers with credentials are enabled.
+ * NOTE: These are global providers. Per-org provider filtering is handled
+ * by the login page via /v1/auth/discovery and the signIn callback.
  */
 export function getConfiguredProviders(): any[] {
   const providers: any[] = [];
@@ -141,10 +143,115 @@ export function getConfiguredProviders(): any[] {
   return providers;
 }
 
+export const rateLimiter = new AuthRateLimiter();
+export const providerHealth = new ProviderHealthMonitor();
+
+// Prune expired rate limit entries every hour
+if (typeof setInterval !== "undefined") {
+  setInterval(() => rateLimiter.prune(), 60 * 60 * 1000);
+}
+
+// Request-scoped IP for use in NextAuth callbacks/events
+let _currentRequestIp = "unknown";
+export function setCurrentRequestIp(ip: string): void { _currentRequestIp = ip; }
+export function getCurrentRequestIp(): string { return _currentRequestIp; }
+
+/**
+ * Extract client IP from request headers.
+ * x-forwarded-for is set by reverse proxies; falls back to "unknown".
+ */
+export function extractClientIp(headers: Headers): string {
+  return headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+}
+
+/**
+ * Extract provider ID from NextAuth catch-all route path.
+ * e.g. /api/auth/callback/github → "github"
+ */
+export function extractProvider(url: string): string | undefined {
+  try {
+    const { pathname } = new URL(url);
+    const parts = pathname.split("/");
+    // /api/auth/<action>/<provider>
+    if (parts.length >= 5 && (parts[3] === "callback" || parts[3] === "signin")) {
+      return parts[4];
+    }
+  } catch { /* ignore malformed URLs */ }
+  return undefined;
+}
+
+/** Structured auth event logger (JSON to stdout for log aggregators). */
+export function logAuthEvent(event: string, details: Record<string, unknown>): void {
+  const entry = { event, ...details, timestamp: new Date().toISOString() };
+  console.log(JSON.stringify(entry));
+}
+
 export const authOptions: AuthOptions = {
   providers: getConfiguredProviders(),
 
+  session: {
+    strategy: "jwt",
+    maxAge: 8 * 60 * 60,       // 8 hours absolute timeout
+    updateAge: 60 * 60,         // Rotate JWT every 1 hour of activity
+  },
+
+  jwt: {
+    async encode({ token, secret }) {
+      if (!token) return "";
+      const { encryptJwe } = await import("./jwe");
+      const key = typeof secret === "string" ? secret : secret.toString("base64");
+      return encryptJwe(token as Record<string, unknown>, key);
+    },
+    async decode({ token, secret }) {
+      if (!token) return null;
+      const { decryptJwe } = await import("./jwe");
+      const key = typeof secret === "string" ? secret : secret.toString("base64");
+      return decryptJwe(token, key) as any;
+    },
+  },
+
+  cookies: {
+    sessionToken: {
+      name: "next-auth.session-token",
+      options: {
+        httpOnly: true,
+        sameSite: "lax" as const,
+        path: "/",
+        secure: process.env.NODE_ENV === "production",
+      },
+    },
+  },
+
   callbacks: {
+    async signIn({ account, profile }) {
+      // Enforce SSO restrictions if configured
+      if (account?.provider && profile?.email) {
+        try {
+          const apiUrl = process.env.SENTINEL_API_URL ?? "http://localhost:8080";
+          const res = await fetch(
+            `${apiUrl}/v1/auth/discovery?email=${encodeURIComponent(profile.email as string)}`,
+          );
+          if (res.ok) {
+            const data = await res.json();
+            if (data.enforced) {
+              const allowed = data.providers.map((p: any) => p.id);
+              if (!allowed.includes(account.provider)) {
+                logAuthEvent("auth.login.blocked", {
+                  provider: account.provider,
+                  email: profile.email,
+                  reason: "sso_enforcement",
+                });
+                return false;
+              }
+            }
+          }
+        } catch {
+          // Fail-open if discovery API is unavailable
+        }
+      }
+      return true;
+    },
+
     async jwt({ token, profile, account }) {
       if (profile) {
         // GitHub: profile.login, GitLab: profile.username
@@ -160,6 +267,20 @@ export const authOptions: AuthOptions = {
     async session({ session, token }: { session: Session; token: JWT }) {
       session.user.role = (token.role as Role) ?? "viewer";
       return session;
+    },
+  },
+
+  events: {
+    async signIn({ account }) {
+      const ip = getCurrentRequestIp();
+      if (account?.provider) {
+        providerHealth.recordSuccess(account.provider);
+      }
+      rateLimiter.reset(ip);
+      logAuthEvent("auth.login.success", {
+        provider: account?.provider,
+        ip,
+      });
     },
   },
 

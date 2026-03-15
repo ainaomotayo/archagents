@@ -1,91 +1,16 @@
 <idea-plugin>
     <id>com.sentinel.intellij</id>
     <name>Sentinel Security</name>
-    <vendor email="support@sentinel.dev" url="https://sentinel.dev">Sentinel</vendor>
-    <version>0.1.0</version>
-    <category>Code tools</category>
-    <description><![CDATA[
-        <h2>Sentinel Security — AI Code Governance for JetBrains IDEs</h2>
-        <p>Real-time security findings, IP attribution, and compliance checks
-        inline in your JetBrains IDE.</p>
-        <h3>Features</h3>
-        <ul>
-            <li><b>Gutter Icons</b> — Severity-colored markers at affected lines</li>
-            <li><b>Tool Window</b> — Sortable, filterable findings table with double-click navigation</li>
-            <li><b>Inline Annotations</b> — Descriptions and remediation advice directly in the editor</li>
-            <li><b>Status Bar</b> — Scan status and finding count at a glance</li>
-            <li><b>One-Click Suppress</b> — Dismiss findings from gutter or tool window</li>
-            <li><b>Real-Time Updates</b> — SSE push delivers new findings instantly</li>
-            <li><b>Trigger Scans</b> — Run security scans from the Tools menu</li>
-        </ul>
-        <h3>Supported IDEs</h3>
-        <p>Works with all JetBrains IDEs based on the IntelliJ Platform:
-        IntelliJ IDEA, PhpStorm, WebStorm, PyCharm, GoLand, RubyMine,
-        CLion, Rider, DataGrip, and Android Studio.</p>
-    ]]></description>
-
+    <vendor>Sentinel</vendor>
+    <description>Show Sentinel security findings inline in your JetBrains IDE</description>
     <depends>com.intellij.modules.platform</depends>
     <depends>com.redhat.devtools.lsp4ij</depends>
-
-    <extensions defaultExtensionNs="com.intellij">
-        <!-- Services -->
-        <applicationService serviceImplementation="com.sentinel.intellij.services.SentinelAuthService"/>
-        <projectService serviceImplementation="com.sentinel.intellij.services.SentinelSettingsService"/>
-        <projectService serviceImplementation="com.sentinel.intellij.services.SentinelFindingsService"/>
-
-        <!-- Tool Window -->
-        <toolWindow id="Sentinel"
-                    anchor="bottom"
-                    factoryClass="com.sentinel.intellij.ui.SentinelToolWindowFactory"
-                    icon="/icons/sentinel-logo.svg"/>
-
-        <!-- Gutter Icons -->
-        <codeInsight.lineMarkerProvider
-                language=""
-                implementationClass="com.sentinel.intellij.ui.SentinelGutterIconProvider"/>
-
-        <!-- Inline Annotations -->
-        <externalAnnotator
-                language=""
-                implementationClass="com.sentinel.intellij.ui.SentinelExternalAnnotator"/>
-
-        <!-- Status Bar -->
-        <statusBarWidgetFactory
-                id="SentinelStatusBar"
-                implementation="com.sentinel.intellij.ui.SentinelStatusBarWidgetFactory"/>
-
-        <!-- Settings -->
-        <projectConfigurable
-                parentId="tools"
-                instance="com.sentinel.intellij.ui.SentinelSettingsConfigurable"
-                id="sentinel.settings"
-                displayName="Sentinel Security"/>
-    </extensions>
-
     <extensions defaultExtensionNs="com.redhat.devtools.lsp4ij">
-        <server id="sentinel"
-                name="Sentinel LSP"
-                factoryClass="com.sentinel.intellij.lsp.SentinelLspServerDescriptor">
-            <description><![CDATA[Sentinel security analysis language server]]></description>
+        <server id="sentinelLsp"
+                name="Sentinel"
+                factoryClass="com.sentinel.intellij.SentinelLspServerDescriptor">
+            <description><![CDATA[Sentinel security scanner — shows findings inline as diagnostics]]></description>
         </server>
+        <languageMapping language="" serverId="sentinelLsp"/>
     </extensions>
-
-    <actions>
-        <group id="Sentinel.Actions" text="Sentinel" popup="true">
-            <add-to-group group-id="ToolsMenu" anchor="last"/>
-            <action id="Sentinel.TriggerScan"
-                    class="com.sentinel.intellij.actions.TriggerScanAction"
-                    text="Trigger Security Scan"
-                    description="Run Sentinel scan on current project"
-                    icon="AllIcons.Actions.Execute"/>
-            <action id="Sentinel.Configure"
-                    class="com.sentinel.intellij.actions.ConfigureAction"
-                    text="Configure Sentinel"
-                    description="Configure API connection"/>
-            <action id="Sentinel.OpenDashboard"
-                    class="com.sentinel.intellij.actions.OpenDashboardAction"
-                    text="Open Dashboard"
-                    description="Open Sentinel dashboard in browser"/>
-        </group>
-    </actions>
 </idea-plugin>

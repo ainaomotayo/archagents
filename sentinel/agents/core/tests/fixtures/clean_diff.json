@@ -1,0 +1,43 @@
+{
+  "scanId": "scan-clean-001",
+  "projectId": "proj-001",
+  "commitHash": "cafebabe",
+  "branch": "main",
+  "author": "dev@test.com",
+  "timestamp": "2026-03-11T00:00:00Z",
+  "files": [
+    {
+      "path": "hello.py",
+      "language": "python",
+      "hunks": [
+        {
+          "oldStart": 0,
+          "oldCount": 0,
+          "newStart": 1,
+          "newCount": 5,
+          "content": "+def greet(name: str) -> str:\n+    \"\"\"Return a greeting message.\"\"\"\n+    if not name:\n+        return 'Hello, World!'\n+    return f'Hello, {name}!'"
+        }
+      ],
+      "aiScore": 0.0
+    },
+    {
+      "path": "math_utils.py",
+      "language": "python",
+      "hunks": [
+        {
+          "oldStart": 0,
+          "oldCount": 0,
+          "newStart": 1,
+          "newCount": 4,
+          "content": "+def add(a: int, b: int) -> int:\n+    return a + b\n+\n+def multiply(a: int, b: int) -> int:\n+    return a * b"
+        }
+      ],
+      "aiScore": 0.0
+    }
+  ],
+  "scanConfig": {
+    "securityLevel": "standard",
+    "licensePolicy": "",
+    "qualityThreshold": 70
+  }
+}

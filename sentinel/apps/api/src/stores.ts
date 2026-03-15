@@ -1,4 +1,5 @@
 import type { PrismaClient } from "@sentinel/db";
+import { DecisionTraceService } from "@sentinel/compliance";
 
 export function createScanStore(db: PrismaClient) {
   return {
@@ -68,6 +69,30 @@ export function createAssessmentStore(db: PrismaClient) {
           rawData: f,
         }));
         await db.finding.createMany({ data: findingRecords });
+
+        // 2b. Create DecisionTrace rows for AI detector findings
+        const aiFindings = findingRecords.filter(
+          (r: any) => r.agentName === "ai-detector",
+        );
+        if (aiFindings.length > 0) {
+          const persisted = await db.finding.findMany({
+            where: { scanId: data.scanId, agentName: "ai-detector" },
+            select: { id: true, rawData: true, orgId: true },
+          });
+          const traceService = new DecisionTraceService(db);
+          for (const f of persisted) {
+            try {
+              await traceService.createFromFinding(
+                f.id,
+                f.orgId,
+                data.scanId,
+                f.rawData,
+              );
+            } catch {
+              // Best-effort — trace creation failure should not block assessment
+            }
+          }
+        }
       }
 
       // 3. Persist agent results

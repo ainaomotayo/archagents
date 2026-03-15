@@ -61,6 +61,7 @@ export function Sidebar({ items }: SidebarProps) {
               href={item.href}
               icon={item.icon}
               collapsed={collapsed}
+              badge={item.badge}
             />
           ))}
 
@@ -78,6 +79,7 @@ export function Sidebar({ items }: SidebarProps) {
               href={item.href}
               icon={item.icon}
               collapsed={collapsed}
+              badge={item.badge}
             />
           ))}
 

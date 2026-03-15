@@ -10,6 +10,11 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@opentelemetry/auto-instrumentations-node": "^0.56",
+    "@opentelemetry/exporter-trace-otlp-http": "^0.57",
+    "@opentelemetry/resources": "^1.30",
+    "@opentelemetry/sdk-node": "^0.57",
+    "@opentelemetry/semantic-conventions": "^1.28",
     "pino": "^10.3",
     "prom-client": "^15.1"
   },

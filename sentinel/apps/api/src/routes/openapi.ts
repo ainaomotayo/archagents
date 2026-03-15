@@ -11,14 +11,64 @@ const REQUIRED_TOP_LEVEL = ["openapi", "info", "paths", "components"] as const;
  */
 const REQUIRED_PATHS = [
   "/v1/scans",
+  "/v1/scans/{id}",
   "/v1/scans/{id}/poll",
   "/v1/findings",
+  "/v1/findings/{id}",
   "/v1/certificates",
+  "/v1/certificates/{id}",
+  "/v1/certificates/{id}/verify",
   "/v1/certificates/{id}/revoke",
+  "/v1/projects",
+  "/v1/projects/{id}",
+  "/v1/projects/{id}/findings",
   "/v1/policies",
   "/v1/policies/{id}",
+  "/v1/policies/{id}/versions",
   "/v1/audit",
+  "/v1/admin/dlq",
+  "/v1/compliance/frameworks",
+  "/v1/compliance/frameworks/{id}",
+  "/v1/compliance/controls/{id}/override",
+  "/v1/compliance/assess/{frameworkId}",
+  "/v1/compliance/scores",
+  "/v1/compliance/trends/{frameworkId}",
+  "/v1/evidence",
+  "/v1/evidence/{id}",
+  "/v1/evidence/verify",
+  "/v1/reports",
+  "/v1/reports/{id}",
+  "/v1/webhooks",
+  "/v1/webhooks/{id}",
+  "/v1/webhooks/{id}/deliveries",
+  "/v1/webhooks/{id}/test",
+  "/v1/notifications/rules",
+  "/v1/notifications/rules/{id}",
+  "/v1/events/stream",
+  "/webhooks/github",
+  "/v1/api-keys",
+  "/v1/api-keys/{id}",
+  "/v1/sso-configs",
+  "/v1/sso-configs/{id}",
+  "/v1/sso-configs/{id}/scim-token",
+  "/v1/memberships",
+  "/v1/memberships/{id}",
+  "/v1/scim/v2/ServiceProviderConfig",
+  "/v1/scim/v2/Schemas",
+  "/v1/scim/v2/ResourceTypes",
+  "/v1/scim/v2/Users",
+  "/v1/scim/v2/Users/{id}",
+  "/v1/scim/v2/Groups",
+  "/v1/scim/v2/Groups/{id}",
+  "/v1/domains",
+  "/v1/domains/{domain}/verify",
+  "/v1/domains/{domain}",
+  "/v1/admin/rotate-keys",
+  "/v1/admin/crypto-shred",
+  "/v1/auth/discovery",
+  "/v1/saml/metadata",
   "/health",
+  "/metrics",
 ] as const;
 
 /**
@@ -31,14 +81,47 @@ const REQUIRED_SCHEMAS = [
   "Finding",
   "Certificate",
   "Assessment",
-  "ErrorResponse",
+  "CategoryScore",
+  "Policy",
+  "PolicyInput",
+  "AuditEvent",
   "HealthResponse",
+  "ScanRecord",
+  "Project",
+  "ProjectDetail",
+  "ErrorResponse",
+  "EvidenceRecord",
+  "ReportRequest",
+  "Report",
+  "ComplianceFramework",
+  "ComplianceFrameworkInput",
+  "ComplianceAssessment",
+  "ComplianceSnapshot",
+  "PolicyVersion",
+  "WebhookInput",
+  "WebhookEndpoint",
+  "WebhookDelivery",
+  "NotificationRuleInput",
+  "NotificationRule",
+  "ApiKeyCreated",
+  "ApiKey",
+  "SsoConfig",
+  "SsoConfigInput",
+  "Membership",
+  "ScimServiceProviderConfig",
+  "ScimUser",
+  "ScimUserInput",
+  "ScimGroup",
+  "ScimGroupInput",
+  "ScimPatchOp",
+  "ScimError",
+  "ScimListResponse",
 ] as const;
 
 /**
  * Required security schemes.
  */
-const REQUIRED_SECURITY_SCHEMES = ["hmacAuth"] as const;
+const REQUIRED_SECURITY_SCHEMES = ["hmacAuth", "scimBearerAuth"] as const;
 
 export interface OpenApiSpec {
   openapi: string;
@@ -133,7 +216,19 @@ export function validateOpenApiPaths(spec: OpenApiSpec): {
 
   // Check that secured paths reference security
   if (spec.paths) {
-    const securedPaths = REQUIRED_PATHS.filter((p) => p !== "/health");
+    const publicPaths: readonly string[] = [
+      "/health",
+      "/metrics",
+      "/webhooks/github",
+      "/v1/auth/discovery",
+      "/v1/saml/metadata",
+      "/v1/scim/v2/ServiceProviderConfig",
+      "/v1/scim/v2/Schemas",
+      "/v1/scim/v2/ResourceTypes",
+    ];
+    const securedPaths = REQUIRED_PATHS.filter(
+      (p) => !publicPaths.includes(p)
+    );
     for (const path of securedPaths) {
       const pathObj = spec.paths[path];
       if (!pathObj) continue;
