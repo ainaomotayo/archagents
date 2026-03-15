@@ -291,6 +291,16 @@ export const authOptions: AuthOptions = {
         provider: account?.provider,
         ip,
       });
+      // Emit structured SSO audit event
+      try {
+        const { emitSsoAuditEvent } = await import("./auth-audit.js");
+        await emitSsoAuditEvent("sso.login.success", {
+          provider: account?.provider ?? "unknown",
+          email: "unknown",
+          ip,
+          orgId: "default",
+        });
+      } catch { /* non-blocking */ }
     },
   },
 
