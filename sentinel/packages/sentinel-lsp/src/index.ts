@@ -114,6 +114,10 @@ if (isDirectRun && process.env.NODE_ENV !== "test") {
     }
   });
 
+  connection.onRequest("sentinel/findingDetail", async (params: { findingId: string }) => {
+    return server.handleFindingDetail(params.findingId);
+  });
+
   documents.listen(connection);
   connection.listen();
 }
