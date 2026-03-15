@@ -41,6 +41,7 @@ model Organization {
   aiMetricsConfig             AIMetricsConfig?
   reportSchedules             ReportSchedule[]
   digestSnapshots             DigestSnapshot[]
+  complianceWizards           ComplianceWizard[]
 
   @@map("organizations")
 }
@@ -328,8 +329,11 @@ model User {
   lastSsoProvider String?   @map("last_sso_provider")
   createdAt       DateTime  @default(now()) @map("created_at")
 
-  organization Organization    @relation(fields: [orgId], references: [id])
-  memberships  OrgMembership[]
+  organization          Organization           @relation(fields: [orgId], references: [id])
+  memberships           OrgMembership[]
+  wizardsCreated        ComplianceWizard[]     @relation("WizardCreator")
+  wizardEvidenceUploads WizardStepEvidence[]   @relation("EvidenceUploader")
+  wizardEvents          WizardEvent[]          @relation("WizardEventActor")
 
   @@index([orgId])
   @@index([externalId])
@@ -1133,4 +1137,100 @@ model AIMetricsConfig {
   organization Organization @relation(fields: [orgId], references: [id])
 
   @@map("ai_metrics_configs")
+}
+
+// --- EU AI Act Compliance Wizard ---
+
+model ComplianceWizard {
+  id            String    @id @default(uuid()) @db.Uuid
+  orgId         String    @map("org_id") @db.Uuid
+  frameworkCode String    @map("framework_code")
+  name          String
+  status        String    @default("active")
+  progress      Float     @default(0)
+  metadata      Json      @default("{}")
+  createdBy     String    @map("created_by") @db.Uuid
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+  completedAt   DateTime? @map("completed_at")
+
+  organization Organization      @relation(fields: [orgId], references: [id])
+  creator      User              @relation("WizardCreator", fields: [createdBy], references: [id])
+  steps        WizardStep[]
+  events       WizardEvent[]
+  documents    WizardDocument[]
+
+  @@unique([orgId, frameworkCode, name])
+  @@index([orgId])
+  @@map("compliance_wizards")
+}
+
+model WizardStep {
+  id            String    @id @default(uuid()) @db.Uuid
+  wizardId      String    @map("wizard_id") @db.Uuid
+  controlCode   String    @map("control_code")
+  phase         Int
+  state         String    @default("locked")
+  requirements  Json      @default("[]")
+  justification String?   @db.Text
+  skipReason    String?   @map("skip_reason") @db.Text
+  completedAt   DateTime? @map("completed_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  wizard   ComplianceWizard    @relation(fields: [wizardId], references: [id], onDelete: Cascade)
+  evidence WizardStepEvidence[]
+
+  @@unique([wizardId, controlCode])
+  @@index([wizardId])
+  @@map("wizard_steps")
+}
+
+model WizardStepEvidence {
+  id         String   @id @default(uuid()) @db.Uuid
+  stepId     String   @map("step_id") @db.Uuid
+  fileName   String   @map("file_name")
+  mimeType   String   @map("mime_type")
+  fileSize   Int      @map("file_size")
+  storageKey String   @map("storage_key")
+  sha256     String
+  uploadedBy String   @map("uploaded_by") @db.Uuid
+  uploadedAt DateTime @default(now()) @map("uploaded_at")
+
+  step     WizardStep @relation(fields: [stepId], references: [id], onDelete: Cascade)
+  uploader User       @relation("EvidenceUploader", fields: [uploadedBy], references: [id])
+
+  @@map("wizard_step_evidence")
+}
+
+model WizardEvent {
+  id            String   @id @default(uuid()) @db.Uuid
+  wizardId      String   @map("wizard_id") @db.Uuid
+  controlCode   String?  @map("control_code")
+  eventType     String   @map("event_type")
+  previousState String?  @map("previous_state")
+  newState      String?  @map("new_state")
+  actorId       String   @map("actor_id") @db.Uuid
+  metadata      Json     @default("{}")
+  timestamp     DateTime @default(now())
+
+  wizard ComplianceWizard @relation(fields: [wizardId], references: [id], onDelete: Cascade)
+  actor  User             @relation("WizardEventActor", fields: [actorId], references: [id])
+
+  @@index([wizardId, timestamp])
+  @@map("wizard_events")
+}
+
+model WizardDocument {
+  id           String    @id @default(uuid()) @db.Uuid
+  wizardId     String    @map("wizard_id") @db.Uuid
+  documentType String    @map("document_type")
+  reportId     String?   @map("report_id") @db.Uuid
+  status       String    @default("pending")
+  error        String?   @db.Text
+  generatedAt  DateTime? @map("generated_at")
+
+  wizard ComplianceWizard @relation(fields: [wizardId], references: [id], onDelete: Cascade)
+
+  @@unique([wizardId, documentType])
+  @@map("wizard_documents")
 }
