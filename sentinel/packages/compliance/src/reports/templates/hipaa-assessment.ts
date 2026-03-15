@@ -10,7 +10,7 @@ export const hipaaAssessmentTemplate: ReportTemplate<HipaaAssessmentData> = {
   gather: async (_ctx: GatherContext): Promise<HipaaAssessmentData> => {
     throw new Error("gather() must be called with assembled data");
   },
-  render: (data: HipaaAssessmentData, _branding: BrandingContext) => {
-    return createElement(HipaaAssessmentReport, { data }) as any;
+  render: (data: HipaaAssessmentData, branding: BrandingContext) => {
+    return createElement(HipaaAssessmentReport, { data, branding }) as any;
   },
 };

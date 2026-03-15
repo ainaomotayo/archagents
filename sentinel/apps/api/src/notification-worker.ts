@@ -282,12 +282,50 @@ if (process.env.NODE_ENV !== "test") {
       if (storageKey) {
         const { createReportStorage } = await import("./report-storage-factory.js");
         const reportStorage = createReportStorage();
-        // Generate download link with 7-day expiry
-        const downloadUrl = await reportStorage.getSignedUrl(storageKey, 7 * 24 * 3600);
-        const sizeLabel = fileSize && fileSize < 10 * 1024 * 1024 ? "attached" : "download link";
-        logger.info({ reportId, type, sizeLabel }, "Report ready for email delivery");
-        // Email sending would go through the existing email transport
-        // For now, log the download URL for manual testing
+        const downloadUrl = await reportStorage.getSignedUrl(String(storageKey), 7 * 24 * 3600);
+        const sizeMB = typeof fileSize === "number" ? (fileSize / (1024 * 1024)).toFixed(1) : "unknown";
+
+        // Look up the report and requesting user's email
+        const report = await db.report.findUnique({ where: { id: String(reportId) } });
+        let recipientEmail: string | undefined;
+        if (report?.requestedBy) {
+          const user = await db.user.findUnique({ where: { id: report.requestedBy }, select: { email: true } });
+          recipientEmail = user?.email;
+        }
+
+        if (!recipientEmail) {
+          logger.warn({ reportId }, "No recipient email found for report delivery");
+        } else {
+          const emailAdapter = registry.get("email");
+          if (emailAdapter) {
+            const reportEvent: NotificationEvent = {
+              id: `${event.id}-email`,
+              orgId: event.orgId,
+              topic: "compliance.report_ready",
+              timestamp: event.timestamp,
+              payload: {
+                "Report Type": String(type).replace(/_/g, " "),
+                "Report ID": String(reportId),
+                "Download Link": downloadUrl,
+                "File Size": `${sizeMB} MB`,
+                "Link Expires": "7 days",
+              },
+            };
+            await emailAdapter.deliver(
+              {
+                channelType: "email",
+                channelConfig: {
+                  to: [recipientEmail],
+                  subject: "SENTINEL Report Ready: {{topic}}",
+                },
+              } as any,
+              reportEvent,
+            );
+            logger.info({ reportId, type, recipientEmail, sizeMB }, "Report email delivered");
+          } else {
+            logger.warn({ reportId }, "Email adapter not configured — skipping email delivery");
+          }
+        }
       }
     } else {
       await processNotificationEvent(event, { db, registry, redisPub });

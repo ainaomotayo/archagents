@@ -10,7 +10,7 @@ export const complianceSummaryTemplate: ReportTemplate<ComplianceSummaryData> = 
   gather: async (_ctx: GatherContext): Promise<ComplianceSummaryData> => {
     throw new Error("gather() must be called with assembled data");
   },
-  render: (data: ComplianceSummaryData, _branding: BrandingContext) => {
-    return createElement(ComplianceSummaryReport, { data }) as any;
+  render: (data: ComplianceSummaryData, branding: BrandingContext) => {
+    return createElement(ComplianceSummaryReport, { data, branding }) as any;
   },
 };

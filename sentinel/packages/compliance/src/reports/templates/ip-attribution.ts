@@ -11,7 +11,7 @@ export const ipAttributionTemplate: ReportTemplate<IPAttributionReportData> = {
   gather: async (_ctx: GatherContext): Promise<IPAttributionReportData> => {
     throw new Error("gather() must be called with assembled data");
   },
-  render: (data: IPAttributionReportData, _branding: BrandingContext) => {
-    return createElement(IPAttributionReport, { data }) as any;
+  render: (data: IPAttributionReportData, branding: BrandingContext) => {
+    return createElement(IPAttributionReport, { data, branding }) as any;
   },
 };
