@@ -57,7 +57,7 @@ describe("rbac", () => {
 
   it("should return limited endpoints for viewer", () => {
     const endpoints = getPermittedEndpoints("viewer");
-    expect(endpoints.length).toBe(30);
+    expect(endpoints.length).toBe(35);
     // Viewer should not have DELETE or admin access
     for (const ep of endpoints) {
       expect(ep.method).not.toBe("DELETE");

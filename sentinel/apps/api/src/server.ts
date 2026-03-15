@@ -30,6 +30,7 @@ import { buildDecisionTraceRoutes } from "./routes/decision-traces.js";
 import { buildIPAttributionRoutes } from "./routes/ip-attribution.js";
 import { buildBAARoutes } from "./routes/baa.js";
 import { buildAttestationRoutes } from "./routes/attestations.js";
+import { buildWizardRoutes } from "./routes/compliance-wizards.js";
 import { buildNotificationRuleRoutes } from "./routes/notification-rules.js";
 import { buildReportScheduleRoutes } from "./routes/report-schedules.js";
 import { HttpWebhookAdapter, SseManager } from "@sentinel/notifications";
@@ -127,6 +128,7 @@ const gapRoutes = buildGapAnalysisRoutes({ db });
 const remediationRoutes = buildRemediationRoutes({ db });
 const baaRoutes = buildBAARoutes({ db });
 const attestationRoutes = buildAttestationRoutes({ db });
+const wizardRoutes = buildWizardRoutes({ db });
 const aiMetricsRoutes = buildAIMetricsRoutes({ db });
 const riskTrendRoutes = buildRiskTrendRoutes({ db });
 const decisionTraceRoutes = buildDecisionTraceRoutes({ db });
@@ -1691,6 +1693,144 @@ app.post("/v1/compliance/attestations/:id/renew", { preHandler: authHook }, asyn
   } catch (err: any) {
     reply.code(400).send({ error: err.message });
   }
+});
+
+// --- Compliance Wizard routes ---
+app.post("/v1/compliance/wizards", { preHandler: authHook }, async (request, reply) => {
+  const orgId = (request as any).orgId ?? "default";
+  const userId = (request as any).userId ?? "unknown";
+  const result = await withTenant(db, orgId, () => wizardRoutes.createWizard(orgId, userId, request.body));
+  if (result.error) { reply.code(result.status ?? 400).send({ error: result.error }); return; }
+  reply.code(201).send(result);
+});
+
+app.get("/v1/compliance/wizards", { preHandler: authHook }, async (request) => {
+  const orgId = (request as any).orgId ?? "default";
+  return withTenant(db, orgId, () => wizardRoutes.listWizards(orgId));
+});
+
+app.get("/v1/compliance/wizards/:wizardId", { preHandler: authHook }, async (request, reply) => {
+  const orgId = (request as any).orgId ?? "default";
+  const { wizardId } = request.params as { wizardId: string };
+  return withTenant(db, orgId, async () => {
+    const wizard = await wizardRoutes.getWizard(wizardId, orgId);
+    if (!wizard) { reply.code(404).send({ error: "Not found" }); return; }
+    return wizard;
+  });
+});
+
+app.delete("/v1/compliance/wizards/:wizardId", { preHandler: authHook }, async (request, reply) => {
+  const orgId = (request as any).orgId ?? "default";
+  const { wizardId } = request.params as { wizardId: string };
+  return withTenant(db, orgId, async () => {
+    const result = await wizardRoutes.deleteWizard(wizardId, orgId);
+    if (!result) { reply.code(404).send({ error: "Not found" }); return; }
+    return result;
+  });
+});
+
+app.patch("/v1/compliance/wizards/:wizardId", { preHandler: authHook }, async (request, reply) => {
+  const orgId = (request as any).orgId ?? "default";
+  const { wizardId } = request.params as { wizardId: string };
+  return withTenant(db, orgId, async () => {
+    const result = await wizardRoutes.updateWizardMetadata(wizardId, orgId, request.body as Record<string, unknown>);
+    if (!result) { reply.code(404).send({ error: "Not found" }); return; }
+    return result;
+  });
+});
+
+app.get("/v1/compliance/wizards/:wizardId/steps/:code", { preHandler: authHook }, async (request, reply) => {
+  const orgId = (request as any).orgId ?? "default";
+  const { wizardId, code } = request.params as { wizardId: string; code: string };
+  return withTenant(db, orgId, async () => {
+    const step = await wizardRoutes.getStep(wizardId, code, orgId);
+    if (!step) { reply.code(404).send({ error: "Not found" }); return; }
+    return step;
+  });
+});
+
+app.patch("/v1/compliance/wizards/:wizardId/steps/:code", { preHandler: authHook }, async (request, reply) => {
+  const orgId = (request as any).orgId ?? "default";
+  const userId = (request as any).userId ?? "unknown";
+  const { wizardId, code } = request.params as { wizardId: string; code: string };
+  return withTenant(db, orgId, async () => {
+    const result = await wizardRoutes.updateStep(wizardId, code, request.body, userId);
+    if (!result) { reply.code(404).send({ error: "Not found" }); return; }
+    return result;
+  });
+});
+
+app.post("/v1/compliance/wizards/:wizardId/steps/:code/complete", { preHandler: authHook }, async (request, reply) => {
+  const orgId = (request as any).orgId ?? "default";
+  const userId = (request as any).userId ?? "unknown";
+  const { wizardId, code } = request.params as { wizardId: string; code: string };
+  return withTenant(db, orgId, async () => {
+    const result = await wizardRoutes.completeStep(wizardId, code, userId);
+    if (!result) { reply.code(404).send({ error: "Not found" }); return; }
+    return result;
+  });
+});
+
+app.post("/v1/compliance/wizards/:wizardId/steps/:code/skip", { preHandler: authHook }, async (request, reply) => {
+  const orgId = (request as any).orgId ?? "default";
+  const userId = (request as any).userId ?? "unknown";
+  const { wizardId, code } = request.params as { wizardId: string; code: string };
+  return withTenant(db, orgId, async () => {
+    const result = await wizardRoutes.skipStep(wizardId, code, request.body, userId);
+    if (!result) { reply.code(404).send({ error: "Not found" }); return; }
+    return result;
+  });
+});
+
+app.post("/v1/compliance/wizards/:wizardId/steps/:code/evidence", { preHandler: authHook }, async (request, reply) => {
+  const orgId = (request as any).orgId ?? "default";
+  const userId = (request as any).userId ?? "unknown";
+  const { wizardId, code } = request.params as { wizardId: string; code: string };
+  return withTenant(db, orgId, async () => {
+    const result = await wizardRoutes.uploadEvidence(wizardId, code, request.body, userId);
+    if (!result) { reply.code(404).send({ error: "Not found" }); return; }
+    reply.code(201).send(result);
+  });
+});
+
+app.delete("/v1/compliance/wizards/:wizardId/steps/:code/evidence/:evidenceId", { preHandler: authHook }, async (request, reply) => {
+  const orgId = (request as any).orgId ?? "default";
+  const userId = (request as any).userId ?? "unknown";
+  const { wizardId, code, evidenceId } = request.params as { wizardId: string; code: string; evidenceId: string };
+  return withTenant(db, orgId, async () => {
+    const result = await wizardRoutes.deleteEvidence(wizardId, code, evidenceId, userId);
+    if (!result) { reply.code(404).send({ error: "Not found" }); return; }
+    return result;
+  });
+});
+
+app.get("/v1/compliance/wizards/:wizardId/progress", { preHandler: authHook }, async (request, reply) => {
+  const orgId = (request as any).orgId ?? "default";
+  const { wizardId } = request.params as { wizardId: string };
+  return withTenant(db, orgId, async () => {
+    const result = await wizardRoutes.getProgress(wizardId, orgId);
+    if (!result) { reply.code(404).send({ error: "Not found" }); return; }
+    return result;
+  });
+});
+
+app.post("/v1/compliance/wizards/:wizardId/documents/generate", { preHandler: authHook }, async (request, reply) => {
+  const orgId = (request as any).orgId ?? "default";
+  const userId = (request as any).userId ?? "unknown";
+  const { wizardId } = request.params as { wizardId: string };
+  const result = await withTenant(db, orgId, () => wizardRoutes.generateDocuments(wizardId, request.body, userId));
+  if (result.error) { reply.code(result.status ?? 400).send({ error: result.error }); return; }
+  reply.code(202).send(result);
+});
+
+app.get("/v1/compliance/wizards/:wizardId/documents", { preHandler: authHook }, async (request, reply) => {
+  const orgId = (request as any).orgId ?? "default";
+  const { wizardId } = request.params as { wizardId: string };
+  return withTenant(db, orgId, async () => {
+    const docs = await wizardRoutes.listDocuments(wizardId, orgId);
+    if (!docs) { reply.code(404).send({ error: "Not found" }); return; }
+    return docs;
+  });
 });
 
 // --- Evidence ---
