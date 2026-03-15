@@ -1,0 +1,25 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ include "sentinel.fullname" . }}-test-api
+  labels:
+    {{- include "sentinel.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": test
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  restartPolicy: Never
+  containers:
+    - name: test
+      image: curlimages/curl:8.5.0
+      command: ["sh", "-c"]
+      args:
+        - |
+          set -e
+          echo "Testing API health..."
+          curl -sf http://{{ include "sentinel.fullname" . }}-api:8080/health
+          echo "Testing API metrics..."
+          curl -sf http://{{ include "sentinel.fullname" . }}-api:8080/metrics | grep -q sentinel_api
+          echo "Testing Dashboard health..."
+          curl -sf http://{{ include "sentinel.fullname" . }}-dashboard:3000/api/health
+          echo "All tests passed"
