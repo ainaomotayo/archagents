@@ -9,7 +9,7 @@ import {
 
 import type { SentinelContext, SentinelConfig, Severity } from "./context.js";
 import { defaultConfig } from "./context.js";
-import { activateStatusBar } from "./features/status-bar.js";
+import { activateStatusBar, updateStatusBar } from "./features/status-bar.js";
 import { activateCommands } from "./commands/index.js";
 import { activateTreeView } from "./features/tree-view.js";
 import { activateGutterIcons } from "./features/gutter-icons.js";
@@ -73,12 +73,38 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   };
 
   // Feature modules will be activated here in subsequent tasks:
-  activateStatusBar(ctx);
+  const statusBarItem = activateStatusBar(ctx);
   const treeProvider = activateTreeView(ctx);
   activateGutterIcons(ctx);
   activateCommands(ctx);
   activateScanTrigger(ctx);
   activateDetailPanel(ctx);
+
+  // Sync LSP diagnostics to TreeView and status bar
+  ctx.subscriptions.push(
+    vscode.languages.onDidChangeDiagnostics(() => {
+      const allDiags = vscode.languages.getDiagnostics();
+      const sentinelFindings: Array<Record<string, unknown>> = [];
+      let criticalCount = 0;
+      let highCount = 0;
+
+      for (const [, diags] of allDiags) {
+        for (const d of diags) {
+          if (!d.source?.startsWith("sentinel/")) continue;
+          const data = d.data as { finding?: Record<string, unknown> } | undefined;
+          if (data?.finding) {
+            sentinelFindings.push(data.finding);
+            const sev = data.finding.severity as string;
+            if (sev === "critical") criticalCount++;
+            if (sev === "high") highCount++;
+          }
+        }
+      }
+
+      treeProvider.updateFindings(sentinelFindings as any);
+      updateStatusBar(statusBarItem, "connected", criticalCount, highCount);
+    }),
+  );
 
   await client.start();
   output.appendLine("Sentinel LSP client started.");

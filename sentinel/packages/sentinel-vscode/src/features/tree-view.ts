@@ -116,6 +116,18 @@ export class FindingsTreeProvider implements vscode.TreeDataProvider<TreeNode> {
   }
 }
 
+export function extractFindingsFromDiagnostics(diagnostics: vscode.Diagnostic[]): Finding[] {
+  const findings: Finding[] = [];
+  for (const diag of diagnostics) {
+    if (!diag.source?.startsWith("sentinel/")) continue;
+    const data = diag.data as { finding?: Finding } | undefined;
+    if (data?.finding) {
+      findings.push(data.finding);
+    }
+  }
+  return findings;
+}
+
 export function activateTreeView(ctx: SentinelContext): FindingsTreeProvider {
   const provider = new FindingsTreeProvider();
   const treeView = vscode.window.createTreeView("sentinelFindings", {
