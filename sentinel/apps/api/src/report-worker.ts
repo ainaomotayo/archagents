@@ -249,8 +249,29 @@ const healthPort = parseInt(process.env.REPORT_WORKER_PORT ?? "9094", 10);
 const healthServer = createWorkerHealthServer(healthPort);
 logger.info({ port: healthPort }, "Report worker health server listening");
 
+// Stale report sweep — mark queued/generating reports older than 5 min as failed
+async function sweepStaleReports() {
+  const fiveMinAgo = new Date(Date.now() - 5 * 60 * 1000);
+  const stale = await db.report.updateMany({
+    where: {
+      status: { in: ["pending", "generating"] },
+      createdAt: { lt: fiveMinAgo },
+    },
+    data: {
+      status: "failed",
+      error: "Report generation timed out",
+    },
+  });
+  if (stale.count > 0) {
+    logger.info({ count: stale.count }, "Marked stale reports as failed");
+  }
+}
+
+const sweepTimer = setInterval(sweepStaleReports, 2 * 60 * 1000);
+
 // Graceful shutdown
 const shutdown = async () => {
+  clearInterval(sweepTimer);
   healthServer.close();
   logger.info("Report worker shutting down...");
   statusRedis.disconnect();

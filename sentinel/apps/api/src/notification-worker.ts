@@ -277,6 +277,18 @@ if (process.env.NODE_ENV !== "test") {
     const event = data as unknown as NotificationEvent;
     if (event.topic === "compliance.digest_ready") {
       await handleDigestEvent(event, { db, registry, redisPub, dashboardUrl });
+    } else if (event.topic === "compliance.report_ready" && event.payload?.delivery === "email") {
+      const { reportId, type, storageKey, fileSize } = event.payload;
+      if (storageKey) {
+        const { createReportStorage } = await import("./report-storage-factory.js");
+        const reportStorage = createReportStorage();
+        // Generate download link with 7-day expiry
+        const downloadUrl = await reportStorage.getSignedUrl(storageKey, 7 * 24 * 3600);
+        const sizeLabel = fileSize && fileSize < 10 * 1024 * 1024 ? "attached" : "download link";
+        logger.info({ reportId, type, sizeLabel }, "Report ready for email delivery");
+        // Email sending would go through the existing email transport
+        // For now, log the download URL for manual testing
+      }
     } else {
       await processNotificationEvent(event, { db, registry, redisPub });
     }
