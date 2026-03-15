@@ -34,19 +34,10 @@ steps:
   - script: npm install -g @sentinel/cli
     displayName: Install SENTINEL CLI
 
-  - script: |
-      if [ -n "$(System.PullRequest.PullRequestId)" ]; then
-        DIFF=$(git diff origin/$(System.PullRequest.TargetBranch)...HEAD)
-      else
-        DIFF=$(git diff HEAD~1 HEAD 2>/dev/null || echo "")
-      fi
-      if [ -z "$DIFF" ]; then
-        echo "No changes to scan."
-        exit 0
-      fi
-      echo "$DIFF" | sentinel ci --api-url $(SENTINEL_API_URL)
+  - script: sentinel ci --api-url "$SENTINEL_API_URL"
     displayName: Run SENTINEL Scan
     env:
       SENTINEL_API_KEY: $(SENTINEL_API_KEY)
       SENTINEL_SECRET: $(SENTINEL_SECRET)
+      SENTINEL_API_URL: $(SENTINEL_API_URL)
     timeoutInMinutes: 10
