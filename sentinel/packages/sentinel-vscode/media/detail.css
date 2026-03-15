@@ -1,0 +1,9 @@
+/* Webview styles -- uses VS Code CSS variables for theme integration */
+body {
+  font-family: var(--vscode-font-family, sans-serif);
+  color: var(--vscode-foreground);
+  background: var(--vscode-editor-background);
+  padding: 16px;
+  line-height: 1.6;
+  max-width: 720px;
+}

@@ -14,6 +14,7 @@ import { activateCommands } from "./commands/index.js";
 import { activateTreeView } from "./features/tree-view.js";
 import { activateGutterIcons } from "./features/gutter-icons.js";
 import { activateScanTrigger } from "./features/scan-trigger.js";
+import { activateDetailPanel } from "./features/detail-panel.js";
 
 let client: LanguageClient | undefined;
 
@@ -77,6 +78,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   activateGutterIcons(ctx);
   activateCommands(ctx);
   activateScanTrigger(ctx);
+  activateDetailPanel(ctx);
 
   await client.start();
   output.appendLine("Sentinel LSP client started.");

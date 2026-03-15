@@ -135,3 +135,19 @@ export const Uri = {
   file: (path: string) => ({ scheme: "file", path }),
   parse: (value: string) => ({ scheme: "file", path: value }),
 };
+
+export class Position {
+  constructor(public line: number, public character: number) {}
+}
+
+export class Selection {
+  constructor(public anchor: any, public active: any) {}
+}
+
+export enum ViewColumn {
+  Active = -1,
+  Beside = -2,
+  One = 1,
+  Two = 2,
+  Three = 3,
+}
