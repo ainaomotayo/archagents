@@ -646,11 +646,19 @@ model Report {
   parameters  Json      @default("{}")
   fileUrl     String?   @map("file_url")
   fileHash    String?   @map("file_hash")
+  fileSize    Int?      @map("file_size")
+  pageCount   Int?      @map("page_count")
+  storageKey  String?   @map("storage_key")
+  batchId     String?   @map("batch_id")
+  error       String?
+  expiresAt   DateTime? @map("expires_at") @db.Timestamptz
+  delivery    String?   @default("download")
   requestedBy String?   @map("requested_by")
   createdAt   DateTime  @default(now()) @map("created_at")
   completedAt DateTime? @map("completed_at")
 
   @@index([orgId])
+  @@index([batchId])
   @@map("reports")
 }
 

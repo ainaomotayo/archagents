@@ -101,6 +101,16 @@ describe("RBAC enforcement", () => {
     expect(isAuthorized("developer", "POST", "/v1/reports")).toBe(false);
   });
 
+  it("admin and manager can download reports and check status", () => {
+    expect(isAuthorized("admin", "GET", "/v1/reports/:id/download")).toBe(true);
+    expect(isAuthorized("manager", "GET", "/v1/reports/:id/download")).toBe(true);
+    expect(isAuthorized("developer", "GET", "/v1/reports/:id/download")).toBe(false);
+    expect(isAuthorized("viewer", "GET", "/v1/reports/:id/download")).toBe(false);
+    expect(isAuthorized("admin", "GET", "/v1/reports/:id/status")).toBe(true);
+    expect(isAuthorized("manager", "GET", "/v1/reports/:id/status")).toBe(true);
+    expect(isAuthorized("developer", "GET", "/v1/reports/:id/status")).toBe(false);
+  });
+
   it("developer can run live assessments", () => {
     expect(isAuthorized("developer", "GET", "/v1/compliance/assess/:frameworkId")).toBe(true);
     expect(isAuthorized("viewer", "GET", "/v1/compliance/assess/:frameworkId")).toBe(false);

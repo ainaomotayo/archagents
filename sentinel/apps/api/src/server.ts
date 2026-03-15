@@ -1729,15 +1729,34 @@ app.get("/v1/evidence/verify", { preHandler: authHook }, async (request) => {
 // --- Reports ---
 app.post("/v1/reports", { preHandler: authHook }, async (request, reply) => {
   const orgId = (request as any).orgId ?? "default";
-  const { type, frameworkId, parameters } = request.body as any;
+  const { type, frameworkId, parameters, batchId, delivery } = request.body as any;
+
+  if (process.env.PDF_EXPORT_ENABLED !== "true") {
+    reply.code(404).send({ error: "PDF export is not enabled" });
+    return;
+  }
+
   if (!VALID_REPORT_TYPES.includes(type)) {
     reply.code(400).send({ error: `Invalid report type. Must be one of: ${VALID_REPORT_TYPES.join(", ")}` });
     return;
   }
+
   const report = await db.report.create({
-    data: { orgId, type, frameworkId, parameters: parameters ?? {}, requestedBy: "api" },
+    data: {
+      orgId,
+      type,
+      frameworkId,
+      parameters: parameters ?? {},
+      batchId: batchId ?? null,
+      delivery: delivery ?? "download",
+      requestedBy: (request as any).userId ?? "api",
+    },
   });
-  await eventBus.publish("sentinel.reports", { reportId: report.id, orgId, type, frameworkId, parameters });
+
+  await eventBus.publish("sentinel.reports", {
+    reportId: report.id, orgId, type, frameworkId, parameters, batchId, delivery,
+  });
+
   reply.code(202).send(report);
 });
 
@@ -1761,6 +1780,114 @@ app.get("/v1/reports/:id", { preHandler: authHook }, async (request, reply) => {
   });
   if (!report) { reply.code(404).send({ error: "Report not found" }); return; }
   return report;
+});
+
+app.get("/v1/reports/:id/download", { preHandler: authHook }, async (request, reply) => {
+  const orgId = (request as any).orgId ?? "default";
+  const { id } = request.params as { id: string };
+
+  const report = await withTenant(db, orgId, async (tx) => {
+    return tx.report.findUnique({ where: { id } });
+  });
+
+  if (!report) {
+    reply.code(404).send({ error: "Report not found" });
+    return;
+  }
+
+  if (report.expiresAt && report.expiresAt < new Date()) {
+    reply.code(410).send({ error: "Report expired" });
+    return;
+  }
+
+  if (report.status !== "completed" || !report.storageKey) {
+    reply.code(404).send({ error: "Report not ready for download" });
+    return;
+  }
+
+  const { createReportStorage } = await import("./report-storage-factory.js");
+  const storage = createReportStorage();
+  const url = await storage.getSignedUrl(report.storageKey, 900);
+
+  reply.code(302).header("Location", url).send();
+});
+
+app.get("/v1/reports/:id/status", { preHandler: authHook }, async (request, reply) => {
+  const orgId = (request as any).orgId ?? "default";
+  const { id } = request.params as { id: string };
+
+  const report = await withTenant(db, orgId, async (tx) => {
+    return tx.report.findUnique({ where: { id } });
+  });
+  if (!report) {
+    reply.code(404).send({ error: "Report not found" });
+    return;
+  }
+
+  reply.raw.writeHead(200, {
+    "Content-Type": "text/event-stream",
+    "Cache-Control": "no-cache",
+    "Connection": "keep-alive",
+    "X-Accel-Buffering": "no",
+  });
+
+  reply.raw.write(`data: ${JSON.stringify({ status: report.status })}\n\n`);
+
+  if (["completed", "failed"].includes(report.status)) {
+    reply.raw.end();
+    return;
+  }
+
+  const { Redis: RedisClient } = await import("ioredis");
+  const sub = new RedisClient(process.env.REDIS_URL ?? "redis://localhost:6379");
+  const channel = `report:${id}:status`;
+
+  const listener = (_ch: string, message: string) => {
+    reply.raw.write(`data: ${message}\n\n`);
+    try {
+      const parsed = JSON.parse(message);
+      if (["completed", "failed"].includes(parsed.status)) {
+        sub.unsubscribe(channel);
+        sub.disconnect();
+        reply.raw.end();
+      }
+    } catch {}
+  };
+
+  sub.subscribe(channel);
+  sub.on("message", listener);
+
+  request.raw.on("close", () => {
+    sub.unsubscribe(channel);
+    sub.disconnect();
+  });
+});
+
+app.get("/v1/report-batches/:batchId", { preHandler: authHook }, async (request, reply) => {
+  const orgId = (request as any).orgId ?? "default";
+  const { batchId } = request.params as { batchId: string };
+
+  const reports = await withTenant(db, orgId, async (tx) => {
+    return tx.report.findMany({ where: { batchId }, orderBy: { createdAt: "asc" } });
+  });
+
+  if (reports.length === 0) {
+    reply.code(404).send({ error: "Batch not found" });
+    return;
+  }
+
+  const statuses = reports.map((r: any) => r.status);
+  const allCompleted = statuses.every((s: string) => s === "completed");
+  const allFailed = statuses.every((s: string) => s === "failed");
+  const anyFailed = statuses.some((s: string) => s === "failed");
+
+  let batchStatus: string;
+  if (allCompleted) batchStatus = "completed";
+  else if (allFailed) batchStatus = "failed";
+  else if (anyFailed && statuses.some((s: string) => s === "completed")) batchStatus = "partial";
+  else batchStatus = "in_progress";
+
+  return { batchId, status: batchStatus, total: reports.length, reports };
 });
 
 // --- Report Schedules ---

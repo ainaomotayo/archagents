@@ -11,9 +11,21 @@ import {
   generateHipaaAssessmentPdf,
   computeGapAnalysis,
   FRAMEWORK_MAP,
+  createDefaultRegistry,
+  getDefaultBranding,
   type NistProfileData,
   type HipaaAssessmentData,
 } from "@sentinel/compliance";
+import { renderReport } from "./report-renderer.js";
+import { createReportStorage } from "./report-storage-factory.js";
+
+// Environment variables:
+// REPORT_STORAGE - "s3" or "local" (default: "local")
+// REPORT_S3_BUCKET - S3 bucket name (required when REPORT_STORAGE=s3)
+// REPORT_S3_REGION - AWS region (default: "us-east-1")
+// REPORT_LOCAL_DIR - local directory for reports (default: ./data/reports)
+// PDF_EXPORT_ENABLED - "true" to enable PDF generation (default: disabled)
+// RENDER_TIMEOUT_MS - render timeout in ms (default: 60000)
 
 if (process.env.OTEL_EXPORTER_OTLP_ENDPOINT) {
   initTracing({ serviceName: "report-worker" });
@@ -23,6 +35,13 @@ const logger = createLogger({ name: "report-worker" });
 const redis = new Redis(process.env.REDIS_URL ?? "redis://localhost:6379");
 const eventBus = new EventBus(redis);
 const db = getDb();
+const registry = createDefaultRegistry();
+const storage = createReportStorage();
+const statusRedis = new Redis(process.env.REDIS_URL ?? "redis://localhost:6379");
+
+function publishStatus(reportId: string, status: string, extra?: Record<string, unknown>) {
+  statusRedis.publish(`report:${reportId}:status`, JSON.stringify({ status, ...extra })).catch(() => {});
+}
 
 async function appendEvidence(orgId: string, type: string, data: unknown, scanId?: string) {
   const lastRecord = await db.evidenceRecord.findFirst({
@@ -132,52 +151,103 @@ async function assembleAndGeneratePdf(orgId: string, type: string, frameworkId: 
 }
 
 async function handleReportRequest(_id: string, data: Record<string, unknown>) {
-  const { reportId, orgId, type, frameworkId, parameters } = data as any;
+  const { reportId, orgId, type, frameworkId, parameters, delivery } = data as any;
   logger.info({ reportId, type }, "Processing report request");
+
+  if (process.env.PDF_EXPORT_ENABLED !== "true") {
+    logger.info({ reportId }, "PDF export disabled, skipping");
+    return;
+  }
 
   try {
     await db.report.update({ where: { id: reportId }, data: { status: "generating" } });
+    publishStatus(reportId, "rendering");
+
+    // Get org name for branding
+    const org = await db.organization.findUnique({ where: { id: orgId } });
+    const branding = getDefaultBranding(org?.name ?? orgId);
 
     let reportBuffer: Buffer | undefined;
-    const reportMeta = { type, frameworkId, parameters, generatedAt: new Date().toISOString() };
+    let fileSize: number | undefined;
+    let pageCount: number | undefined;
 
+    // Data gathering + rendering
     if (type === "nist_profile" || type === "hipaa_assessment") {
+      // Use existing data assembly for framework reports
       reportBuffer = await assembleAndGeneratePdf(orgId as string, type, frameworkId, parameters);
+      fileSize = reportBuffer.length;
+      // Simple page count heuristic
+      const pdfStr = reportBuffer.toString("latin1");
+      pageCount = Math.max(1, (pdfStr.match(/\/Type\s*\/Page[^s]/g) || []).length);
+    } else if (registry.has(type)) {
+      // Use registry render for other types (data comes from parameters)
+      const result = await renderReport(registry, type, parameters ?? {}, branding);
+      reportBuffer = result.buffer;
+      fileSize = result.fileSize;
+      pageCount = result.pageCount;
     }
 
+    const reportMeta = { type, frameworkId, parameters, generatedAt: new Date().toISOString() };
     const reportString = reportBuffer ? reportBuffer.toString("base64") : JSON.stringify(reportMeta);
     const fileHash = createHash("sha256").update(reportString).digest("hex");
-    const fileExt = reportBuffer ? "pdf" : "json";
 
+    // Upload to report storage (new pipeline)
+    let storageKey: string | undefined;
+    if (reportBuffer) {
+      publishStatus(reportId, "uploading");
+      storageKey = `reports/${orgId}/${reportId}.pdf`;
+      await storage.upload(storageKey, reportBuffer, "application/pdf");
+    }
+
+    // Also archive to S3 if legacy archive is enabled
     let fileUrl: string | undefined;
     if (isArchiveEnabled()) {
       const config = getArchiveConfig();
+      const fileExt = reportBuffer ? "pdf" : "json";
       const key = `${orgId}/reports/${reportId}.${fileExt}`;
       await archiveToS3(config, orgId, key, reportString);
       fileUrl = `s3://${config.bucket}/${config.prefix}/${key}`;
     }
 
+    const expiresAt = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000); // 90 days
+
     await db.report.update({
       where: { id: reportId },
-      data: { status: "completed", fileUrl, fileHash, completedAt: new Date() },
+      data: {
+        status: "completed",
+        fileUrl,
+        fileHash,
+        fileSize,
+        pageCount,
+        storageKey,
+        expiresAt,
+        completedAt: new Date(),
+      },
     });
 
+    publishStatus(reportId, "completed", { storageKey, fileSize, pageCount });
+
     await appendEvidence(orgId as string, "report_generated", {
-      reportId, type, fileHash,
+      reportId, type, fileHash, fileSize, pageCount,
     });
 
     await eventBus.publish("sentinel.notifications", {
       id: `evt-${reportId}-ready`,
       orgId,
       topic: "compliance.report_ready",
-      payload: { reportId, type, fileUrl: fileUrl ?? null },
+      payload: { reportId, type, fileUrl: fileUrl ?? null, storageKey, fileSize, delivery },
       timestamp: new Date().toISOString(),
     });
 
-    logger.info({ reportId, fileHash }, "Report completed");
+    logger.info({ reportId, fileHash, fileSize, pageCount }, "Report completed");
   } catch (err) {
     logger.error({ reportId, err }, "Failed to generate report");
-    await db.report.update({ where: { id: reportId }, data: { status: "failed" } });
+    const errorMsg = err instanceof Error ? err.message : String(err);
+    await db.report.update({
+      where: { id: reportId },
+      data: { status: "failed", error: errorMsg },
+    });
+    publishStatus(reportId, "failed", { error: errorMsg });
   }
 }
 
@@ -192,10 +262,32 @@ const healthPort = parseInt(process.env.REPORT_WORKER_PORT ?? "9094", 10);
 const healthServer = createWorkerHealthServer(healthPort);
 logger.info({ port: healthPort }, "Report worker health server listening");
 
+// Stale report sweep — mark queued/generating reports older than 5 min as failed
+async function sweepStaleReports() {
+  const fiveMinAgo = new Date(Date.now() - 5 * 60 * 1000);
+  const stale = await db.report.updateMany({
+    where: {
+      status: { in: ["pending", "generating"] },
+      createdAt: { lt: fiveMinAgo },
+    },
+    data: {
+      status: "failed",
+      error: "Report generation timed out",
+    },
+  });
+  if (stale.count > 0) {
+    logger.info({ count: stale.count }, "Marked stale reports as failed");
+  }
+}
+
+const sweepTimer = setInterval(sweepStaleReports, 2 * 60 * 1000);
+
 // Graceful shutdown
 const shutdown = async () => {
+  clearInterval(sweepTimer);
   healthServer.close();
   logger.info("Report worker shutting down...");
+  statusRedis.disconnect();
   await eventBus.disconnect();
   await shutdownTracing();
   await disconnectDb();
