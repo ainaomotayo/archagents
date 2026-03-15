@@ -96,6 +96,9 @@ export { ReportRegistry, type ReportTemplate, type GatherContext } from "./repor
 export { type BrandingContext, getDefaultBranding } from "./reports/branding.js";
 export { createDefaultRegistry } from "./reports/templates/index.js";
 
+export { PageHeader } from "./reports/components/index.js";
+export { PageFooter } from "./reports/components/index.js";
+
 // Report Storage
 export { type ReportStorage, LocalReportStorage } from "./reports/storage.js";
 export { S3ReportStorage, type S3StorageConfig } from "./reports/s3-storage.js";

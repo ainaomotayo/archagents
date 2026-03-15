@@ -1,2 +1,2 @@
-export { ScoreDonut } from "./ScoreDonut.js";
-export { ControlTable } from "./ControlTable.js";
+export { PageHeader } from "./PageHeader.js";
+export { PageFooter } from "./PageFooter.js";

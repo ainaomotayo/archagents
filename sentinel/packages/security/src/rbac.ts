@@ -105,6 +105,7 @@ export const API_PERMISSIONS: EndpointPermission[] = [
   { method: "GET", path: "/v1/reports/:id", roles: ["admin", "manager"] },
   { method: "GET", path: "/v1/reports/:id/download", roles: ["admin", "manager"] },
   { method: "GET", path: "/v1/reports/:id/status", roles: ["admin", "manager"] },
+  { method: "GET", path: "/v1/report-batches/:batchId", roles: ["admin", "manager"] },
   // Webhooks
   { method: "POST", path: "/v1/webhooks", roles: ["admin"] },
   { method: "GET", path: "/v1/webhooks", roles: ["admin", "manager"] },
