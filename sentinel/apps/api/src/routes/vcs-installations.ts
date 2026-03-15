@@ -159,4 +159,41 @@ export function registerVcsInstallationRoutes(
 
     reply.send({ success: true, provider: installation.provider, owner: installation.owner });
   });
+
+  // Provision webhooks on the VCS provider
+  app.post<{ Params: { id: string } }>(
+    "/v1/vcs-installations/:id/provision-webhooks",
+    async (request, reply) => {
+      const orgId = (request as any).orgId;
+      if (!orgId) return reply.code(401).send({ error: "Unauthorized" });
+
+      const { id } = request.params;
+      const body = request.body as any;
+      const callbackUrl = body.callbackUrl as string;
+      if (!callbackUrl) {
+        return reply.code(400).send({ error: "callbackUrl is required" });
+      }
+
+      const installation = await opts.db.vcsInstallation.findFirst({
+        where: { id, orgId },
+        include: { azureDevOpsExt: true },
+      });
+      if (!installation) return reply.code(404).send({ error: "Not found" });
+
+      if (installation.provider === "azure_devops" && installation.azureDevOpsExt) {
+        const { provisionAzureDevOpsHooks } = await import("../vcs/webhook-provisioner.js");
+        const result = await provisionAzureDevOpsHooks(
+          {
+            organizationUrl: installation.azureDevOpsExt.organizationUrl,
+            projectName: installation.azureDevOpsExt.projectName,
+            pat: installation.azureDevOpsExt.pat,
+          },
+          callbackUrl,
+        );
+        return reply.send(result);
+      }
+
+      reply.code(400).send({ error: `Webhook provisioning not yet supported for ${installation.provider}` });
+    },
+  );
 }
