@@ -58,6 +58,7 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Certificates", href: "/certificates", icon: "shield" },
   { label: "Gap Analysis", href: "/compliance/gap-analysis", icon: "grid" },
   { label: "Attestations", href: "/compliance/attestations", icon: "clipboard-check" },
+  { label: "Compliance Wizard", href: "/compliance/wizards", icon: "list-checks" },
   { label: "Policies", href: "/policies", icon: "file-text" },
   { label: "Reports", href: "/reports", icon: "bar-chart" },
   { label: "Drift", href: "/drift", icon: "trending-up" },
