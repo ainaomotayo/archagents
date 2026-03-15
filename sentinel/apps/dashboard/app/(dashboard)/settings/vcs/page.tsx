@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { MOCK_VCS_INSTALLATIONS } from "@/lib/mock-data";
 import { PageHeader } from "@/components/page-header";
-import { IconPlus, IconGithub } from "@/components/icons";
+import { IconPlus, IconGithub, IconGlobe, IconGrid, IconCpu } from "@/components/icons";
 
 /* ─── Types ─── */
 
@@ -57,11 +57,19 @@ function saveInstallations(installations: VcsInstallation[]) {
 
 /* ─── Provider Icon ─── */
 
+const PROVIDER_ICONS: Record<VcsProvider, React.ComponentType<React.SVGProps<SVGSVGElement>>> = {
+  github: IconGithub,
+  gitlab: IconGlobe,
+  bitbucket: IconGrid,
+  azure_devops: IconCpu,
+};
+
 function ProviderIcon({ provider, className }: { provider: VcsProvider; className?: string }) {
   const meta = PROVIDER_META[provider];
+  const Icon = PROVIDER_ICONS[provider];
   return (
     <div className={`flex h-9 w-9 items-center justify-center rounded-lg ${meta.color} ${className ?? ""}`}>
-      <IconGithub className="h-4 w-4 text-white" />
+      <Icon className="h-4 w-4 text-white" />
     </div>
   );
 }

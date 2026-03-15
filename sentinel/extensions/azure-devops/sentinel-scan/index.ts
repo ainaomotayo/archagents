@@ -13,14 +13,14 @@ async function run(): Promise<void> {
     tl.debug("Installing @sentinel/cli...");
     execSync("npm install -g @sentinel/cli", { stdio: "inherit" });
 
-    // Build the command
-    const formatFlag =
-      outputFormat === "json" ? "--json" :
-      outputFormat === "sarif" ? "--sarif" : "";
-    const cmd = `sentinel ci --api-url "${apiUrl}" --timeout ${timeout} ${formatFlag}`.trim();
+    // Build argument list (avoid shell interpolation for security)
+    const args = ["ci", "--api-url", apiUrl, "--timeout", timeout];
+    if (outputFormat === "json") args.push("--json");
+    else if (outputFormat === "sarif") args.push("--sarif");
 
-    // Run scan — CLI handles diff computation internally
-    const exitCode = tl.execSync("bash", `-c "${cmd}"`, {
+    // Run scan using tl.tool() for safe argument passing
+    const tool = tl.tool("sentinel").arg(args);
+    const exitCode = tool.execSync({
       env: {
         ...process.env,
         SENTINEL_API_KEY: apiKey,
