@@ -22,6 +22,7 @@ export function HeatmapGrid({
   onSelectCell,
 }: HeatmapGridProps) {
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
+  const [focusPos, setFocusPos] = useState<{ row: number; col: number } | null>(null);
   const svgRef = useRef<SVGSVGElement>(null);
 
   const visible =
@@ -69,13 +70,52 @@ export function HeatmapGrid({
     function handleKeyDown(e: KeyboardEvent) {
       if (e.key === "Escape") {
         setSelectedKey(null);
+        setFocusPos(null);
         onSelectCell(null);
+        return;
       }
+
+      const rows = visible.length;
+      const cols = allControlCodes.length;
+      if (rows === 0 || cols === 0) return;
+
+      let pos = focusPos ?? { row: 0, col: 0 };
+
+      switch (e.key) {
+        case "ArrowRight":
+          e.preventDefault();
+          pos = { row: pos.row, col: Math.min(pos.col + 1, cols - 1) };
+          break;
+        case "ArrowLeft":
+          e.preventDefault();
+          pos = { row: pos.row, col: Math.max(pos.col - 1, 0) };
+          break;
+        case "ArrowDown":
+          e.preventDefault();
+          pos = { row: Math.min(pos.row + 1, rows - 1), col: pos.col };
+          break;
+        case "ArrowUp":
+          e.preventDefault();
+          pos = { row: Math.max(pos.row - 1, 0), col: pos.col };
+          break;
+        case "Enter": {
+          e.preventDefault();
+          const fw = visible[pos.row];
+          const code = allControlCodes[pos.col];
+          const cs = fw?.controlScores.find((c) => c.controlCode === code);
+          if (cs) handleClick(fw, code);
+          return;
+        }
+        default:
+          return;
+      }
+
+      setFocusPos(pos);
     }
 
     svg.addEventListener("keydown", handleKeyDown);
     return () => svg.removeEventListener("keydown", handleKeyDown);
-  }, [onSelectCell]);
+  }, [onSelectCell, visible, allControlCodes, focusPos, handleClick]);
 
   if (visible.length === 0) {
     return (
@@ -138,6 +178,8 @@ export function HeatmapGrid({
                     key={cellKey}
                     score={cs ? cs.score : -1}
                     total={cs ? cs.total : 0}
+                    passing={cs ? cs.passing : 0}
+                    failing={cs ? cs.failing : 0}
                     controlCode={code}
                     controlName={cs?.controlName ?? "Not assessed"}
                     x={LABEL_W + ci * (CELL_W + CELL_GAP)}
@@ -145,6 +187,7 @@ export function HeatmapGrid({
                     width={CELL_W}
                     height={CELL_H}
                     isSelected={selectedKey === cellKey}
+                    isFocused={focusPos?.row === ri && focusPos?.col === ci}
                     onClick={() => {
                       if (cs) handleClick(fw, code);
                     }}

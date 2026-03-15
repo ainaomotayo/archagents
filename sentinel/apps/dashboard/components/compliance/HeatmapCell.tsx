@@ -5,6 +5,8 @@ import { scoreToColor } from "./types";
 interface HeatmapCellProps {
   score: number;
   total: number;
+  passing: number;
+  failing: number;
   controlCode: string;
   controlName: string;
   x: number;
@@ -12,6 +14,7 @@ interface HeatmapCellProps {
   width: number;
   height: number;
   isSelected: boolean;
+  isFocused: boolean;
   onClick: () => void;
 }
 
@@ -26,6 +29,8 @@ const COLOR_MAP: Record<string, string> = {
 export function HeatmapCell({
   score,
   total,
+  passing,
+  failing,
   controlCode,
   controlName,
   x,
@@ -33,6 +38,7 @@ export function HeatmapCell({
   width,
   height,
   isSelected,
+  isFocused,
   onClick,
 }: HeatmapCellProps) {
   const color = score < 0 ? "gray" : scoreToColor(score);
@@ -72,7 +78,20 @@ export function HeatmapCell({
         stroke={isSelected ? "white" : "transparent"}
         strokeWidth={isSelected ? 2 : 0}
       />
-      <title>{`${controlCode}: ${controlName} — ${score < 0 ? "N/A" : `${Math.round(score * 100)}%`}`}</title>
+      {isFocused && (
+        <rect
+          x={x - 1}
+          y={y - 1}
+          width={width + 2}
+          height={height + 2}
+          rx={4}
+          fill="none"
+          stroke="#6366f1"
+          strokeWidth={2}
+          strokeDasharray="4 2"
+        />
+      )}
+      <title>{`${controlCode}: ${controlName} — ${score < 0 ? "N/A" : `${Math.round(score * 100)}%`}${score >= 0 ? ` (${passing} passing, ${failing} failing)` : ""}`}</title>
     </g>
   );
 }
