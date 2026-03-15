@@ -7,8 +7,10 @@
 
 import type {
   Certificate,
+  ComplianceTrendPoint,
   Finding,
   FindingCountByCategory,
+  FrameworkScore,
   OverviewStats,
   Project,
   Scan,
@@ -603,3 +605,97 @@ export const MOCK_WEBHOOKS: MockWebhook[] = [
     lastTriggered: null,
   },
 ];
+
+// ── Compliance Scores ────────────────────────────────────────────────
+
+export const MOCK_FRAMEWORK_SCORES: FrameworkScore[] = [
+  {
+    frameworkSlug: "soc2",
+    frameworkName: "SOC 2 Type II",
+    score: 0.82,
+    verdict: "partially_compliant",
+    controlScores: [
+      { controlCode: "CC1.1", controlName: "COSO Principle 1", score: 0.95, passing: 19, failing: 1, total: 20 },
+      { controlCode: "CC1.2", controlName: "COSO Principle 2", score: 0.88, passing: 15, failing: 2, total: 17 },
+      { controlCode: "CC2.1", controlName: "Information & Communication", score: 0.72, passing: 8, failing: 3, total: 11 },
+      { controlCode: "CC3.1", controlName: "Risk Assessment", score: 0.65, passing: 6, failing: 3, total: 9 },
+      { controlCode: "CC4.1", controlName: "Monitoring Activities", score: 0.90, passing: 18, failing: 2, total: 20 },
+      { controlCode: "CC5.1", controlName: "Control Activities", score: 0.78, passing: 14, failing: 4, total: 18 },
+      { controlCode: "CC6.1", controlName: "Logical Access Controls", score: 0.72, passing: 18, failing: 7, total: 25 },
+      { controlCode: "CC6.2", controlName: "Physical Access Controls", score: 0.85, passing: 11, failing: 2, total: 13 },
+      { controlCode: "CC6.3", controlName: "System Operations", score: 0.55, passing: 5, failing: 4, total: 9 },
+      { controlCode: "CC7.1", controlName: "Change Management", score: 0.92, passing: 22, failing: 2, total: 24 },
+      { controlCode: "CC7.2", controlName: "System Monitoring", score: 0.68, passing: 7, failing: 3, total: 10 },
+      { controlCode: "CC8.1", controlName: "Risk Mitigation", score: 0.97, passing: 30, failing: 1, total: 31 },
+    ],
+  },
+  {
+    frameworkSlug: "iso27001",
+    frameworkName: "ISO 27001:2022",
+    score: 0.76,
+    verdict: "needs_remediation",
+    controlScores: [
+      { controlCode: "A.5", controlName: "Information Security Policies", score: 0.90, passing: 9, failing: 1, total: 10 },
+      { controlCode: "A.6", controlName: "Organization of InfoSec", score: 0.80, passing: 12, failing: 3, total: 15 },
+      { controlCode: "A.7", controlName: "Human Resource Security", score: 0.50, passing: 3, failing: 3, total: 6 },
+      { controlCode: "A.8", controlName: "Asset Management", score: 0.72, passing: 8, failing: 3, total: 11 },
+      { controlCode: "A.9", controlName: "Access Control", score: 0.65, passing: 6, failing: 3, total: 9 },
+      { controlCode: "A.10", controlName: "Cryptography", score: 0.95, passing: 19, failing: 1, total: 20 },
+      { controlCode: "A.11", controlName: "Physical Security", score: 0.40, passing: 2, failing: 3, total: 5 },
+      { controlCode: "A.12", controlName: "Operations Security", score: 0.82, passing: 14, failing: 3, total: 17 },
+      { controlCode: "A.13", controlName: "Communications Security", score: 0.88, passing: 7, failing: 1, total: 8 },
+      { controlCode: "A.14", controlName: "System Acquisition", score: 0.70, passing: 7, failing: 3, total: 10 },
+    ],
+  },
+  {
+    frameworkSlug: "slsa",
+    frameworkName: "SLSA v1.0",
+    score: 0.91,
+    verdict: "compliant",
+    controlScores: [
+      { controlCode: "SL1", controlName: "Source - Version Controlled", score: 1.0, passing: 12, failing: 0, total: 12 },
+      { controlCode: "SL2", controlName: "Build - Scripted Build", score: 0.95, passing: 19, failing: 1, total: 20 },
+      { controlCode: "SL3", controlName: "Build - Build Service", score: 0.88, passing: 7, failing: 1, total: 8 },
+      { controlCode: "SL4", controlName: "Build - Provenance", score: 0.80, passing: 4, failing: 1, total: 5 },
+      { controlCode: "SL5", controlName: "Dependencies - Tracked", score: 0.92, passing: 11, failing: 1, total: 12 },
+      { controlCode: "SL6", controlName: "Dependencies - Scanned", score: 0.85, passing: 17, failing: 3, total: 20 },
+      { controlCode: "SL7", controlName: "Dependencies - Pinned", score: 1.0, passing: 8, failing: 0, total: 8 },
+      { controlCode: "SL8", controlName: "Artifacts - Signed", score: 0.90, passing: 9, failing: 1, total: 10 },
+    ],
+  },
+  {
+    frameworkSlug: "gdpr",
+    frameworkName: "GDPR",
+    score: 0.58,
+    verdict: "non_compliant",
+    controlScores: [
+      { controlCode: "Art.5", controlName: "Principles", score: 0.70, passing: 7, failing: 3, total: 10 },
+      { controlCode: "Art.6", controlName: "Lawfulness of Processing", score: 0.60, passing: 3, failing: 2, total: 5 },
+      { controlCode: "Art.25", controlName: "Data Protection by Design", score: 0.45, passing: 4, failing: 5, total: 9 },
+      { controlCode: "Art.30", controlName: "Records of Processing", score: 0.55, passing: 5, failing: 4, total: 9 },
+      { controlCode: "Art.32", controlName: "Security of Processing", score: 0.72, passing: 8, failing: 3, total: 11 },
+      { controlCode: "Art.33", controlName: "Breach Notification", score: 0.30, passing: 1, failing: 2, total: 3 },
+      { controlCode: "Art.35", controlName: "Data Protection Impact", score: 0.50, passing: 2, failing: 2, total: 4 },
+      { controlCode: "Art.37", controlName: "Data Protection Officer", score: 0.80, passing: 4, failing: 1, total: 5 },
+    ],
+  },
+];
+
+export const MOCK_COMPLIANCE_TRENDS: Record<string, ComplianceTrendPoint[]> = {
+  soc2: Array.from({ length: 30 }, (_, i) => ({
+    date: new Date(Date.now() - (29 - i) * 86400000).toISOString().split("T")[0],
+    score: 0.75 + Math.sin(i / 5) * 0.05 + i * 0.002,
+  })),
+  iso27001: Array.from({ length: 30 }, (_, i) => ({
+    date: new Date(Date.now() - (29 - i) * 86400000).toISOString().split("T")[0],
+    score: 0.70 + Math.sin(i / 4) * 0.04 + i * 0.002,
+  })),
+  slsa: Array.from({ length: 30 }, (_, i) => ({
+    date: new Date(Date.now() - (29 - i) * 86400000).toISOString().split("T")[0],
+    score: 0.85 + Math.sin(i / 6) * 0.03 + i * 0.002,
+  })),
+  gdpr: Array.from({ length: 30 }, (_, i) => ({
+    date: new Date(Date.now() - (29 - i) * 86400000).toISOString().split("T")[0],
+    score: 0.50 + Math.sin(i / 3) * 0.06 + i * 0.003,
+  })),
+};
