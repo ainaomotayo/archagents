@@ -1,38 +1,121 @@
 {
   "name": "sentinel-vscode",
   "displayName": "Sentinel Security",
-  "description": "Show Sentinel security findings inline in your editor",
-  "version": "0.1.0",
+  "description": "AI code governance — findings, gutter icons, compliance, and audit trails inline in VS Code",
+  "version": "0.2.0",
   "publisher": "sentinel",
+  "license": "MIT",
   "engines": { "vscode": "^1.85.0" },
   "categories": ["Linters"],
   "activationEvents": ["onStartupFinished"],
   "main": "./dist/extension.js",
+  "icon": "media/sentinel-logo.png",
   "contributes": {
     "commands": [
       { "command": "sentinel.configure", "title": "Sentinel: Configure API Token" },
       { "command": "sentinel.openDashboard", "title": "Sentinel: Open Dashboard" },
       { "command": "sentinel.triggerScan", "title": "Sentinel: Trigger Scan" },
-      { "command": "sentinel.refresh", "title": "Sentinel: Refresh Findings" }
+      { "command": "sentinel.refresh", "title": "Sentinel: Refresh Findings" },
+      { "command": "sentinel.suppress", "title": "Sentinel: Suppress Finding" },
+      { "command": "sentinel.showFindingDetail", "title": "Sentinel: Show Finding Detail" }
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "sentinel",
+          "title": "Sentinel Security",
+          "icon": "media/sentinel-activitybar.svg"
+        }
+      ]
+    },
+    "views": {
+      "sentinel": [
+        {
+          "id": "sentinelFindings",
+          "name": "Findings",
+          "icon": "media/sentinel-activitybar.svg"
+        }
+      ]
+    },
+    "viewsWelcome": [
+      {
+        "view": "sentinelFindings",
+        "contents": "No findings yet.\n[Trigger Scan](command:sentinel.triggerScan)\n[Configure API Token](command:sentinel.configure)"
+      }
     ],
     "configuration": {
       "title": "Sentinel",
       "properties": {
         "sentinel.apiUrl": { "type": "string", "default": "http://localhost:8080", "description": "Sentinel API URL" },
         "sentinel.orgId": { "type": "string", "default": "default", "description": "Organization ID" },
-        "sentinel.projectId": { "type": "string", "default": "", "description": "Project ID" }
+        "sentinel.projectId": { "type": "string", "default": "", "description": "Project ID for scans" },
+        "sentinel.enableGutterIcons": { "type": "boolean", "default": true, "description": "Show severity icons in the gutter" },
+        "sentinel.autoScanOnSave": { "type": "boolean", "default": false, "description": "Trigger scan on file save (debounced)" },
+        "sentinel.autoScanDebounceMs": { "type": "number", "default": 2000, "description": "Debounce delay for auto-scan on save (ms)" },
+        "sentinel.severityThreshold": {
+          "type": "string",
+          "default": "info",
+          "enum": ["critical", "high", "medium", "low", "info"],
+          "description": "Minimum severity to show in the TreeView and gutter"
+        }
       }
-    }
+    },
+    "walkthroughs": [
+      {
+        "id": "sentinel.gettingStarted",
+        "title": "Getting Started with Sentinel Security",
+        "description": "Set up AI code governance in your editor",
+        "steps": [
+          {
+            "id": "sentinel.gettingStarted.configure",
+            "title": "Configure API Connection",
+            "description": "Enter your Sentinel API token to connect.\n[Configure Token](command:sentinel.configure)",
+            "media": { "svg": "media/walkthrough/configure.svg" },
+            "completionEvents": ["onContext:sentinel.configured"]
+          },
+          {
+            "id": "sentinel.gettingStarted.project",
+            "title": "Connect to Your Project",
+            "description": "Set your Project ID in settings.\n[Open Settings](command:workbench.action.openSettings?%5B%22sentinel.projectId%22%5D)",
+            "media": { "svg": "media/walkthrough/scan.svg" }
+          },
+          {
+            "id": "sentinel.gettingStarted.scan",
+            "title": "Trigger Your First Scan",
+            "description": "Run a scan to detect findings.\n[Trigger Scan](command:sentinel.triggerScan)",
+            "media": { "svg": "media/walkthrough/scan.svg" }
+          },
+          {
+            "id": "sentinel.gettingStarted.explore",
+            "title": "Explore Findings",
+            "description": "Open the Sentinel panel to browse findings by severity.\n[Open Findings](command:sentinelFindings.focus)",
+            "media": { "svg": "media/walkthrough/findings.svg" }
+          },
+          {
+            "id": "sentinel.gettingStarted.dashboard",
+            "title": "Review in Dashboard",
+            "description": "Open the web dashboard for full compliance reports.\n[Open Dashboard](command:sentinel.openDashboard)",
+            "media": { "svg": "media/walkthrough/configure.svg" }
+          }
+        ]
+      }
+    ]
   },
   "scripts": {
-    "build": "echo 'VS Code extension — build via vsce package'",
-    "test": "echo 'no tests yet'"
+    "build": "node esbuild.config.mjs",
+    "watch": "node esbuild.config.mjs --watch",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "package": "vsce package --no-dependencies"
   },
   "dependencies": {
     "vscode-languageclient": "^9.0.1"
   },
   "devDependencies": {
     "@types/vscode": "^1.85.0",
-    "typescript": "^5.7"
+    "@vscode/vsce": "^3.0.0",
+    "esbuild": "^0.24.0",
+    "typescript": "^5.7",
+    "vitest": "^3.2.0"
   }
 }
