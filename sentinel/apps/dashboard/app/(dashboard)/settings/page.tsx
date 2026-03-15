@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useSession } from "next-auth/react";
 import { PageHeader } from "@/components/page-header";
-import { IconGlobe, IconUser, IconShield, IconActivity, IconBell, IconPlus, IconWrench } from "@/components/icons";
+import { IconGlobe, IconUser, IconShield, IconActivity, IconBell, IconPlus, IconWrench, IconGithub } from "@/components/icons";
 
 /* ─── Team Members Panel ─── */
 function TeamMembersPanel() {
@@ -354,18 +354,26 @@ export default function SettingsPage() {
 
       <div className="grid gap-3 sm:grid-cols-2">
         <LinkSectionCard
+          title="VCS Providers"
+          description="Connect GitHub, GitLab, Bitbucket, or Azure DevOps repositories."
+          href="/settings/vcs"
+          Icon={IconGithub}
+          animationDelay="0s"
+        />
+
+        <LinkSectionCard
           title="Webhooks"
           description="Configure webhook endpoints for scan events and alerts."
           href="/settings/webhooks"
           Icon={IconGlobe}
-          animationDelay="0s"
+          animationDelay="0.05s"
         />
 
         <SectionCard
           title="Team Members"
           description="Manage users, roles, and access permissions."
           Icon={IconUser}
-          animationDelay="0.05s"
+          animationDelay="0.1s"
         >
           <TeamMembersPanel />
         </SectionCard>
@@ -374,7 +382,7 @@ export default function SettingsPage() {
           title="API Tokens"
           description="Create and manage API tokens for CI/CD integration."
           Icon={IconShield}
-          animationDelay="0.1s"
+          animationDelay="0.15s"
         >
           <APITokensPanel />
         </SectionCard>
@@ -383,7 +391,7 @@ export default function SettingsPage() {
           title="Notifications"
           description="Configure email and Slack notification preferences."
           Icon={IconBell}
-          animationDelay="0.15s"
+          animationDelay="0.2s"
         >
           <NotificationsPanel />
         </SectionCard>
@@ -393,7 +401,7 @@ export default function SettingsPage() {
           description="Configure OIDC, SAML, and other SSO providers for your organization."
           href="/settings/sso"
           Icon={IconShield}
-          animationDelay="0.2s"
+          animationDelay="0.25s"
         />
 
         <LinkSectionCard
@@ -401,7 +409,7 @@ export default function SettingsPage() {
           description="Configure remediation workflow stages and pipeline behavior."
           href="/settings/workflow"
           Icon={IconWrench}
-          animationDelay="0.25s"
+          animationDelay="0.3s"
         />
 
         <LinkSectionCard
@@ -409,7 +417,7 @@ export default function SettingsPage() {
           description="Data retention, export settings, and compliance configuration."
           href="/audit"
           Icon={IconActivity}
-          animationDelay="0.3s"
+          animationDelay="0.35s"
         />
       </div>
     </div>
