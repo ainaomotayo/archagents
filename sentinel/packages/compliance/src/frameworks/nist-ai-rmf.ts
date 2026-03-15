@@ -46,6 +46,7 @@ export const NIST_AI_RMF: FrameworkDefinition = {
     { code: "MP-1.4", name: "Usage Context Documented", weight: 1.5, matchRules: [{ agent: "quality", category: "quality/ai-documentation*" }], requirementType: "hybrid", parentCode: "MP-1" },
     { code: "MP-1.5", name: "Assumptions and Limitations Documented", weight: 2.0, matchRules: [{ agent: "quality", category: "quality/ai-documentation*" }], requirementType: "hybrid", parentCode: "MP-1" },
     { code: "MP-1.6", name: "Scientific Integrity and Reproducibility", weight: 2.0, matchRules: [], requirementType: "attestation", parentCode: "MP-1" },
+    { code: "MP-1.7", name: "Formal Methods for AI Safety Properties", weight: 2.0, matchRules: [{ agent: "formal-verification", category: "formal-verification/*" }], requirementType: "hybrid", parentCode: "MP-1" },
 
     { code: "MP-2", name: "AI Categorization", weight: 2.0, matchRules: [], requirementType: "attestation", parentCode: "MP" },
     { code: "MP-2.1", name: "AI System Categorized by Risk Level", weight: 2.0, matchRules: [{ severity: ["critical", "high", "medium"] }], requirementType: "automated", parentCode: "MP-2" },

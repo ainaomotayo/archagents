@@ -24,5 +24,6 @@ export const SOC2: FrameworkDefinition = {
     { code: "CC6.3", name: "Registration and Authorization", weight: 2.0, matchRules: [{ category: "vulnerability/auth*" }] },
     { code: "CC7.3", name: "Vulnerability Remediation", weight: 3.0, matchRules: [{ category: "vulnerability/*", severity: ["critical", "high", "medium"] }] },
     { code: "CC7.4", name: "Incident Response", weight: 2.0, matchRules: [{ severity: ["critical"] }] },
+    { code: "CC5.3", name: "Formal Verification of Critical Logic", weight: 2.0, matchRules: [{ agent: "formal-verification", severity: ["critical", "high"] }] },
   ],
 };
