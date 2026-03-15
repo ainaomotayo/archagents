@@ -31,6 +31,7 @@ declare module "next-auth" {
 declare module "next-auth/jwt" {
   interface JWT {
     role?: Role;
+    sessionId?: string;
   }
 }
 
@@ -293,12 +294,39 @@ export const authOptions: AuthOptions = {
 
     async jwt({ token, profile, account }) {
       if (profile) {
-        // GitHub: profile.login, GitLab: profile.username
+        // First sign-in: resolve role and create server session
         const username =
           (profile as any).login ?? (profile as any).username;
-        // Also try email for SAML/OIDC users
         const identifier = username ?? (profile as any).email;
         token.role = resolveRole(identifier);
+
+        // Create server-side session for lifecycle enforcement
+        try {
+          const { createServerSession } = await import("./auth-session.js");
+          const sessionId = await createServerSession({
+            userId: identifier ?? "unknown",
+            orgId: (account as any)?.orgId ?? "default",
+            provider: account?.provider ?? "unknown",
+            ipAddress: getCurrentRequestIp(),
+          });
+          if (sessionId) {
+            token.sessionId = sessionId;
+          }
+        } catch { /* fail-open */ }
+      } else if (token.sessionId) {
+        // Token rotation: validate server session (idle timeout, revocation, expiry)
+        try {
+          const { validateServerSession } = await import("./auth-session.js");
+          const validation = await validateServerSession(token.sessionId);
+          if (!validation.valid) {
+            logAuthEvent("auth.session.invalidated", {
+              sessionId: token.sessionId,
+              reason: validation.reason,
+            });
+            // Return empty token to force re-authentication
+            return {} as any;
+          }
+        } catch { /* fail-open: keep token valid on API error */ }
       }
       return token;
     },
