@@ -344,7 +344,7 @@ logger.info("Consuming sentinel.results...");
 // ---------------------------------------------------------------------------
 
 const healthPort = parseInt(process.env.VCS_BRIDGE_PORT ?? "9093", 10);
-const healthServer = http.createServer((req, res) => {
+const healthServer = http.createServer(async (req, res) => {
   if (req.url === "/health") {
     res.writeHead(200, { "Content-Type": "application/json" });
     res.end(
@@ -354,6 +354,16 @@ const healthServer = http.createServer((req, res) => {
         providers: registry.list(),
       }),
     );
+  } else if (req.url === "/metrics") {
+    try {
+      const { workerRegistry } = await import("./worker-metrics.js");
+      const metrics = await workerRegistry.metrics();
+      res.writeHead(200, { "Content-Type": workerRegistry.contentType });
+      res.end(metrics);
+    } catch {
+      res.writeHead(500);
+      res.end();
+    }
   } else {
     res.writeHead(404);
     res.end();

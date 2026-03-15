@@ -1,10 +1,10 @@
-import http from "node:http";
 import { createHash } from "node:crypto";
 import { Redis } from "ioredis";
 import { EventBus, withRetry } from "@sentinel/events";
 import { getDb, disconnectDb } from "@sentinel/db";
 import { createLogger, initTracing, shutdownTracing } from "@sentinel/telemetry";
 import { isArchiveEnabled, archiveToS3, getArchiveConfig } from "@sentinel/security";
+import { createWorkerHealthServer } from "./worker-metrics.js";
 import {
   computeEvidenceHash,
   generateNistProfilePdf,
@@ -187,18 +187,9 @@ async function handleEvidenceEvent(_id: string, data: Record<string, unknown>) {
   logger.info({ orgId, type }, "Evidence record appended");
 }
 
-// Health server
+// Health server (also serves /metrics for Prometheus)
 const healthPort = parseInt(process.env.REPORT_WORKER_PORT ?? "9094", 10);
-const healthServer = http.createServer((req, res) => {
-  if (req.url === "/health") {
-    res.writeHead(200, { "Content-Type": "application/json" });
-    res.end(JSON.stringify({ status: "ok", uptime: process.uptime() }));
-  } else {
-    res.writeHead(404);
-    res.end();
-  }
-});
-healthServer.listen(healthPort);
+const healthServer = createWorkerHealthServer(healthPort);
 logger.info({ port: healthPort }, "Report worker health server listening");
 
 // Graceful shutdown
