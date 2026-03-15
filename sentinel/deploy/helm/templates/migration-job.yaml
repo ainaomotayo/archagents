@@ -1,0 +1,39 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "sentinel.fullname" . }}-migration
+  labels:
+    {{- include "sentinel.labels" . | nindent 4 }}
+    app.kubernetes.io/component: migration
+  annotations:
+    "helm.sh/hook": pre-upgrade,pre-install
+    "helm.sh/hook-weight": "-5"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: {{ .Values.migration.backoffLimit }}
+  activeDeadlineSeconds: {{ .Values.migration.activeDeadlineSeconds }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/component: migration
+    spec:
+      restartPolicy: Never
+      securityContext:
+        {{- include "sentinel.podSecurityContext" . | nindent 8 }}
+      containers:
+        - name: migrate
+          image: {{ include "sentinel.image" (dict "global" .Values.global "repository" .Values.migration.image.repository "tag" (.Values.migration.image.tag | default .Chart.AppVersion)) }}
+          command:
+            {{- toYaml .Values.migration.command | nindent 12 }}
+          env:
+            {{- include "sentinel.commonEnv" . | nindent 12 }}
+          resources:
+            {{- toYaml .Values.migration.resources | nindent 12 }}
+          securityContext:
+            {{- include "sentinel.containerSecurityContext" . | nindent 12 }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
