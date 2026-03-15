@@ -7,8 +7,10 @@
 
 import type {
   Certificate,
+  ComplianceTrendPoint,
   Finding,
   FindingCountByCategory,
+  FrameworkScore,
   OverviewStats,
   Project,
   Scan,
@@ -17,8 +19,10 @@ import type {
 import {
   MOCK_AUDIT_LOG,
   MOCK_CERTIFICATES,
+  MOCK_COMPLIANCE_TRENDS,
   MOCK_FINDING_COUNTS_BY_CATEGORY,
   MOCK_FINDINGS,
+  MOCK_FRAMEWORK_SCORES,
   MOCK_OVERVIEW_STATS,
   MOCK_POLICIES,
   MOCK_PROJECTS,
@@ -283,4 +287,44 @@ export async function getAuditLog(limit = 50) {
     const data = await apiGet<{ events: any[] }>("/v1/audit", { limit: String(limit) }, headers);
     return data.events ?? [];
   }, MOCK_AUDIT_LOG);
+}
+
+// ── Compliance ────────────────────────────────────────────────────────
+
+export async function getComplianceScores(): Promise<FrameworkScore[]> {
+  return tryApi(async (headers) => {
+    const { apiGet } = await import("./api-client");
+    const data = await apiGet<{ frameworks: any[] }>("/v1/compliance/scores", undefined, headers);
+    return (data.frameworks ?? []).map((fw: any) => ({
+      frameworkSlug: fw.frameworkSlug,
+      frameworkName: fw.frameworkName ?? fw.frameworkSlug,
+      score: fw.score,
+      verdict: fw.verdict,
+      controlScores: (fw.controlScores ?? []).map((cs: any) => ({
+        controlCode: cs.controlCode,
+        controlName: cs.controlName ?? cs.controlCode,
+        score: cs.score,
+        passing: cs.passing,
+        failing: cs.failing,
+        total: cs.total,
+      })),
+    }));
+  }, MOCK_FRAMEWORK_SCORES);
+}
+
+export async function getComplianceTrends(
+  frameworkSlug: string,
+): Promise<ComplianceTrendPoint[]> {
+  return tryApi(async (headers) => {
+    const { apiGet } = await import("./api-client");
+    const data = await apiGet<{ trends: any[] }>(
+      `/v1/compliance/trends/${frameworkSlug}`,
+      undefined,
+      headers,
+    );
+    return (data.trends ?? []).map((t: any) => ({
+      date: t.date,
+      score: t.score,
+    }));
+  }, MOCK_COMPLIANCE_TRENDS[frameworkSlug] ?? []);
 }
