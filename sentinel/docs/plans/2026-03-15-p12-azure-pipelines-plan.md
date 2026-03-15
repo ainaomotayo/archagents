@@ -1009,4 +1009,747 @@ Expected: Three files — `github-actions.yml`, `gitlab-ci.yml`, `azure-pipeline
 
 Run: `ls -la /home/ainaomotayo/archagents/sentinel/apps/cli/src/ci-providers/`
 
-Expected: 8 files — `types.ts`, `azure-devops.ts`, `azure-devops.test.ts`, `github.ts`, `github.test.ts`, `gitlab.ts`, `gitlab.test.ts`, `generic.ts`, `detect.ts`, `detect.test.ts`
+Expected: 10 files — `types.ts`, `azure-devops.ts`, `azure-devops.test.ts`, `github.ts`, `github.test.ts`, `gitlab.ts`, `gitlab.test.ts`, `generic.ts`, `detect.ts`, `detect.test.ts`
+
+---
+
+## Phase 2: Extended Scope — Dashboard, Extension, Service Hook Provisioning
+
+---
+
+### Task 11: VCS Installations API Routes
+
+**Files:**
+- Create: `sentinel/apps/api/src/routes/vcs-installations.ts`
+- Modify: `sentinel/apps/api/src/server.ts` (register route)
+
+**Step 1: Create the VCS installations CRUD route file**
+
+```typescript
+// sentinel/apps/api/src/routes/vcs-installations.ts
+import type { FastifyInstance } from "fastify";
+import type { PrismaClient } from "@sentinel/db";
+
+interface VcsInstallationsOpts {
+  db: PrismaClient;
+}
+
+export function registerVcsInstallationRoutes(
+  app: FastifyInstance,
+  opts: VcsInstallationsOpts,
+): void {
+  // List installations for current org
+  app.get("/v1/vcs-installations", async (request, reply) => {
+    const orgId = (request as any).orgId;
+    if (!orgId) return reply.code(401).send({ error: "Unauthorized" });
+
+    const installations = await opts.db.vcsInstallation.findMany({
+      where: { orgId },
+      include: {
+        githubExt: true,
+        gitlabExt: true,
+        bitbucketExt: true,
+        azureDevOpsExt: true,
+      },
+      orderBy: { createdAt: "desc" },
+    });
+
+    reply.send({ installations });
+  });
+
+  // Create new installation
+  app.post("/v1/vcs-installations", async (request, reply) => {
+    const orgId = (request as any).orgId;
+    if (!orgId) return reply.code(401).send({ error: "Unauthorized" });
+
+    const body = request.body as any;
+    const { provider, installationId, owner, webhookSecret, ...providerConfig } = body;
+
+    if (!provider || !installationId || !owner) {
+      return reply.code(400).send({ error: "provider, installationId, and owner are required" });
+    }
+
+    const installation = await opts.db.vcsInstallation.create({
+      data: {
+        orgId,
+        provider,
+        installationId,
+        owner,
+        webhookSecret: webhookSecret ?? "",
+        active: true,
+        metadata: {},
+        ...(provider === "github" && providerConfig.appId
+          ? {
+              githubExt: {
+                create: {
+                  appId: providerConfig.appId,
+                  numericInstallId: parseInt(providerConfig.numericInstallId ?? "0", 10),
+                  privateKey: providerConfig.privateKey ?? "",
+                },
+              },
+            }
+          : {}),
+        ...(provider === "gitlab" && providerConfig.accessToken
+          ? {
+              gitlabExt: {
+                create: {
+                  gitlabUrl: providerConfig.gitlabUrl ?? "https://gitlab.com",
+                  accessToken: providerConfig.accessToken,
+                  tokenType: providerConfig.tokenType ?? "personal",
+                },
+              },
+            }
+          : {}),
+        ...(provider === "bitbucket" && providerConfig.clientKey
+          ? {
+              bitbucketExt: {
+                create: {
+                  workspace: providerConfig.workspace ?? "",
+                  clientKey: providerConfig.clientKey,
+                  sharedSecret: providerConfig.sharedSecret ?? "",
+                },
+              },
+            }
+          : {}),
+        ...(provider === "azure_devops" && providerConfig.organizationUrl
+          ? {
+              azureDevOpsExt: {
+                create: {
+                  organizationUrl: providerConfig.organizationUrl,
+                  projectName: providerConfig.projectName ?? "",
+                  pat: providerConfig.pat ?? "",
+                },
+              },
+            }
+          : {}),
+      },
+      include: {
+        githubExt: true,
+        gitlabExt: true,
+        bitbucketExt: true,
+        azureDevOpsExt: true,
+      },
+    });
+
+    reply.code(201).send(installation);
+  });
+
+  // Update installation
+  app.put<{ Params: { id: string } }>("/v1/vcs-installations/:id", async (request, reply) => {
+    const orgId = (request as any).orgId;
+    if (!orgId) return reply.code(401).send({ error: "Unauthorized" });
+
+    const { id } = request.params;
+    const body = request.body as any;
+
+    const existing = await opts.db.vcsInstallation.findFirst({
+      where: { id, orgId },
+    });
+    if (!existing) return reply.code(404).send({ error: "Not found" });
+
+    const updated = await opts.db.vcsInstallation.update({
+      where: { id },
+      data: {
+        active: body.active ?? existing.active,
+        webhookSecret: body.webhookSecret ?? existing.webhookSecret,
+        owner: body.owner ?? existing.owner,
+      },
+    });
+
+    reply.send(updated);
+  });
+
+  // Delete installation
+  app.delete<{ Params: { id: string } }>("/v1/vcs-installations/:id", async (request, reply) => {
+    const orgId = (request as any).orgId;
+    if (!orgId) return reply.code(401).send({ error: "Unauthorized" });
+
+    const { id } = request.params;
+    const existing = await opts.db.vcsInstallation.findFirst({
+      where: { id, orgId },
+    });
+    if (!existing) return reply.code(404).send({ error: "Not found" });
+
+    await opts.db.vcsInstallation.delete({ where: { id } });
+    reply.code(204).send();
+  });
+
+  // Test connection
+  app.post<{ Params: { id: string } }>("/v1/vcs-installations/:id/test", async (request, reply) => {
+    const orgId = (request as any).orgId;
+    if (!orgId) return reply.code(401).send({ error: "Unauthorized" });
+
+    const { id } = request.params;
+    const installation = await opts.db.vcsInstallation.findFirst({
+      where: { id, orgId },
+      include: { azureDevOpsExt: true, githubExt: true, gitlabExt: true, bitbucketExt: true },
+    });
+    if (!installation) return reply.code(404).send({ error: "Not found" });
+
+    // Basic connectivity test — returns success if the installation record exists
+    // In production, this would call the provider API to verify credentials
+    reply.send({ success: true, provider: installation.provider, owner: installation.owner });
+  });
+}
+```
+
+**Step 2: Register the route in server.ts**
+
+Add import and registration alongside existing route registrations in `apps/api/src/server.ts`.
+
+**Step 3: Commit**
+
+```bash
+git add sentinel/apps/api/src/routes/vcs-installations.ts sentinel/apps/api/src/server.ts
+git commit -m "feat(api): add VCS installations CRUD API routes"
+```
+
+---
+
+### Task 12: Dashboard VCS Settings Page
+
+**Files:**
+- Create: `sentinel/apps/dashboard/app/(dashboard)/settings/vcs/page.tsx`
+- Modify: `sentinel/apps/dashboard/app/(dashboard)/settings/page.tsx` (add VCS nav link)
+- Modify: `sentinel/apps/dashboard/lib/mock-data.ts` (add VCS mock data)
+
+**Step 1: Add mock data for VCS installations**
+
+Add to `sentinel/apps/dashboard/lib/mock-data.ts`:
+
+```typescript
+export const MOCK_VCS_INSTALLATIONS = [
+  {
+    id: "vcs-1",
+    provider: "github",
+    installationId: "12345678",
+    owner: "acme-corp",
+    active: true,
+    webhookSecret: "••••••••",
+    createdAt: "2026-02-15T10:00:00Z",
+  },
+  {
+    id: "vcs-2",
+    provider: "azure_devops",
+    installationId: "repo-guid-1",
+    owner: "acme-project",
+    active: true,
+    webhookSecret: "••••••••",
+    createdAt: "2026-03-01T14:30:00Z",
+    azureDevOpsExt: {
+      organizationUrl: "https://dev.azure.com/acme-corp",
+      projectName: "sentinel-demo",
+    },
+  },
+];
+```
+
+**Step 2: Create the VCS settings page**
+
+Create `sentinel/apps/dashboard/app/(dashboard)/settings/vcs/page.tsx` following the webhooks page pattern:
+- PageHeader with "Add VCS Provider" action button
+- Provider selection dropdown (GitHub, GitLab, Bitbucket, Azure DevOps) with dynamic form fields
+- Card-based list of existing installations with provider icon, owner, status toggle, delete
+- localStorage persistence for mock mode
+- Feedback banners for success/error states
+
+The page should use the exact same CSS classes from the webhooks page (`card-shine`, `animate-fade-up`, `rounded-xl border border-border bg-surface-1`, etc.) and import from `@/components/page-header` and `@/components/icons`.
+
+**Step 3: Add VCS link to settings navigation**
+
+In the main settings page, add a card/link for "VCS Providers" alongside existing cards for SSO, Webhooks, etc.
+
+**Step 4: Commit**
+
+```bash
+git add sentinel/apps/dashboard/app/(dashboard)/settings/vcs/page.tsx sentinel/apps/dashboard/lib/mock-data.ts sentinel/apps/dashboard/app/(dashboard)/settings/page.tsx
+git commit -m "feat(dashboard): add VCS provider configuration settings page"
+```
+
+---
+
+### Task 13: Service Hook Auto-Provisioning API
+
+**Files:**
+- Create: `sentinel/apps/api/src/vcs/webhook-provisioner.ts`
+- Modify: `sentinel/apps/api/src/routes/vcs-installations.ts` (add provision endpoint)
+
+**Step 1: Create the webhook provisioner module**
+
+```typescript
+// sentinel/apps/api/src/vcs/webhook-provisioner.ts
+
+export interface ProvisionResult {
+  success: boolean;
+  hookIds: string[];
+  errors: string[];
+}
+
+export interface WebhookInfo {
+  id: string;
+  eventType: string;
+  url: string;
+  active: boolean;
+}
+
+interface AzureDevOpsConfig {
+  organizationUrl: string;
+  projectName: string;
+  pat: string;
+}
+
+export async function provisionAzureDevOpsHooks(
+  config: AzureDevOpsConfig,
+  callbackUrl: string,
+): Promise<ProvisionResult> {
+  const authHeader = `Basic ${Buffer.from(`:${config.pat}`).toString("base64")}`;
+  const baseUrl = `${config.organizationUrl}/_apis/hooks/subscriptions?api-version=7.0`;
+
+  const eventTypes = [
+    "git.push",
+    "git.pullrequest.created",
+    "git.pullrequest.updated",
+  ];
+
+  const hookIds: string[] = [];
+  const errors: string[] = [];
+
+  for (const eventType of eventTypes) {
+    try {
+      const resp = await fetch(baseUrl, {
+        method: "POST",
+        headers: {
+          Authorization: authHeader,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          publisherId: "tfs",
+          eventType,
+          consumerId: "webHooks",
+          consumerActionId: "httpRequest",
+          publisherInputs: {
+            projectId: config.projectName,
+            repository: "",
+          },
+          consumerInputs: {
+            url: callbackUrl,
+          },
+        }),
+      });
+
+      if (!resp.ok) {
+        const text = await resp.text();
+        errors.push(`${eventType}: ${resp.status} ${text}`);
+        continue;
+      }
+
+      const data = (await resp.json()) as { id: string };
+      hookIds.push(data.id);
+    } catch (err: any) {
+      errors.push(`${eventType}: ${err.message}`);
+    }
+  }
+
+  return {
+    success: errors.length === 0,
+    hookIds,
+    errors,
+  };
+}
+
+export async function listAzureDevOpsHooks(
+  config: AzureDevOpsConfig,
+): Promise<WebhookInfo[]> {
+  const authHeader = `Basic ${Buffer.from(`:${config.pat}`).toString("base64")}`;
+  const url = `${config.organizationUrl}/_apis/hooks/subscriptions?api-version=7.0`;
+
+  const resp = await fetch(url, {
+    headers: { Authorization: authHeader },
+  });
+
+  if (!resp.ok) return [];
+
+  const data = (await resp.json()) as { value?: Array<any> };
+  return (data.value ?? [])
+    .filter((s: any) => s.consumerId === "webHooks")
+    .map((s: any) => ({
+      id: s.id,
+      eventType: s.eventType,
+      url: s.consumerInputs?.url ?? "",
+      active: s.status === "enabled",
+    }));
+}
+```
+
+**Step 2: Add provision endpoint to vcs-installations route**
+
+Add to the existing `registerVcsInstallationRoutes` function:
+
+```typescript
+  // Provision webhooks on the VCS provider
+  app.post<{ Params: { id: string } }>(
+    "/v1/vcs-installations/:id/provision-webhooks",
+    async (request, reply) => {
+      const orgId = (request as any).orgId;
+      if (!orgId) return reply.code(401).send({ error: "Unauthorized" });
+
+      const { id } = request.params;
+      const body = request.body as any;
+      const callbackUrl = body.callbackUrl as string;
+      if (!callbackUrl) {
+        return reply.code(400).send({ error: "callbackUrl is required" });
+      }
+
+      const installation = await opts.db.vcsInstallation.findFirst({
+        where: { id, orgId },
+        include: { azureDevOpsExt: true },
+      });
+      if (!installation) return reply.code(404).send({ error: "Not found" });
+
+      if (installation.provider === "azure_devops" && installation.azureDevOpsExt) {
+        const { provisionAzureDevOpsHooks } = await import("../vcs/webhook-provisioner.js");
+        const result = await provisionAzureDevOpsHooks(
+          {
+            organizationUrl: installation.azureDevOpsExt.organizationUrl,
+            projectName: installation.azureDevOpsExt.projectName,
+            pat: installation.azureDevOpsExt.pat,
+          },
+          callbackUrl,
+        );
+        return reply.send(result);
+      }
+
+      reply.code(400).send({ error: `Webhook provisioning not yet supported for ${installation.provider}` });
+    },
+  );
+```
+
+**Step 3: Commit**
+
+```bash
+git add sentinel/apps/api/src/vcs/webhook-provisioner.ts sentinel/apps/api/src/routes/vcs-installations.ts
+git commit -m "feat(api): add service hook auto-provisioning for Azure DevOps"
+```
+
+---
+
+### Task 14: Azure DevOps Marketplace Extension — Manifest & Task Definition
+
+**Files:**
+- Create: `sentinel/extensions/azure-devops/vss-extension.json`
+- Create: `sentinel/extensions/azure-devops/sentinel-scan/task.json`
+- Create: `sentinel/extensions/azure-devops/overview.md`
+- Create: `sentinel/extensions/azure-devops/package.json`
+
+**Step 1: Create the extension manifest**
+
+```json
+// sentinel/extensions/azure-devops/vss-extension.json
+{
+  "$schema": "http://json.schemastore.org/vss-extension",
+  "manifestVersion": 1,
+  "id": "sentinel-security-scan",
+  "version": "0.1.0",
+  "name": "SENTINEL Security Scan",
+  "description": "AI-powered code governance and compliance scanning for Azure Pipelines.",
+  "publisher": "sentinel-security",
+  "categories": ["Azure Pipelines"],
+  "targets": [
+    { "id": "Microsoft.VisualStudio.Services" }
+  ],
+  "icons": {
+    "default": "images/icon.png"
+  },
+  "content": {
+    "details": { "path": "overview.md" }
+  },
+  "files": [
+    { "path": "sentinel-scan" }
+  ],
+  "contributions": [
+    {
+      "id": "sentinel-scan-task",
+      "type": "ms.vss-distributed-task.task",
+      "targets": ["ms.vss-distributed-task.tasks"],
+      "properties": {
+        "name": "sentinel-scan"
+      }
+    }
+  ]
+}
+```
+
+**Step 2: Create the task definition**
+
+```json
+// sentinel/extensions/azure-devops/sentinel-scan/task.json
+{
+  "$schema": "https://raw.githubusercontent.com/Microsoft/azure-pipelines-task-lib/master/tasks.schema.json",
+  "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "name": "SentinelScan",
+  "friendlyName": "SENTINEL Security Scan",
+  "description": "Run SENTINEL AI-powered security and compliance scan on your code changes.",
+  "helpMarkDown": "[Learn more](https://sentinel.archagents.dev/docs/azure-devops)",
+  "category": "Utility",
+  "author": "SENTINEL",
+  "version": { "Major": 1, "Minor": 0, "Patch": 0 },
+  "instanceNameFormat": "SENTINEL Scan",
+  "inputs": [
+    {
+      "name": "apiUrl",
+      "type": "string",
+      "label": "SENTINEL API URL",
+      "required": true,
+      "helpMarkDown": "The URL of your SENTINEL API instance."
+    },
+    {
+      "name": "apiKey",
+      "type": "string",
+      "label": "API Key",
+      "required": true,
+      "helpMarkDown": "Your SENTINEL API key. Use a secret variable."
+    },
+    {
+      "name": "secret",
+      "type": "string",
+      "label": "HMAC Secret",
+      "required": true,
+      "helpMarkDown": "Your SENTINEL HMAC shared secret. Use a secret variable."
+    },
+    {
+      "name": "timeout",
+      "type": "string",
+      "label": "Timeout (seconds)",
+      "required": false,
+      "defaultValue": "120",
+      "helpMarkDown": "Maximum time to wait for scan results."
+    },
+    {
+      "name": "outputFormat",
+      "type": "pickList",
+      "label": "Output Format",
+      "required": false,
+      "defaultValue": "summary",
+      "options": {
+        "summary": "Summary",
+        "json": "JSON",
+        "sarif": "SARIF"
+      },
+      "helpMarkDown": "Format for scan results output."
+    },
+    {
+      "name": "failOnFindings",
+      "type": "boolean",
+      "label": "Fail on Findings",
+      "required": false,
+      "defaultValue": "true",
+      "helpMarkDown": "Fail the task if security findings are detected."
+    }
+  ],
+  "execution": {
+    "Node16": {
+      "target": "dist/index.js"
+    }
+  }
+}
+```
+
+**Step 3: Create the overview and package.json**
+
+`overview.md` — Marketplace listing with features, screenshots, setup instructions.
+
+`package.json` — Build scripts: `tsc` to compile `index.ts`, `tfx extension create` to package.
+
+**Step 4: Commit**
+
+```bash
+git add sentinel/extensions/azure-devops/
+git commit -m "feat(extensions): add Azure DevOps marketplace extension manifest and task definition"
+```
+
+---
+
+### Task 15: Azure DevOps Extension — Task Runner Implementation
+
+**Files:**
+- Create: `sentinel/extensions/azure-devops/sentinel-scan/index.ts`
+- Create: `sentinel/extensions/azure-devops/sentinel-scan/package.json`
+- Create: `sentinel/extensions/azure-devops/sentinel-scan/tsconfig.json`
+
+**Step 1: Create the task runner**
+
+```typescript
+// sentinel/extensions/azure-devops/sentinel-scan/index.ts
+import * as tl from "azure-pipelines-task-lib/task";
+import { execSync } from "child_process";
+
+async function run(): Promise<void> {
+  try {
+    const apiUrl = tl.getInput("apiUrl", true)!;
+    const apiKey = tl.getInput("apiKey", true)!;
+    const secret = tl.getInput("secret", true)!;
+    const timeout = tl.getInput("timeout", false) ?? "120";
+    const outputFormat = tl.getInput("outputFormat", false) ?? "summary";
+    const failOnFindings = tl.getBoolInput("failOnFindings", false);
+
+    // Install CLI
+    tl.debug("Installing @sentinel/cli...");
+    execSync("npm install -g @sentinel/cli", { stdio: "inherit" });
+
+    // Build the command
+    const formatFlag =
+      outputFormat === "json" ? "--json" :
+      outputFormat === "sarif" ? "--sarif" : "";
+    const cmd = `sentinel ci --api-url ${apiUrl} --timeout ${timeout} ${formatFlag}`.trim();
+
+    // Capture diff
+    let diff: string;
+    const prId = tl.getVariable("System.PullRequest.PullRequestId");
+    if (prId) {
+      const targetBranch = tl.getVariable("System.PullRequest.TargetBranch") ?? "main";
+      diff = execSync(`git diff origin/${targetBranch.replace("refs/heads/", "")}...HEAD`, {
+        encoding: "utf-8",
+        maxBuffer: 10 * 1024 * 1024,
+      });
+    } else {
+      diff = execSync("git diff HEAD~1 HEAD", {
+        encoding: "utf-8",
+        maxBuffer: 10 * 1024 * 1024,
+      });
+    }
+
+    if (!diff.trim()) {
+      tl.setResult(tl.TaskResult.Succeeded, "No changes to scan.");
+      return;
+    }
+
+    // Run scan via piped stdin
+    const result = execSync(`echo "${Buffer.from(diff).toString("base64")}" | base64 -d | ${cmd}`, {
+      encoding: "utf-8",
+      env: {
+        ...process.env,
+        SENTINEL_API_KEY: apiKey,
+        SENTINEL_SECRET: secret,
+      },
+      maxBuffer: 10 * 1024 * 1024,
+    });
+
+    console.log(result);
+    tl.setResult(tl.TaskResult.Succeeded, "SENTINEL scan completed.");
+  } catch (err: any) {
+    if (err.status === 1 && tl.getBoolInput("failOnFindings", false)) {
+      tl.setResult(tl.TaskResult.Failed, "SENTINEL scan found security issues.");
+    } else if (err.status === 1) {
+      tl.warning("SENTINEL scan found issues but failOnFindings is disabled.");
+      tl.setResult(tl.TaskResult.SucceededWithIssues, "Findings detected.");
+    } else {
+      tl.setResult(tl.TaskResult.Failed, `SENTINEL scan error: ${err.message}`);
+    }
+  }
+}
+
+run();
+```
+
+**Step 2: Create package.json and tsconfig.json for the task**
+
+```json
+// sentinel/extensions/azure-devops/sentinel-scan/package.json
+{
+  "name": "sentinel-scan-task",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "build": "tsc"
+  },
+  "dependencies": {
+    "azure-pipelines-task-lib": "^4.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0",
+    "typescript": "^5.7"
+  }
+}
+```
+
+```json
+// sentinel/extensions/azure-devops/sentinel-scan/tsconfig.json
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "commonjs",
+    "outDir": "dist",
+    "rootDir": ".",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true
+  },
+  "include": ["index.ts"]
+}
+```
+
+**Step 3: Commit**
+
+```bash
+git add sentinel/extensions/azure-devops/sentinel-scan/
+git commit -m "feat(extensions): add Azure DevOps task runner implementation"
+```
+
+---
+
+### Task 16: VCS Installations API Tests
+
+**Files:**
+- Create: `sentinel/apps/api/src/routes/vcs-installations.test.ts`
+
+**Step 1: Write tests for VCS installation CRUD**
+
+Test the 5 endpoints: GET list, POST create, PUT update, DELETE, POST test-connection. Use the same mocking pattern as existing API route tests (mock Prisma client, mock request/reply).
+
+**Step 2: Run tests**
+
+Run: `cd /home/ainaomotayo/archagents/sentinel && npx turbo test --filter=@sentinel/api 2>&1 | tail -30`
+
+Expected: All new + existing API tests pass
+
+**Step 3: Commit**
+
+```bash
+git add sentinel/apps/api/src/routes/vcs-installations.test.ts
+git commit -m "test(api): add VCS installations CRUD route tests"
+```
+
+---
+
+### Task 17: Final Verification — Full Scope
+
+**Files:** None (verification only)
+
+**Step 1: Run full monorepo test suite**
+
+Run: `cd /home/ainaomotayo/archagents/sentinel && npx turbo test 2>&1 | tail -40`
+
+Expected: All suites pass
+
+**Step 2: Verify all new files exist**
+
+Run:
+```bash
+ls sentinel/templates/azure-pipelines.yml
+ls sentinel/apps/cli/src/ci-providers/
+ls sentinel/apps/api/src/routes/vcs-installations.ts
+ls sentinel/apps/api/src/vcs/webhook-provisioner.ts
+ls sentinel/apps/dashboard/app/\(dashboard\)/settings/vcs/page.tsx
+ls sentinel/extensions/azure-devops/vss-extension.json
+ls sentinel/extensions/azure-devops/sentinel-scan/task.json
+ls sentinel/extensions/azure-devops/sentinel-scan/index.ts
+ls sentinel/docs/azure-devops-setup.md
+```
+
+Expected: All files exist
+
+**Step 3: Git log to verify commit history**
+
+Run: `git log --oneline -20`
+
+Expected: Clean commit history with descriptive messages for each task

@@ -21,10 +21,10 @@ Sentinel supports GitHub Actions and GitLab CI via YAML templates in `templates/
 - Setup documentation
 - Tests
 
-**Out of scope (future priorities):**
-- Dashboard VCS configuration UI
-- Azure DevOps Marketplace Extension
-- Service Hook auto-provisioning API
+**Also in scope (expanded):**
+- Dashboard VCS configuration UI (settings page for managing VCS installations)
+- Azure DevOps Marketplace Extension (`SentinelScan@1` custom pipeline task)
+- Service Hook auto-provisioning API (auto-create webhooks on VCS providers)
 
 ## Enterprise Approach Analysis
 
@@ -160,6 +160,95 @@ Sections: Prerequisites, Server Setup, Pipeline Setup, Webhook Setup, Verificati
 | `ci-providers/detect.test.ts` | Priority order, override, fallback |
 | `ci-providers/github.test.ts` | Regression after refactor |
 | `commands/ci.test.ts` | Backoff interval progression |
+
+### 6. Dashboard VCS Configuration UI
+
+**File:** `sentinel/apps/dashboard/app/(dashboard)/settings/vcs/page.tsx`
+
+A settings page for managing VCS provider installations. Follows the webhooks page pattern (`settings/webhooks/page.tsx`) — card-based list with add/edit/delete forms, PageHeader with action button, localStorage persistence for mock mode.
+
+**Features:**
+- List existing VCS installations with provider icon, owner/repo, status badge (active/disabled)
+- Add form with provider dropdown (GitHub, GitLab, Bitbucket, Azure DevOps) that shows provider-specific fields:
+  - GitHub: App ID, Private Key, Installation ID
+  - GitLab: GitLab URL, Access Token, Token Type
+  - Bitbucket: Workspace, Client Key, Shared Secret
+  - Azure DevOps: Organization URL, Project Name, PAT
+- Common fields: Owner, Webhook Secret
+- Toggle active/disabled, delete installation
+- Link from main settings page navigation
+
+**API routes:** `apps/api/src/routes/vcs-installations.ts`
+- `GET /v1/vcs-installations` — List installations for current org
+- `POST /v1/vcs-installations` — Create new installation
+- `PUT /v1/vcs-installations/:id` — Update installation
+- `DELETE /v1/vcs-installations/:id` — Delete installation
+- `POST /v1/vcs-installations/:id/test` — Test connection
+
+**Data model:** Uses existing `VcsInstallation` + provider extension models in Prisma schema.
+
+### 7. Azure DevOps Marketplace Extension
+
+**Location:** `sentinel/extensions/azure-devops/`
+
+```
+extensions/azure-devops/
+  vss-extension.json          # Extension manifest (publisher, version, contributions)
+  sentinel-scan/
+    task.json                 # Task definition: SentinelScan@1
+    index.ts                  # Task runner: installs CLI, runs sentinel ci
+    package.json              # Task dependencies (azure-pipelines-task-lib)
+    tsconfig.json
+  images/
+    icon.png                  # Extension icon (128x128)
+  overview.md                 # Marketplace listing content
+  package.json                # Build/package scripts
+```
+
+**Task inputs** (defined in `task.json`):
+- `apiUrl` (required): SENTINEL API URL
+- `apiKey` (required, secret): API key
+- `secret` (required, secret): HMAC secret
+- `timeout` (optional, default 120): Poll timeout in seconds
+- `outputFormat` (optional, default "summary"): "summary" | "json" | "sarif"
+- `failOnFindings` (optional, default true): Fail pipeline on findings
+
+**Task runner** (`index.ts`): Uses `azure-pipelines-task-lib` to get inputs, runs `npx @sentinel/cli ci` with the correct env vars, sets task result based on exit code.
+
+### 8. Service Hook Auto-Provisioning API
+
+**File:** `sentinel/apps/api/src/routes/vcs-installations.ts` (additional endpoint)
+
+**Endpoint:** `POST /v1/vcs-installations/:id/provision-webhooks`
+
+For each provider, uses the provider's API to auto-create webhook subscriptions:
+- **Azure DevOps**: POST to `/_apis/hooks/subscriptions` to create Service Hook for `git.push`, `git.pullrequest.created`, `git.pullrequest.updated`
+- **GitHub**: POST to `/repos/{owner}/{repo}/hooks` (or handled by GitHub App installation)
+- **GitLab**: POST to `/projects/{id}/hooks`
+- **Bitbucket**: POST to `/repositories/{workspace}/{repo}/hooks`
+
+**Design:** A `WebhookProvisioner` interface with provider-specific implementations, similar to the VCS provider pattern. Each provisioner knows how to create/list/delete webhooks for its platform.
+
+```typescript
+interface WebhookProvisioner {
+  provision(installation: VcsInstallation, callbackUrl: string): Promise<ProvisionResult>;
+  deprovision(installation: VcsInstallation): Promise<void>;
+  listHooks(installation: VcsInstallation): Promise<WebhookInfo[]>;
+}
+```
+
+**Azure DevOps implementation** uses the REST API v7.0:
+```
+POST https://dev.azure.com/{org}/_apis/hooks/subscriptions?api-version=7.0
+{
+  "publisherId": "tfs",
+  "eventType": "git.push",
+  "consumerId": "webHooks",
+  "consumerActionId": "httpRequest",
+  "publisherInputs": { "projectId": "{project-id}", "repository": "" },
+  "consumerInputs": { "url": "https://sentinel-api/webhooks/azure-devops" }
+}
+```
 
 ## Data Flow
 
