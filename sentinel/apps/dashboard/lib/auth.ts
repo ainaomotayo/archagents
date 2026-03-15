@@ -224,6 +224,24 @@ export const authOptions: AuthOptions = {
 
   callbacks: {
     async signIn({ account, profile }) {
+      const ip = getCurrentRequestIp();
+
+      // Rate limiting enforcement
+      if (!rateLimiter.check(ip).allowed) {
+        logAuthEvent("auth.login.rate_limited", { ip, provider: account?.provider });
+        try {
+          const { emitSsoAuditEvent } = await import("./auth-audit.js");
+          await emitSsoAuditEvent("sso.login.rate_limited", {
+            provider: account?.provider ?? "unknown",
+            email: (profile?.email as string) ?? "unknown",
+            ip,
+            orgId: "unknown",
+            reason: "rate_limit_exceeded",
+          });
+        } catch { /* non-blocking */ }
+        return false;
+      }
+
       // Enforce SSO restrictions if configured
       if (account?.provider && profile?.email) {
         try {
@@ -241,6 +259,17 @@ export const authOptions: AuthOptions = {
                   email: profile.email,
                   reason: "sso_enforcement",
                 });
+                rateLimiter.record(ip);
+                try {
+                  const { emitSsoAuditEvent } = await import("./auth-audit.js");
+                  await emitSsoAuditEvent("sso.login.blocked", {
+                    provider: account.provider,
+                    email: profile.email as string,
+                    ip,
+                    orgId: data.orgId ?? "unknown",
+                    reason: "sso_enforcement",
+                  });
+                } catch { /* non-blocking */ }
                 return false;
               }
             }
@@ -281,14 +310,16 @@ export const authOptions: AuthOptions = {
   },
 
   events: {
-    async signIn({ account }) {
+    async signIn({ user, account }) {
       const ip = getCurrentRequestIp();
       if (account?.provider) {
         providerHealth.recordSuccess(account.provider);
       }
       rateLimiter.reset(ip);
+      const email = user?.email ?? "unknown";
       logAuthEvent("auth.login.success", {
         provider: account?.provider,
+        email,
         ip,
       });
       // Emit structured SSO audit event
@@ -296,7 +327,20 @@ export const authOptions: AuthOptions = {
         const { emitSsoAuditEvent } = await import("./auth-audit.js");
         await emitSsoAuditEvent("sso.login.success", {
           provider: account?.provider ?? "unknown",
-          email: "unknown",
+          email,
+          ip,
+          orgId: (account as any)?.orgId ?? "default",
+        });
+      } catch { /* non-blocking */ }
+    },
+    async signOut({ token }) {
+      const ip = getCurrentRequestIp();
+      logAuthEvent("auth.logout", { ip });
+      try {
+        const { emitSsoAuditEvent } = await import("./auth-audit.js");
+        await emitSsoAuditEvent("sso.logout", {
+          provider: "session",
+          email: (token as any)?.email ?? "unknown",
           ip,
           orgId: "default",
         });
