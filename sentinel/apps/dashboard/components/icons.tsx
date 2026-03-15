@@ -211,6 +211,17 @@ export function IconGithub(props: React.SVGProps<SVGSVGElement>) {
   );
 }
 
+export function IconGrid(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg {...iconProps} {...props}>
+      <rect x="3" y="3" width="7" height="7" />
+      <rect x="14" y="3" width="7" height="7" />
+      <rect x="3" y="14" width="7" height="7" />
+      <rect x="14" y="14" width="7" height="7" />
+    </svg>
+  );
+}
+
 export const ICON_MAP: Record<string, React.ComponentType<React.SVGProps<SVGSVGElement>>> = {
   home: IconHome,
   folder: IconFolder,
@@ -221,4 +232,5 @@ export const ICON_MAP: Record<string, React.ComponentType<React.SVGProps<SVGSVGE
   "trending-up": IconTrendingUp,
   clock: IconClock,
   settings: IconSettings,
+  grid: IconGrid,
 };
