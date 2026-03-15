@@ -111,6 +111,13 @@ describe("RBAC enforcement", () => {
     expect(isAuthorized("developer", "GET", "/v1/reports/:id/status")).toBe(false);
   });
 
+  it("admin and manager can access report batch status", () => {
+    expect(isAuthorized("admin", "GET", "/v1/report-batches/:batchId")).toBe(true);
+    expect(isAuthorized("manager", "GET", "/v1/report-batches/:batchId")).toBe(true);
+    expect(isAuthorized("developer", "GET", "/v1/report-batches/:batchId")).toBe(false);
+    expect(isAuthorized("viewer", "GET", "/v1/report-batches/:batchId")).toBe(false);
+  });
+
   it("developer can run live assessments", () => {
     expect(isAuthorized("developer", "GET", "/v1/compliance/assess/:frameworkId")).toBe(true);
     expect(isAuthorized("viewer", "GET", "/v1/compliance/assess/:frameworkId")).toBe(false);
