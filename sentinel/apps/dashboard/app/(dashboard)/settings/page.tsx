@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useSession } from "next-auth/react";
 import { PageHeader } from "@/components/page-header";
-import { IconGlobe, IconUser, IconShield, IconActivity, IconBell, IconPlus, IconWrench } from "@/components/icons";
+import { IconGlobe, IconUser, IconShield, IconActivity, IconBell, IconPlus, IconWrench, IconCalendarEvent } from "@/components/icons";
 
 /* ─── Team Members Panel ─── */
 function TeamMembersPanel() {
@@ -405,11 +405,19 @@ export default function SettingsPage() {
         />
 
         <LinkSectionCard
+          title="Report Schedules"
+          description="Configure automated report delivery and digest schedules."
+          href="/settings/report-schedules"
+          Icon={IconCalendarEvent}
+          animationDelay="0.3s"
+        />
+
+        <LinkSectionCard
           title="Audit & Compliance"
           description="Data retention, export settings, and compliance configuration."
           href="/audit"
           Icon={IconActivity}
-          animationDelay="0.3s"
+          animationDelay="0.35s"
         />
       </div>
     </div>
