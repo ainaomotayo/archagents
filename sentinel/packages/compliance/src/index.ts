@@ -8,6 +8,7 @@ export type {
   FindingInput,
   ReportType,
   EvidenceEventType,
+  DigestMetrics,
 } from "./types.js";
 
 export { VALID_REPORT_TYPES, EVIDENCE_EVENT_TYPES } from "./types.js";
