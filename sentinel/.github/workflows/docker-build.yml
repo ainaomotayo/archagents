@@ -1,0 +1,153 @@
+name: Build & Push Docker Images
+
+on:
+  push:
+    branches: [main]
+    paths: ['apps/**', 'packages/**', 'agents/**', 'docker/**', 'deploy/**']
+  pull_request:
+    branches: [main]
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_PREFIX: ghcr.io/${{ github.repository_owner }}/sentinel
+
+jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      api: ${{ steps.filter.outputs.api }}
+      dashboard: ${{ steps.filter.outputs.dashboard }}
+      agent-security: ${{ steps.filter.outputs.agent-security }}
+      agent-dependency: ${{ steps.filter.outputs.agent-dependency }}
+      helm: ${{ steps.filter.outputs.helm }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            api:
+              - 'apps/api/**'
+              - 'packages/**'
+              - 'docker/api.Dockerfile'
+            dashboard:
+              - 'apps/dashboard/**'
+              - 'packages/shared/**'
+              - 'docker/dashboard.Dockerfile'
+            agent-security:
+              - 'agents/security/**'
+              - 'agents/core/**'
+              - 'docker/agent.Dockerfile'
+            agent-dependency:
+              - 'agents/dependency/**'
+              - 'agents/core/**'
+              - 'docker/agent.Dockerfile'
+            helm:
+              - 'deploy/helm/**'
+
+  build-api:
+    needs: changes
+    if: needs.changes.outputs.api == 'true' || github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions: { contents: read, packages: write }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: docker/api.Dockerfile
+          push: ${{ github.event_name == 'push' }}
+          tags: |
+            ${{ env.IMAGE_PREFIX }}-api:${{ github.sha }}
+            ${{ env.IMAGE_PREFIX }}-api:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  build-dashboard:
+    needs: changes
+    if: needs.changes.outputs.dashboard == 'true' || github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions: { contents: read, packages: write }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: docker/dashboard.Dockerfile
+          push: ${{ github.event_name == 'push' }}
+          tags: |
+            ${{ env.IMAGE_PREFIX }}-dashboard:${{ github.sha }}
+            ${{ env.IMAGE_PREFIX }}-dashboard:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  build-agents:
+    needs: changes
+    runs-on: ubuntu-latest
+    permissions: { contents: read, packages: write }
+    strategy:
+      matrix:
+        include:
+          - name: security
+            changed: ${{ needs.changes.outputs.agent-security }}
+          - name: dependency
+            changed: ${{ needs.changes.outputs.agent-dependency }}
+    steps:
+      - uses: actions/checkout@v4
+        if: matrix.changed == 'true' || github.ref == 'refs/heads/main'
+      - uses: docker/setup-buildx-action@v3
+        if: matrix.changed == 'true' || github.ref == 'refs/heads/main'
+      - uses: docker/login-action@v3
+        if: matrix.changed == 'true' || github.ref == 'refs/heads/main'
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v5
+        if: matrix.changed == 'true' || github.ref == 'refs/heads/main'
+        with:
+          context: .
+          file: docker/agent.Dockerfile
+          build-args: AGENT_NAME=${{ matrix.name }}
+          push: ${{ github.event_name == 'push' }}
+          tags: |
+            ${{ env.IMAGE_PREFIX }}-agent-${{ matrix.name }}:${{ github.sha }}
+            ${{ env.IMAGE_PREFIX }}-agent-${{ matrix.name }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  helm-validate:
+    needs: changes
+    if: needs.changes.outputs.helm == 'true' || github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/setup-helm@v3
+        with: { version: v3.14.0 }
+      - name: Helm lint
+        run: helm lint deploy/helm/
+      - name: Template render
+        run: helm template sentinel deploy/helm/ > /dev/null
+
+  drift-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - name: Install deps
+        run: cd deploy && npm install yaml
+      - name: Validate drift
+        run: cd deploy && npx tsx scripts/validate-drift.ts

@@ -1,0 +1,56 @@
+{{- if .Values.monitoring.prometheus.serviceMonitor.enabled }}
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ include "sentinel.fullname" . }}-api
+  labels:
+    {{- include "sentinel.labels" . | nindent 4 }}
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: api
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: {{ .Values.monitoring.prometheus.serviceMonitor.interval }}
+---
+{{- range $name, $worker := .Values.workers }}
+{{- if $worker.enabled }}
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ include "sentinel.fullname" $ }}-worker-{{ $name }}
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: worker-{{ $name }}
+  endpoints:
+    - port: metrics
+      path: /metrics
+      interval: {{ $.Values.monitoring.prometheus.serviceMonitor.interval }}
+{{- end }}
+{{- end }}
+---
+{{- range $tier, $agents := .Values.agents }}
+{{- if or (eq $tier "critical") (eq $tier "batch") }}
+{{- range $name, $agent := $agents }}
+{{- if $agent.enabled }}
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ include "sentinel.fullname" $ }}-agent-{{ $name }}
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: agent-{{ $name }}
+  endpoints:
+    - port: health
+      path: /metrics
+      interval: {{ $.Values.monitoring.prometheus.serviceMonitor.interval }}
+{{- end }}
+{{- end }}
+{{- end }}
+{{- end }}
+{{- end }}

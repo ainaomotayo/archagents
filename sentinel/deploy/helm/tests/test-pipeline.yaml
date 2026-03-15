@@ -1,0 +1,24 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ include "sentinel.fullname" . }}-test-pipeline
+  annotations:
+    "helm.sh/hook": test
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  restartPolicy: Never
+  containers:
+    - name: test
+      image: curlimages/curl:8.5.0
+      command: ["sh", "-c"]
+      args:
+        - |
+          set -e
+          API="http://{{ include "sentinel.fullname" . }}-api:8080"
+          echo "Checking API health..."
+          curl -sf "$API/health"
+          echo "Checking agent registration..."
+          for agent in security dependency; do
+            curl -sf "$API/v1/agents/$agent/health" || echo "Agent $agent not yet registered"
+          done
+          echo "Pipeline connectivity verified"

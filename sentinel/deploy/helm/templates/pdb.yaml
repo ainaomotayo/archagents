@@ -1,0 +1,54 @@
+{{- if .Values.pdb.api }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "sentinel.fullname" . }}-api
+  labels:
+    {{- include "sentinel.labels" . | nindent 4 }}
+    app.kubernetes.io/component: api
+spec:
+  minAvailable: {{ .Values.pdb.api.minAvailable }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: api
+      {{- include "sentinel.selectorLabels" . | nindent 6 }}
+{{- end }}
+---
+{{- if .Values.pdb.dashboard }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "sentinel.fullname" . }}-dashboard
+  labels:
+    {{- include "sentinel.labels" . | nindent 4 }}
+    app.kubernetes.io/component: dashboard
+spec:
+  minAvailable: {{ .Values.pdb.dashboard.minAvailable }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: dashboard
+      {{- include "sentinel.selectorLabels" . | nindent 6 }}
+{{- end }}
+---
+{{- if .Values.pdb.agents }}
+{{- if .Values.pdb.agents.critical }}
+{{- range $name, $agent := .Values.agents.critical }}
+{{- if $agent.enabled }}
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "sentinel.fullname" $ }}-agent-{{ $name }}
+  labels:
+    {{- include "sentinel.labels" $ | nindent 4 }}
+    app.kubernetes.io/component: agent-{{ $name }}
+spec:
+  minAvailable: {{ $.Values.pdb.agents.critical.minAvailable }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: agent-{{ $name }}
+      {{- include "sentinel.selectorLabels" $ | nindent 6 }}
+{{- end }}
+{{- end }}
+{{- end }}
+{{- end }}

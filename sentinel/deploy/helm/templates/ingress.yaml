@@ -2,51 +2,40 @@
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: sentinel-ingress
-  namespace: {{ .Values.global.namespace }}
-  annotations:
-    cert-manager.io/cluster-issuer: {{ .Values.ingress.clusterIssuer }}
-    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+  name: {{ include "sentinel.fullname" . }}-ingress
   labels:
     {{- include "sentinel.labels" . | nindent 4 }}
+  {{- with .Values.ingress.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
 spec:
-  ingressClassName: nginx
+  {{- if .Values.ingress.className }}
+  ingressClassName: {{ .Values.ingress.className }}
+  {{- end }}
   {{- if .Values.ingress.tls }}
   tls:
-    - hosts:
-        - {{ .Values.ingress.host }}
-      secretName: sentinel-tls
+    {{- range .Values.ingress.tls }}
+    - secretName: {{ .secretName }}
+      hosts:
+        {{- range .hosts }}
+        - {{ . | quote }}
+        {{- end }}
+    {{- end }}
   {{- end }}
   rules:
-    - host: {{ .Values.ingress.host }}
+    {{- range .Values.ingress.hosts }}
+    - host: {{ .host | quote }}
       http:
         paths:
-          - path: /v1
-            pathType: Prefix
+          {{- range .paths }}
+          - path: {{ .path }}
+            pathType: {{ .pathType }}
             backend:
               service:
-                name: sentinel-api
+                name: {{ include "sentinel.fullname" $ }}-{{ .service }}
                 port:
-                  number: {{ .Values.api.port }}
-          - path: /webhooks
-            pathType: Prefix
-            backend:
-              service:
-                name: sentinel-api
-                port:
-                  number: {{ .Values.api.port }}
-          - path: /metrics
-            pathType: Prefix
-            backend:
-              service:
-                name: sentinel-api
-                port:
-                  number: {{ .Values.api.port }}
-          - path: /
-            pathType: Prefix
-            backend:
-              service:
-                name: sentinel-dashboard
-                port:
-                  number: {{ .Values.dashboard.port }}
+                  number: {{ .port }}
+          {{- end }}
+    {{- end }}
 {{- end }}

@@ -1,0 +1,53 @@
+api:
+  replicaCount: 2
+  resources:
+    requests: { cpu: 500m, memory: 512Mi }
+    limits: { cpu: "2", memory: 1Gi }
+dashboard:
+  replicaCount: 2
+workers:
+  assessor: { scaling: { enabled: true, minReplicas: 2, maxReplicas: 8, targetCPU: 70 } }
+  report: { scaling: { enabled: true, minReplicas: 1, maxReplicas: 5, targetCPU: 70 } }
+  notification: { scaling: { enabled: true, minReplicas: 1, maxReplicas: 5, targetCPU: 70 } }
+  githubBridge: { scaling: { enabled: true, minReplicas: 1, maxReplicas: 5, targetCPU: 70 } }
+agents:
+  critical:
+    security:
+      scaling: { minReplicas: 2, maxReplicas: 10, targetCPU: 65 }
+      resources:
+        requests: { cpu: "1", memory: 1Gi }
+        limits: { cpu: "4", memory: 2Gi }
+    dependency:
+      scaling: { minReplicas: 2, maxReplicas: 8, targetCPU: 70 }
+      resources:
+        requests: { cpu: 500m, memory: 512Mi }
+        limits: { cpu: "2", memory: 1Gi }
+secrets:
+  provider: aws
+  aws: { region: us-east-1, secretName: sentinel/production }
+networkPolicy:
+  enabled: true
+ingress:
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/rate-limit: "200"
+    nginx.ingress.kubernetes.io/rate-limit-window: "1m"
+  hosts:
+    - host: sentinel.example.com
+      paths:
+        - { path: /v1, pathType: Prefix, service: api, port: 8080 }
+        - { path: /, pathType: Prefix, service: dashboard, port: 3000 }
+  tls:
+    - secretName: sentinel-tls
+      hosts: [sentinel.example.com]
+postgresql:
+  enabled: false
+redis:
+  enabled: false
+monitoring:
+  prometheus: { enabled: true, serviceMonitor: { interval: 15s } }
+  grafana: { enabled: true }
+  otel:
+    enabled: true
+    exporters:
+      otlp: { endpoint: "" }

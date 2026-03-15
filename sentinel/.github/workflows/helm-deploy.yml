@@ -1,0 +1,53 @@
+name: Helm Deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Target environment"
+        required: true
+        type: choice
+        options: [staging, production]
+      image_tag:
+        description: "Image tag (commit SHA)"
+        required: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/setup-helm@v3
+        with: { version: v3.14.0 }
+      - uses: azure/setup-kubectl@v3
+      - uses: azure/k8s-set-context@v3
+        with:
+          kubeconfig: ${{ secrets.KUBECONFIG }}
+      - name: Helm diff
+        run: |
+          helm plugin install https://github.com/databus23/helm-diff 2>/dev/null || true
+          helm diff upgrade sentinel deploy/helm/ \
+            -f deploy/helm/values.yaml \
+            -f deploy/helm/values-${{ inputs.environment }}.yaml \
+            --set global.imageRegistry=${{ vars.IMAGE_REGISTRY }} \
+            --set api.image.tag=${{ inputs.image_tag }} \
+            --set dashboard.image.tag=${{ inputs.image_tag }}
+      - name: Helm upgrade
+        run: |
+          helm upgrade --install sentinel deploy/helm/ \
+            --namespace sentinel --create-namespace \
+            -f deploy/helm/values.yaml \
+            -f deploy/helm/values-${{ inputs.environment }}.yaml \
+            --set global.imageRegistry=${{ vars.IMAGE_REGISTRY }} \
+            --set api.image.tag=${{ inputs.image_tag }} \
+            --set dashboard.image.tag=${{ inputs.image_tag }} \
+            --wait --timeout 10m
+      - name: Verify rollout
+        run: |
+          kubectl -n sentinel rollout status deployment/sentinel-api --timeout=5m
+          kubectl -n sentinel rollout status deployment/sentinel-dashboard --timeout=5m
+      - name: Smoke test
+        run: |
+          API_URL=$(kubectl -n sentinel get ingress sentinel -o jsonpath='{.spec.rules[0].host}')
+          curl -sf "https://${API_URL}/health" || exit 1

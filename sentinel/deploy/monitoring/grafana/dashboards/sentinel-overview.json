@@ -1,0 +1,189 @@
+{
+  "dashboard": {
+    "id": null,
+    "uid": "sentinel-overview",
+    "title": "Sentinel Overview",
+    "tags": ["sentinel"],
+    "timezone": "browser",
+    "refresh": "30s",
+    "time": { "from": "now-6h", "to": "now" },
+    "panels": [
+      {
+        "title": "Health Status",
+        "type": "row",
+        "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
+        "collapsed": false
+      },
+      {
+        "title": "API Up",
+        "type": "stat",
+        "datasource": "Prometheus",
+        "gridPos": { "h": 4, "w": 6, "x": 0, "y": 1 },
+        "targets": [
+          { "expr": "up{job=\"sentinel-api\"}", "legendFormat": "API" }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "mappings": [
+              { "type": "value", "options": { "0": { "text": "DOWN", "color": "red" }, "1": { "text": "UP", "color": "green" } } }
+            ],
+            "thresholds": { "steps": [{ "value": null, "color": "red" }, { "value": 1, "color": "green" }] }
+          }
+        }
+      },
+      {
+        "title": "Dashboard Up",
+        "type": "stat",
+        "datasource": "Prometheus",
+        "gridPos": { "h": 4, "w": 6, "x": 6, "y": 1 },
+        "targets": [
+          { "expr": "up{job=\"sentinel-dashboard\"}", "legendFormat": "Dashboard" }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "mappings": [
+              { "type": "value", "options": { "0": { "text": "DOWN", "color": "red" }, "1": { "text": "UP", "color": "green" } } }
+            ],
+            "thresholds": { "steps": [{ "value": null, "color": "red" }, { "value": 1, "color": "green" }] }
+          }
+        }
+      },
+      {
+        "title": "Agents Up",
+        "type": "stat",
+        "datasource": "Prometheus",
+        "gridPos": { "h": 4, "w": 6, "x": 12, "y": 1 },
+        "targets": [
+          { "expr": "count(up{job=\"sentinel-agents\"} == 1) / count(up{job=\"sentinel-agents\"})", "legendFormat": "Agents" }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "percentunit",
+            "thresholds": { "steps": [{ "value": null, "color": "red" }, { "value": 0.5, "color": "yellow" }, { "value": 1, "color": "green" }] }
+          }
+        }
+      },
+      {
+        "title": "Error Rate",
+        "type": "stat",
+        "datasource": "Prometheus",
+        "gridPos": { "h": 4, "w": 6, "x": 18, "y": 1 },
+        "targets": [
+          { "expr": "sum(rate(sentinel_api_http_requests_total{status_code=~\"5..\"}[5m])) / sum(rate(sentinel_api_http_requests_total[5m]))", "legendFormat": "5xx Rate" }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "percentunit",
+            "thresholds": { "steps": [{ "value": null, "color": "green" }, { "value": 0.01, "color": "yellow" }, { "value": 0.05, "color": "red" }] }
+          }
+        }
+      },
+      {
+        "title": "Request Traffic",
+        "type": "row",
+        "gridPos": { "h": 1, "w": 24, "x": 0, "y": 5 },
+        "collapsed": false
+      },
+      {
+        "title": "API Requests/s by Route",
+        "type": "timeseries",
+        "datasource": "Prometheus",
+        "gridPos": { "h": 8, "w": 12, "x": 0, "y": 6 },
+        "targets": [
+          { "expr": "sum by (route) (rate(sentinel_api_http_requests_total[5m]))", "legendFormat": "{{ route }}" }
+        ]
+      },
+      {
+        "title": "API Latency p50 / p95 / p99",
+        "type": "timeseries",
+        "datasource": "Prometheus",
+        "gridPos": { "h": 8, "w": 12, "x": 12, "y": 6 },
+        "targets": [
+          { "expr": "histogram_quantile(0.50, rate(sentinel_api_http_request_duration_seconds_bucket[5m]))", "legendFormat": "p50" },
+          { "expr": "histogram_quantile(0.95, rate(sentinel_api_http_request_duration_seconds_bucket[5m]))", "legendFormat": "p95" },
+          { "expr": "histogram_quantile(0.99, rate(sentinel_api_http_request_duration_seconds_bucket[5m]))", "legendFormat": "p99" }
+        ],
+        "fieldConfig": { "defaults": { "unit": "s" } }
+      },
+      {
+        "title": "Pipeline Throughput",
+        "type": "row",
+        "gridPos": { "h": 1, "w": 24, "x": 0, "y": 14 },
+        "collapsed": false
+      },
+      {
+        "title": "Diffs Processed/min by Agent",
+        "type": "timeseries",
+        "datasource": "Prometheus",
+        "gridPos": { "h": 8, "w": 6, "x": 0, "y": 15 },
+        "targets": [
+          { "expr": "sum by (agent) (rate(sentinel_agent_diffs_processed_total[5m]) * 60)", "legendFormat": "{{ agent }}" }
+        ]
+      },
+      {
+        "title": "Findings by Severity",
+        "type": "timeseries",
+        "datasource": "Prometheus",
+        "gridPos": { "h": 8, "w": 6, "x": 6, "y": 15 },
+        "targets": [
+          { "expr": "sum by (severity) (rate(sentinel_agent_findings_total[5m]))", "legendFormat": "{{ severity }}" }
+        ]
+      },
+      {
+        "title": "Stream Backlog",
+        "type": "timeseries",
+        "datasource": "Prometheus",
+        "gridPos": { "h": 8, "w": 6, "x": 12, "y": 15 },
+        "targets": [
+          { "expr": "sentinel_agent_stream_lag", "legendFormat": "{{ agent }}" }
+        ]
+      },
+      {
+        "title": "Certificates Issued",
+        "type": "timeseries",
+        "datasource": "Prometheus",
+        "gridPos": { "h": 8, "w": 6, "x": 18, "y": 15 },
+        "targets": [
+          { "expr": "sum(rate(sentinel_worker_certificates_issued_total[5m]) * 60)", "legendFormat": "certs/min" }
+        ]
+      },
+      {
+        "title": "Infrastructure",
+        "type": "row",
+        "gridPos": { "h": 1, "w": 24, "x": 0, "y": 23 },
+        "collapsed": false
+      },
+      {
+        "title": "CPU by Pod",
+        "type": "timeseries",
+        "datasource": "Prometheus",
+        "gridPos": { "h": 8, "w": 8, "x": 0, "y": 24 },
+        "targets": [
+          { "expr": "sum by (pod) (rate(container_cpu_usage_seconds_total{namespace=\"sentinel\"}[5m]))", "legendFormat": "{{ pod }}" }
+        ],
+        "fieldConfig": { "defaults": { "unit": "short" } }
+      },
+      {
+        "title": "Memory by Pod",
+        "type": "timeseries",
+        "datasource": "Prometheus",
+        "gridPos": { "h": 8, "w": 8, "x": 8, "y": 24 },
+        "targets": [
+          { "expr": "container_memory_working_set_bytes{namespace=\"sentinel\"}", "legendFormat": "{{ pod }}" }
+        ],
+        "fieldConfig": { "defaults": { "unit": "bytes" } }
+      },
+      {
+        "title": "PostgreSQL Connections / Redis Memory",
+        "type": "timeseries",
+        "datasource": "Prometheus",
+        "gridPos": { "h": 8, "w": 8, "x": 16, "y": 24 },
+        "targets": [
+          { "expr": "pg_stat_activity_count{datname=\"sentinel\"}", "legendFormat": "PG connections" },
+          { "expr": "redis_memory_used_bytes", "legendFormat": "Redis memory" }
+        ],
+        "fieldConfig": { "defaults": { "unit": "short" } }
+      }
+    ]
+  }
+}

@@ -1,0 +1,169 @@
+{
+  "dashboard": {
+    "id": null,
+    "uid": "sentinel-agent-perf",
+    "title": "Sentinel Agent Performance",
+    "tags": ["sentinel"],
+    "timezone": "browser",
+    "refresh": "30s",
+    "time": { "from": "now-6h", "to": "now" },
+    "templating": {
+      "list": [
+        {
+          "name": "agent",
+          "type": "query",
+          "datasource": "Prometheus",
+          "query": "label_values(up{job=\"sentinel-agents\"}, agent)",
+          "refresh": 2,
+          "includeAll": true,
+          "multi": false,
+          "current": { "text": "All", "value": "$__all" }
+        }
+      ]
+    },
+    "panels": [
+      {
+        "title": "Agent Health",
+        "type": "row",
+        "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
+        "collapsed": false
+      },
+      {
+        "title": "Agent Status",
+        "type": "stat",
+        "datasource": "Prometheus",
+        "gridPos": { "h": 4, "w": 6, "x": 0, "y": 1 },
+        "targets": [
+          { "expr": "up{job=\"sentinel-agents\", agent=~\"$agent\"}", "legendFormat": "{{ agent }}" }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "mappings": [
+              { "type": "value", "options": { "0": { "text": "DOWN", "color": "red" }, "1": { "text": "UP", "color": "green" } } }
+            ]
+          }
+        }
+      },
+      {
+        "title": "Diffs/min",
+        "type": "stat",
+        "datasource": "Prometheus",
+        "gridPos": { "h": 4, "w": 6, "x": 6, "y": 1 },
+        "targets": [
+          { "expr": "sum by (agent) (rate(sentinel_agent_diffs_processed_total{agent=~\"$agent\"}[5m]) * 60)", "legendFormat": "{{ agent }}" }
+        ]
+      },
+      {
+        "title": "p95 Duration",
+        "type": "stat",
+        "datasource": "Prometheus",
+        "gridPos": { "h": 4, "w": 6, "x": 12, "y": 1 },
+        "targets": [
+          { "expr": "histogram_quantile(0.95, rate(sentinel_agent_diff_processing_duration_seconds_bucket{agent=~\"$agent\"}[5m]))", "legendFormat": "{{ agent }}" }
+        ],
+        "fieldConfig": { "defaults": { "unit": "s" } }
+      },
+      {
+        "title": "Stream Lag",
+        "type": "stat",
+        "datasource": "Prometheus",
+        "gridPos": { "h": 4, "w": 6, "x": 18, "y": 1 },
+        "targets": [
+          { "expr": "sentinel_agent_stream_lag{agent=~\"$agent\"}", "legendFormat": "{{ agent }}" }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "thresholds": { "steps": [{ "value": null, "color": "green" }, { "value": 50, "color": "yellow" }, { "value": 100, "color": "red" }] }
+          }
+        }
+      },
+      {
+        "title": "Processing",
+        "type": "row",
+        "gridPos": { "h": 1, "w": 24, "x": 0, "y": 5 },
+        "collapsed": false
+      },
+      {
+        "title": "Processing Duration Heatmap",
+        "type": "heatmap",
+        "datasource": "Prometheus",
+        "gridPos": { "h": 8, "w": 12, "x": 0, "y": 6 },
+        "targets": [
+          { "expr": "sum by (le) (increase(sentinel_agent_diff_processing_duration_seconds_bucket{agent=~\"$agent\"}[5m]))", "legendFormat": "{{ le }}", "format": "heatmap" }
+        ],
+        "options": {
+          "calculate": false,
+          "yAxis": { "unit": "s" }
+        }
+      },
+      {
+        "title": "Findings by Severity",
+        "type": "timeseries",
+        "datasource": "Prometheus",
+        "gridPos": { "h": 8, "w": 12, "x": 12, "y": 6 },
+        "targets": [
+          { "expr": "sum by (severity) (rate(sentinel_agent_findings_total{agent=~\"$agent\"}[5m]))", "legendFormat": "{{ severity }}" }
+        ]
+      },
+      {
+        "title": "Throughput",
+        "type": "row",
+        "gridPos": { "h": 1, "w": 24, "x": 0, "y": 14 },
+        "collapsed": false
+      },
+      {
+        "title": "Critical vs Batch Throughput",
+        "type": "timeseries",
+        "datasource": "Prometheus",
+        "gridPos": { "h": 8, "w": 12, "x": 0, "y": 15 },
+        "targets": [
+          { "expr": "sum by (tier) (rate(sentinel_agent_diffs_processed_total{agent=~\"$agent\"}[5m]))", "legendFormat": "{{ tier }}" }
+        ]
+      },
+      {
+        "title": "Error Rate by Agent",
+        "type": "timeseries",
+        "datasource": "Prometheus",
+        "gridPos": { "h": 8, "w": 12, "x": 12, "y": 15 },
+        "targets": [
+          { "expr": "sum by (agent) (rate(sentinel_agent_errors_total{agent=~\"$agent\"}[5m]))", "legendFormat": "{{ agent }}" }
+        ]
+      },
+      {
+        "title": "Resources",
+        "type": "row",
+        "gridPos": { "h": 1, "w": 24, "x": 0, "y": 23 },
+        "collapsed": false
+      },
+      {
+        "title": "CPU Usage",
+        "type": "timeseries",
+        "datasource": "Prometheus",
+        "gridPos": { "h": 8, "w": 8, "x": 0, "y": 24 },
+        "targets": [
+          { "expr": "sum by (pod) (rate(container_cpu_usage_seconds_total{namespace=\"sentinel\", pod=~\".*agent.*\"}[5m]))", "legendFormat": "{{ pod }}" }
+        ],
+        "fieldConfig": { "defaults": { "unit": "short" } }
+      },
+      {
+        "title": "Memory Usage",
+        "type": "timeseries",
+        "datasource": "Prometheus",
+        "gridPos": { "h": 8, "w": 8, "x": 8, "y": 24 },
+        "targets": [
+          { "expr": "container_memory_working_set_bytes{namespace=\"sentinel\", pod=~\".*agent.*\"}", "legendFormat": "{{ pod }}" }
+        ],
+        "fieldConfig": { "defaults": { "unit": "bytes" } }
+      },
+      {
+        "title": "Container Restarts",
+        "type": "timeseries",
+        "datasource": "Prometheus",
+        "gridPos": { "h": 8, "w": 8, "x": 16, "y": 24 },
+        "targets": [
+          { "expr": "increase(kube_pod_container_status_restarts_total{namespace=\"sentinel\", pod=~\".*agent.*\"}[1h])", "legendFormat": "{{ pod }}" }
+        ]
+      }
+    ]
+  }
+}

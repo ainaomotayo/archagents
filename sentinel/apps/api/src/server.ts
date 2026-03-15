@@ -44,6 +44,7 @@ import { registerOrgMembershipRoutes } from "./routes/org-memberships.js";
 import { registerScimRoutes } from "./routes/scim.js";
 import { registerEncryptionAdminRoutes } from "./routes/encryption-admin.js";
 import { registerDomainRoutes } from "./routes/domain-verification.js";
+import { registerMetricsRoute } from "./metrics.js";
 import { registerJitRoutes } from "./routes/jit-provision.js";
 import { registerSessionRoutes } from "./routes/sessions.js";
 import { registerAuditEventRoutes } from "./routes/audit-events.js";
@@ -2177,6 +2178,9 @@ const shutdown = async () => {
 };
 process.on("SIGTERM", shutdown);
 process.on("SIGINT", shutdown);
+
+// ── Prometheus Metrics ────────────────────────────────
+registerMetricsRoute(app);
 
 // --- Start ---
 const port = parseInt(process.env.PORT ?? "8080", 10);
