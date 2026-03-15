@@ -1,6 +1,40 @@
+# =============================================================================
+# SENTINEL Development Docker Compose
+# =============================================================================
+# Usage:
+#   docker compose up                          # core services only
+#   docker compose --profile all-agents up     # include batch agents
+#   docker compose --profile sso up            # include SAML/SSO
+#   docker compose --profile monitoring up     # include Prometheus + Grafana
+#   docker compose --profile all-agents --profile sso --profile monitoring up
+# =============================================================================
+
+# ── YAML Anchors ─────────────────────────────────────────────────────────────
+
+x-common-env: &common-env
+  DATABASE_URL: postgresql://sentinel:sentinel_dev@postgres:5432/sentinel
+  REDIS_URL: redis://redis:6379
+
+x-api-image: &api-image
+  build:
+    context: .
+    dockerfile: docker/api.Dockerfile
+
+x-agent-base: &agent-base
+  restart: unless-stopped
+  depends_on:
+    redis:
+      condition: service_healthy
+
+# ── Services ─────────────────────────────────────────────────────────────────
+
 services:
+
+  # ---------- Infrastructure ----------
+
   postgres:
     image: postgres:16-alpine
+    restart: unless-stopped
     ports:
       - "5432:5432"
     environment:
@@ -17,6 +51,7 @@ services:
 
   redis:
     image: redis:7-alpine
+    restart: unless-stopped
     ports:
       - "6379:6379"
     healthcheck:
@@ -25,10 +60,11 @@ services:
       timeout: 5s
       retries: 5
 
+  # ---------- Application ----------
+
   api:
-    build:
-      context: .
-      dockerfile: docker/api.Dockerfile
+    <<: *api-image
+    restart: unless-stopped
     ports:
       - "8080:8080"
     depends_on:
@@ -37,8 +73,8 @@ services:
       redis:
         condition: service_healthy
     environment:
-      DATABASE_URL: postgresql://sentinel:sentinel_dev@postgres:5432/sentinel
-      REDIS_URL: redis://redis:6379
+      <<: *common-env
+      RUN_MIGRATIONS: "true"
       SENTINEL_SECRET: dev-secret-change-in-production
       CLOUD_PROVIDER: ${CLOUD_PROVIDER:-}
       ARCHIVE_BUCKET: ${ARCHIVE_BUCKET:-}
@@ -66,6 +102,7 @@ services:
     build:
       context: .
       dockerfile: docker/dashboard.Dockerfile
+    restart: unless-stopped
     ports:
       - "3000:3000"
     depends_on:
@@ -96,18 +133,18 @@ services:
       timeout: 5s
       retries: 3
 
+  # ---------- Workers ----------
+
   assessor-worker:
-    build:
-      context: .
-      dockerfile: docker/api.Dockerfile
+    <<: *api-image
+    restart: unless-stopped
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
     environment:
-      DATABASE_URL: postgresql://sentinel:sentinel_dev@postgres:5432/sentinel
-      REDIS_URL: redis://redis:6379
+      <<: *common-env
       SENTINEL_SECRET: dev-secret-change-in-production
       CLOUD_PROVIDER: ${CLOUD_PROVIDER:-}
       ARCHIVE_BUCKET: ${ARCHIVE_BUCKET:-}
@@ -134,17 +171,15 @@ services:
       retries: 3
 
   scheduler:
-    build:
-      context: .
-      dockerfile: docker/api.Dockerfile
+    <<: *api-image
+    restart: unless-stopped
     depends_on:
       redis:
         condition: service_healthy
       postgres:
         condition: service_healthy
     environment:
-      DATABASE_URL: postgresql://sentinel:sentinel_dev@postgres:5432/sentinel
-      REDIS_URL: redis://redis:6379
+      <<: *common-env
       SELF_SCAN_ENABLED: ${SELF_SCAN_ENABLED:-true}
       SCHEDULER_LEASE_TTL: ${SCHEDULER_LEASE_TTL:-15000}
       SCAN_TIMEOUT_MS: ${SCAN_TIMEOUT_MS:-300000}
@@ -157,17 +192,15 @@ services:
       retries: 3
 
   report-worker:
-    build:
-      context: .
-      dockerfile: docker/api.Dockerfile
+    <<: *api-image
+    restart: unless-stopped
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
     environment:
-      DATABASE_URL: postgresql://sentinel:sentinel_dev@postgres:5432/sentinel
-      REDIS_URL: redis://redis:6379
+      <<: *common-env
       SENTINEL_SECRET: dev-secret-change-in-production
       CLOUD_PROVIDER: ${CLOUD_PROVIDER:-}
       ARCHIVE_BUCKET: ${ARCHIVE_BUCKET:-}
@@ -181,17 +214,15 @@ services:
       retries: 3
 
   notification-worker:
-    build:
-      context: .
-      dockerfile: docker/api.Dockerfile
+    <<: *api-image
+    restart: unless-stopped
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
     environment:
-      DATABASE_URL: postgresql://sentinel:sentinel_dev@postgres:5432/sentinel
-      REDIS_URL: redis://redis:6379
+      <<: *common-env
       NOTIFICATION_WORKER_PORT: "9095"
     command: ["node", "apps/api/dist/notification-worker.js"]
     healthcheck:
@@ -201,17 +232,15 @@ services:
       retries: 3
 
   github-bridge:
-    build:
-      context: .
-      dockerfile: docker/api.Dockerfile
+    <<: *api-image
+    restart: unless-stopped
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
     environment:
-      DATABASE_URL: postgresql://sentinel:sentinel_dev@postgres:5432/sentinel
-      REDIS_URL: redis://redis:6379
+      <<: *common-env
       GITHUB_APP_ID: ${GITHUB_APP_ID:-}
       GITHUB_PRIVATE_KEY: ${GITHUB_PRIVATE_KEY:-}
       GITHUB_BRIDGE_PORT: "9092"
@@ -222,14 +251,13 @@ services:
       timeout: 5s
       retries: 3
 
-  # Analysis Agents
+  # ---------- Core Analysis Agents ----------
+
   agent-security:
+    <<: *agent-base
     build:
       context: .
       dockerfile: agents/security/Dockerfile
-    depends_on:
-      redis:
-        condition: service_healthy
     environment:
       REDIS_URL: redis://redis:6379
     healthcheck:
@@ -239,12 +267,10 @@ services:
       retries: 3
 
   agent-dependency:
+    <<: *agent-base
     build:
       context: .
       dockerfile: agents/dependency/Dockerfile
-    depends_on:
-      redis:
-        condition: service_healthy
     environment:
       REDIS_URL: redis://redis:6379
     healthcheck:
@@ -253,22 +279,133 @@ services:
       timeout: 5s
       retries: 3
 
-  # agent-ip-license:
-  #   build:
-  #     context: .
-  #     dockerfile: agents/ip-license/Dockerfile
-  #   depends_on:
-  #     redis:
-  #       condition: service_healthy
-  #   environment:
-  #     REDIS_URL: redis://redis:6379
+  # ---------- Batch Agents (profile: all-agents) ----------
+
+  agent-ip-license:
+    <<: *agent-base
+    profiles:
+      - all-agents
+    build:
+      context: .
+      dockerfile: agents/ip-license/Dockerfile
+    environment:
+      REDIS_URL: redis://redis:6379
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/')"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
+  agent-quality:
+    <<: *agent-base
+    profiles:
+      - all-agents
+    build:
+      context: .
+      dockerfile: docker/agent.Dockerfile
+      args:
+        AGENT_NAME: quality
+    environment:
+      REDIS_URL: redis://redis:6379
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/')"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
+  agent-ai-detector:
+    <<: *agent-base
+    profiles:
+      - all-agents
+    build:
+      context: .
+      dockerfile: docker/agent.Dockerfile
+      args:
+        AGENT_NAME: ai-detector
+    environment:
+      REDIS_URL: redis://redis:6379
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/')"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
+  agent-policy:
+    <<: *agent-base
+    profiles:
+      - all-agents
+    build:
+      context: .
+      dockerfile: docker/agent.Dockerfile
+      args:
+        AGENT_NAME: policy
+    environment:
+      REDIS_URL: redis://redis:6379
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/')"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
+  # ---------- SSO (profile: sso) ----------
+
+  saml-jackson:
+    image: boxyhq/jackson:latest
+    restart: unless-stopped
+    profiles:
+      - sso
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      JACKSON_URL: http://saml-jackson:5225
+      DB_ENGINE: sql
+      DB_TYPE: postgres
+      DB_URL: postgresql://sentinel:sentinel_dev@postgres:5432/sentinel
+      NEXTAUTH_URL: http://localhost:3000
+    ports:
+      - "5225:5225"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:5225/api/v1/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  # ---------- Monitoring (profile: monitoring) ----------
 
   prometheus:
     image: prom/prometheus:v3.2
+    restart: unless-stopped
+    profiles:
+      - monitoring
     ports:
       - "9090:9090"
     volumes:
       - ./docker/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:9090/-/healthy || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  grafana:
+    image: grafana/grafana:11.5
+    restart: unless-stopped
+    profiles:
+      - monitoring
+    ports:
+      - "3001:3001"
+    depends_on:
+      prometheus:
+        condition: service_healthy
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_SERVER_HTTP_PORT: "3001"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3001/api/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
 
 volumes:
   pgdata:
