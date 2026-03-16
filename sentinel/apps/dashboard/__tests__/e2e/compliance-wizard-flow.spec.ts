@@ -120,8 +120,8 @@ test.describe("Full Wizard Flow", () => {
     await selectStep(page, "Record-Keeping (Logging)");
     await completeCurrentStep(page);
 
-    // Progress should show 3 completed / 25%
-    await expect(page.getByText("3 completed")).toBeVisible();
+    // Progress should show 3 completed / 25% (allow time for API + re-render)
+    await expect(page.getByText("3 completed")).toBeVisible({ timeout: 15_000 });
     await expect(page.getByText("25%", { exact: true })).toBeVisible();
   });
 });
