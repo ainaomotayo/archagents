@@ -97,6 +97,10 @@ export async function fetchProgress(wizardId: string): Promise<WizardProgress> {
   return wizardFetch(`/v1/compliance/wizards/${wizardId}/progress`);
 }
 
+export async function canGenerateDocument(wizardId: string, docType: string): Promise<{ ready: boolean; blocking: string[] }> {
+  return wizardFetch(`/v1/compliance/wizards/${wizardId}/documents/${docType}/readiness`);
+}
+
 export async function generateDocuments(wizardId: string, documentTypes: string[]): Promise<{ documents: WizardDocument[] }> {
   return wizardFetch(`/v1/compliance/wizards/${wizardId}/documents/generate`, {
     method: "POST",
@@ -111,7 +115,7 @@ export async function fetchDocuments(wizardId: string): Promise<WizardDocument[]
 export async function uploadEvidence(
   wizardId: string,
   code: string,
-  file: { fileName: string; mimeType: string; fileSize: number; sha256: string },
+  file: { fileName: string; mimeType: string; fileSize: number; storageKey: string; sha256: string },
 ): Promise<{ evidence: import("./wizard-types").WizardEvidence }> {
   return wizardFetch(`/v1/compliance/wizards/${wizardId}/steps/${code}/evidence`, {
     method: "POST",

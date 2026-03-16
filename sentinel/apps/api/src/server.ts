@@ -1814,6 +1814,12 @@ app.get("/v1/compliance/wizards/:wizardId/progress", { preHandler: authHook }, a
   });
 });
 
+app.get("/v1/compliance/wizards/:wizardId/documents/:docType/readiness", { preHandler: authHook }, async (request) => {
+  const orgId = (request as any).orgId ?? "default";
+  const { wizardId, docType } = request.params as { wizardId: string; docType: string };
+  return withTenant(db, orgId, () => wizardRoutes.canGenerateDocument(wizardId, docType));
+});
+
 app.post("/v1/compliance/wizards/:wizardId/documents/generate", { preHandler: authHook }, async (request, reply) => {
   const orgId = (request as any).orgId ?? "default";
   const userId = (request as any).userId ?? "unknown";

@@ -43,10 +43,11 @@ const GUIDANCE: Record<string, string> = {
 };
 
 // Map document types to the controls that must be completed before generating
+// Must stay in sync with DOC_PREREQUISITES in packages/compliance/src/wizard/wizard-service.ts
 const DOC_BLOCKING_CONTROLS: Record<WizardDocumentType, string[]> = {
-  technical_documentation: ["AIA-9", "AIA-10", "AIA-11", "AIA-12", "AIA-14", "AIA-15"],
-  declaration_of_conformity: ["AIA-47"],
-  instructions_for_use: ["AIA-9", "AIA-10", "AIA-13", "AIA-14", "AIA-15", "AIA-26"],
+  technical_documentation: ["AIA-9", "AIA-10", "AIA-12", "AIA-14", "AIA-15"],
+  declaration_of_conformity: [], // special: requires >= 90% overall progress
+  instructions_for_use: ["AIA-9", "AIA-10", "AIA-13", "AIA-14", "AIA-15"],
   post_market_monitoring: ["AIA-17", "AIA-60", "AIA-61"],
 };
 
@@ -58,6 +59,7 @@ export function WizardPageClient({ wizard: initialWizard }: WizardPageClientProp
     return available?.controlCode ?? wizard.steps[0]?.controlCode ?? "AIA-9";
   });
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showDocPanel, setShowDocPanel] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -85,8 +87,8 @@ export function WizardPageClient({ wizard: initialWizard }: WizardPageClientProp
             : s
         ),
       }));
-    } catch (err) {
-      console.error("Failed to update requirement", err);
+    } catch (err: any) {
+      setError(err.message ?? "Failed to update requirement");
     } finally {
       setSaving(false);
     }
@@ -108,8 +110,8 @@ export function WizardPageClient({ wizard: initialWizard }: WizardPageClientProp
       await updateStep(wizard.id, currentCode, {
         justification: currentStep.justification ?? undefined,
       });
-    } catch (err) {
-      console.error("Failed to save", err);
+    } catch (err: any) {
+      setError(err.message ?? "Failed to save");
     } finally {
       setSaving(false);
     }
@@ -121,8 +123,8 @@ export function WizardPageClient({ wizard: initialWizard }: WizardPageClientProp
       await completeStep(wizard.id, currentCode);
       const updated = await fetchWizard(wizard.id);
       setWizard(updated);
-    } catch (err) {
-      console.error("Failed to complete step", err);
+    } catch (err: any) {
+      setError(err.message ?? "Failed to complete step");
     } finally {
       setSaving(false);
     }
@@ -134,8 +136,8 @@ export function WizardPageClient({ wizard: initialWizard }: WizardPageClientProp
       await skipStep(wizard.id, currentCode, reason);
       const updated = await fetchWizard(wizard.id);
       setWizard(updated);
-    } catch (err) {
-      console.error("Failed to skip step", err);
+    } catch (err: any) {
+      setError(err.message ?? "Failed to skip step");
     } finally {
       setSaving(false);
     }
@@ -160,6 +162,7 @@ export function WizardPageClient({ wizard: initialWizard }: WizardPageClientProp
         fileName: file.name,
         mimeType: file.type || "application/octet-stream",
         fileSize: file.size,
+        storageKey: `evidence/${wizard.id}/${currentCode}/${sha256.slice(0, 12)}-${file.name}`,
         sha256,
       });
 
@@ -171,8 +174,8 @@ export function WizardPageClient({ wizard: initialWizard }: WizardPageClientProp
             : s
         ),
       }));
-    } catch (err) {
-      console.error("Failed to upload evidence", err);
+    } catch (err: any) {
+      setError(err.message ?? "Failed to upload evidence");
     } finally {
       setSaving(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
@@ -191,8 +194,8 @@ export function WizardPageClient({ wizard: initialWizard }: WizardPageClientProp
             : s
         ),
       }));
-    } catch (err) {
-      console.error("Failed to delete evidence", err);
+    } catch (err: any) {
+      setError(err.message ?? "Failed to delete evidence");
     } finally {
       setSaving(false);
     }
@@ -202,8 +205,8 @@ export function WizardPageClient({ wizard: initialWizard }: WizardPageClientProp
     try {
       await deleteWizard(wizard.id);
       router.push("/compliance/wizards");
-    } catch (err) {
-      console.error("Failed to delete wizard", err);
+    } catch (err: any) {
+      setError(err.message ?? "Failed to delete wizard");
     }
   }, [wizard.id, router]);
 
@@ -218,8 +221,8 @@ export function WizardPageClient({ wizard: initialWizard }: WizardPageClientProp
           ...result.documents,
         ],
       }));
-    } catch (err) {
-      console.error("Failed to generate documents", err);
+    } catch (err: any) {
+      setError(err.message ?? "Failed to generate documents");
     } finally {
       setSaving(false);
     }
@@ -256,6 +259,16 @@ export function WizardPageClient({ wizard: initialWizard }: WizardPageClientProp
   );
   const docBlockingSteps: Record<string, string[]> = {};
   for (const [docType, requiredCodes] of Object.entries(DOC_BLOCKING_CONTROLS)) {
+    if (docType === "declaration_of_conformity") {
+      // Special: requires >= 90% overall progress
+      if (progress.overall < 0.9) {
+        const incomplete = wizard.steps
+          .filter((s) => s.state !== "completed" && s.state !== "skipped")
+          .map((s) => s.controlCode);
+        docBlockingSteps[docType] = incomplete;
+      }
+      continue;
+    }
     const blocking = requiredCodes.filter((c) => !completedCodes.has(c));
     if (blocking.length > 0) {
       docBlockingSteps[docType] = blocking;
@@ -277,6 +290,21 @@ export function WizardPageClient({ wizard: initialWizard }: WizardPageClientProp
         className="hidden"
         onChange={handleFileSelected}
       />
+
+      {/* Error banner */}
+      {error && (
+        <div className="border-b border-red-500/20 bg-red-500/5 px-6 py-3">
+          <div className="flex items-center justify-between">
+            <p className="text-sm text-red-400">{error}</p>
+            <button
+              onClick={() => setError(null)}
+              className="text-xs text-red-400 hover:text-red-300 underline"
+            >
+              Dismiss
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Delete confirmation dialog */}
       {showDeleteConfirm && (

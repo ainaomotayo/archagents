@@ -30,6 +30,10 @@ function createMockDb() {
     },
     wizardDocument: {
       upsert: vi.fn(),
+      update: vi.fn(),
+    },
+    report: {
+      create: vi.fn(),
     },
   };
 }
@@ -383,11 +387,14 @@ describe("Wizard integration – document generation", () => {
   });
 
   it("generateDocuments succeeds and creates document rows", async () => {
-    db.complianceWizard.findUnique.mockResolvedValue({ id: "wiz-1", status: "active" });
-    db.complianceWizard.update.mockResolvedValue({});
     const allCompleted = makeSteps(
       Object.fromEntries(EU_AI_ACT_CONTROLS.map((c) => [c.code, "completed"])),
-    );
+    ).map((s) => ({ ...s, evidence: [] }));
+    db.complianceWizard.findUnique.mockResolvedValue({
+      id: "wiz-1", orgId: "org-1", status: "active", name: "Test", metadata: {},
+      steps: allCompleted,
+    });
+    db.complianceWizard.update.mockResolvedValue({});
     db.wizardStep.findMany.mockResolvedValue(allCompleted);
     db.wizardDocument.upsert.mockResolvedValue({
       id: "doc-1",
