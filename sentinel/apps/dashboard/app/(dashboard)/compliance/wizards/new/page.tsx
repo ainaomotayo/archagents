@@ -19,6 +19,13 @@ export default function CreateWizardPage() {
     setError("");
     try {
       const wizard = await createWizard(name.trim());
+      if (systemName.trim() || provider.trim()) {
+        const { updateWizardMetadata } = await import("@/lib/wizard-api");
+        await updateWizardMetadata(wizard.id, {
+          systemName: systemName.trim(),
+          provider: provider.trim(),
+        }).catch(() => {}); // non-critical
+      }
       router.push(`/compliance/wizards/${wizard.id}`);
     } catch (err: any) {
       setError(err.message ?? "Failed to create wizard");

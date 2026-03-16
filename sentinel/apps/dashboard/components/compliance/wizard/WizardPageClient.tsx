@@ -1,15 +1,26 @@
 "use client";
 
-import { useState, useCallback } from "react";
-import type { Wizard, WizardStep, WizardProgress } from "@/lib/wizard-types";
-import { EU_AI_ACT_CONTROLS } from "@/lib/wizard-types";
+import { useState, useCallback, useRef } from "react";
+import { useRouter } from "next/navigation";
+import type { Wizard, WizardStep, WizardProgress, WizardDocumentType } from "@/lib/wizard-types";
+import { EU_AI_ACT_CONTROLS, DOCUMENT_TYPE_LABELS } from "@/lib/wizard-types";
 import { WizardStepper } from "./WizardStepper";
 import { WizardHeader } from "./WizardHeader";
 import { StepHeader } from "./StepHeader";
 import { StepFooter } from "./StepFooter";
 import { GenericStepForm } from "./GenericStepForm";
 import { ProgressSummary } from "./ProgressSummary";
-import { updateStep, completeStep, skipStep, fetchWizard } from "@/lib/wizard-api";
+import { DocumentGenerationPanel } from "./DocumentGenerationPanel";
+import {
+  updateStep,
+  completeStep,
+  skipStep,
+  fetchWizard,
+  deleteWizard,
+  generateDocuments,
+  uploadEvidence,
+  deleteEvidence,
+} from "@/lib/wizard-api";
 
 interface WizardPageClientProps {
   wizard: Wizard;
@@ -31,14 +42,25 @@ const GUIDANCE: Record<string, string> = {
   "AIA-61": "Establish a post-market monitoring plan with data collection, analysis, update procedures, and regular reporting.",
 };
 
+// Map document types to the controls that must be completed before generating
+const DOC_BLOCKING_CONTROLS: Record<WizardDocumentType, string[]> = {
+  technical_documentation: ["AIA-9", "AIA-10", "AIA-11", "AIA-12", "AIA-14", "AIA-15"],
+  declaration_of_conformity: ["AIA-47"],
+  instructions_for_use: ["AIA-9", "AIA-10", "AIA-13", "AIA-14", "AIA-15", "AIA-26"],
+  post_market_monitoring: ["AIA-17", "AIA-60", "AIA-61"],
+};
+
 export function WizardPageClient({ wizard: initialWizard }: WizardPageClientProps) {
+  const router = useRouter();
   const [wizard, setWizard] = useState(initialWizard);
   const [currentCode, setCurrentCode] = useState(() => {
-    // Start with first in-progress or available step
     const available = wizard.steps.find((s) => s.state === "in_progress" || s.state === "available");
     return available?.controlCode ?? wizard.steps[0]?.controlCode ?? "AIA-9";
   });
   const [saving, setSaving] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showDocPanel, setShowDocPanel] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const currentStep = wizard.steps.find((s) => s.controlCode === currentCode);
 
@@ -49,7 +71,6 @@ export function WizardPageClient({ wizard: initialWizard }: WizardPageClientProp
       await updateStep(wizard.id, currentCode, {
         requirements: [{ key, completed }],
       });
-      // Optimistic update
       setWizard((prev) => ({
         ...prev,
         steps: prev.steps.map((s) =>
@@ -98,7 +119,6 @@ export function WizardPageClient({ wizard: initialWizard }: WizardPageClientProp
     setSaving(true);
     try {
       await completeStep(wizard.id, currentCode);
-      // Re-fetch the full wizard to get updated step states (unlocked dependents)
       const updated = await fetchWizard(wizard.id);
       setWizard(updated);
     } catch (err) {
@@ -112,7 +132,6 @@ export function WizardPageClient({ wizard: initialWizard }: WizardPageClientProp
     setSaving(true);
     try {
       await skipStep(wizard.id, currentCode, reason);
-      // Re-fetch the full wizard to get updated step states (potentially unlocked dependents)
       const updated = await fetchWizard(wizard.id);
       setWizard(updated);
     } catch (err) {
@@ -121,6 +140,90 @@ export function WizardPageClient({ wizard: initialWizard }: WizardPageClientProp
       setSaving(false);
     }
   }, [wizard.id, currentCode]);
+
+  const handleUploadEvidence = useCallback(() => {
+    fileInputRef.current?.click();
+  }, []);
+
+  const handleFileSelected = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setSaving(true);
+    try {
+      // Compute SHA-256
+      const buffer = await file.arrayBuffer();
+      const hashBuffer = await crypto.subtle.digest("SHA-256", buffer);
+      const hashArray = Array.from(new Uint8Array(hashBuffer));
+      const sha256 = hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
+
+      const result = await uploadEvidence(wizard.id, currentCode, {
+        fileName: file.name,
+        mimeType: file.type || "application/octet-stream",
+        fileSize: file.size,
+        sha256,
+      });
+
+      setWizard((prev) => ({
+        ...prev,
+        steps: prev.steps.map((s) =>
+          s.controlCode === currentCode
+            ? { ...s, evidence: [...s.evidence, result.evidence] }
+            : s
+        ),
+      }));
+    } catch (err) {
+      console.error("Failed to upload evidence", err);
+    } finally {
+      setSaving(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  }, [wizard.id, currentCode]);
+
+  const handleDeleteEvidence = useCallback(async (evidenceId: string) => {
+    setSaving(true);
+    try {
+      await deleteEvidence(wizard.id, currentCode, evidenceId);
+      setWizard((prev) => ({
+        ...prev,
+        steps: prev.steps.map((s) =>
+          s.controlCode === currentCode
+            ? { ...s, evidence: s.evidence.filter((ev) => ev.id !== evidenceId) }
+            : s
+        ),
+      }));
+    } catch (err) {
+      console.error("Failed to delete evidence", err);
+    } finally {
+      setSaving(false);
+    }
+  }, [wizard.id, currentCode]);
+
+  const handleDelete = useCallback(async () => {
+    try {
+      await deleteWizard(wizard.id);
+      router.push("/compliance/wizards");
+    } catch (err) {
+      console.error("Failed to delete wizard", err);
+    }
+  }, [wizard.id, router]);
+
+  const handleGenerateDocuments = useCallback(async (docTypes: WizardDocumentType[]) => {
+    setSaving(true);
+    try {
+      const result = await generateDocuments(wizard.id, docTypes);
+      setWizard((prev) => ({
+        ...prev,
+        documents: [
+          ...prev.documents.filter((d) => !docTypes.includes(d.documentType as WizardDocumentType)),
+          ...result.documents,
+        ],
+      }));
+    } catch (err) {
+      console.error("Failed to generate documents", err);
+    } finally {
+      setSaving(false);
+    }
+  }, [wizard.id]);
 
   const canCompleteStep = currentStep
     ? currentStep.requirements
@@ -145,13 +248,74 @@ export function WizardPageClient({ wizard: initialWizard }: WizardPageClientProp
     blockingSteps: [],
   };
 
+  // Compute blocking steps for document generation
+  const completedCodes = new Set(
+    wizard.steps
+      .filter((s) => s.state === "completed" || s.state === "skipped")
+      .map((s) => s.controlCode),
+  );
+  const docBlockingSteps: Record<string, string[]> = {};
+  for (const [docType, requiredCodes] of Object.entries(DOC_BLOCKING_CONTROLS)) {
+    const blocking = requiredCodes.filter((c) => !completedCodes.has(c));
+    if (blocking.length > 0) {
+      docBlockingSteps[docType] = blocking;
+    }
+  }
+
   return (
     <div className="flex h-full flex-col">
       <WizardHeader
         wizard={wizard}
-        onGenerateDocuments={() => {}}
-        onDelete={() => {}}
+        onGenerateDocuments={() => setShowDocPanel(!showDocPanel)}
+        onDelete={() => setShowDeleteConfirm(true)}
       />
+
+      {/* Hidden file input for evidence upload */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        className="hidden"
+        onChange={handleFileSelected}
+      />
+
+      {/* Delete confirmation dialog */}
+      {showDeleteConfirm && (
+        <div className="border-b border-red-500/20 bg-red-500/5 px-6 py-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-red-400">Delete this wizard?</p>
+              <p className="text-xs text-text-secondary mt-0.5">
+                This will permanently delete &quot;{wizard.name}&quot; and all its progress. This action cannot be undone.
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setShowDeleteConfirm(false)}
+                className="rounded-lg border border-border bg-surface-2 px-3 py-1.5 text-sm text-text-secondary hover:text-text-primary transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDelete}
+                className="rounded-lg bg-red-500 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-600 transition-colors"
+              >
+                Delete Wizard
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Document generation panel */}
+      {showDocPanel && (
+        <div className="border-b border-border bg-surface-1 px-6 py-4">
+          <DocumentGenerationPanel
+            documents={wizard.documents}
+            blockingSteps={docBlockingSteps}
+            onGenerate={handleGenerateDocuments}
+          />
+        </div>
+      )}
 
       <div className="flex flex-1 overflow-hidden">
         {/* Sidebar Stepper */}
@@ -177,8 +341,8 @@ export function WizardPageClient({ wizard: initialWizard }: WizardPageClientProp
                 guidance={GUIDANCE[currentCode] ?? "Complete the requirements for this control."}
                 onRequirementChange={handleRequirementChange}
                 onJustificationChange={handleJustificationChange}
-                onUploadEvidence={() => {}}
-                onDeleteEvidence={() => {}}
+                onUploadEvidence={handleUploadEvidence}
+                onDeleteEvidence={handleDeleteEvidence}
               />
 
               <StepFooter

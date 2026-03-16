@@ -107,3 +107,24 @@ export async function generateDocuments(wizardId: string, documentTypes: string[
 export async function fetchDocuments(wizardId: string): Promise<WizardDocument[]> {
   return wizardFetch(`/v1/compliance/wizards/${wizardId}/documents`);
 }
+
+export async function uploadEvidence(
+  wizardId: string,
+  code: string,
+  file: { fileName: string; mimeType: string; fileSize: number; sha256: string },
+): Promise<{ evidence: import("./wizard-types").WizardEvidence }> {
+  return wizardFetch(`/v1/compliance/wizards/${wizardId}/steps/${code}/evidence`, {
+    method: "POST",
+    body: JSON.stringify(file),
+  });
+}
+
+export async function deleteEvidence(
+  wizardId: string,
+  code: string,
+  evidenceId: string,
+): Promise<void> {
+  await wizardFetch(`/v1/compliance/wizards/${wizardId}/steps/${code}/evidence/${evidenceId}`, {
+    method: "DELETE",
+  });
+}
