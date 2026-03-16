@@ -30,10 +30,18 @@ export function EvidenceUploader({
   const inputRef = useRef<HTMLInputElement>(null);
   const [isDragging, setIsDragging] = useState(false);
 
+  const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50 MB
+  const [sizeError, setSizeError] = useState<string | null>(null);
+
   const handleFiles = useCallback(
     (files: FileList | null) => {
       if (!files || disabled) return;
+      setSizeError(null);
       for (let i = 0; i < files.length; i++) {
+        if (files[i].size > MAX_FILE_SIZE) {
+          setSizeError(`"${files[i].name}" exceeds 50 MB limit (${formatFileSize(files[i].size)})`);
+          continue;
+        }
         onUpload(files[i]);
       }
     },
@@ -100,6 +108,10 @@ export function EvidenceUploader({
         </span>
         <span className="text-[11px] text-text-tertiary">Max 50 MB</span>
       </button>
+
+      {sizeError && (
+        <p className="text-xs text-red-400">{sizeError}</p>
+      )}
 
       <input
         ref={inputRef}

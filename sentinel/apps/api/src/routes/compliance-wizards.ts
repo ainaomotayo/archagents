@@ -73,6 +73,10 @@ export function buildWizardRoutes(deps: WizardRouteDeps) {
       return service.getProgress(wizardId, orgId);
     },
 
+    async canGenerateDocument(wizardId: string, docType: string) {
+      return service.canGenerateDocument(wizardId, docType);
+    },
+
     async generateDocuments(wizardId: string, body: any, userId: string) {
       const { documentTypes } = body;
       if (!Array.isArray(documentTypes) || documentTypes.length === 0) {
