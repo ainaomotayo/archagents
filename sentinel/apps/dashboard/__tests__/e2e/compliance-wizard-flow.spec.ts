@@ -409,3 +409,242 @@ test.describe("Resume Wizard", () => {
     await expect(page.getByText("1 completed")).toBeVisible();
   });
 });
+
+// ── Test 9: Delete Wizard Flow ──────────────────────────────────────────
+test.describe("Delete Wizard Flow", () => {
+  test("create wizard → delete via UI → wizard removed from list", async ({ page }) => {
+    test.setTimeout(60_000);
+
+    // Create a wizard
+    await createWizardViaUI(page, "Wizard To Delete");
+
+    // Verify we're on the detail page
+    await expect(page.getByRole("heading", { name: "Wizard To Delete" })).toBeVisible();
+
+    // Navigate to wizard list and verify it appears
+    await page.getByRole("link", { name: "Back" }).click();
+    await page.waitForURL(/\/compliance\/wizards$/, { timeout: 10_000 });
+    await expect(page.getByText("Wizard To Delete")).toBeVisible();
+
+    // Navigate back into the wizard detail
+    const row = page.locator("tr", { hasText: "Wizard To Delete" });
+    await row.getByRole("link", { name: "Open" }).click();
+    await page.waitForURL(/\/compliance\/wizards\/wiz-/, { timeout: 10_000 });
+    await page.waitForLoadState("networkidle");
+
+    // Click the Delete button in the header
+    await page.getByRole("button", { name: "Delete" }).click();
+
+    // Confirmation dialog should appear
+    await expect(page.getByText("Delete this wizard?")).toBeVisible();
+    await expect(page.getByText("This will permanently delete")).toBeVisible();
+
+    // Confirm deletion
+    await page.getByRole("button", { name: "Delete Wizard" }).click();
+
+    // Should navigate back to wizard list
+    await page.waitForURL(/\/compliance\/wizards$/, { timeout: 10_000 });
+    await page.waitForLoadState("networkidle");
+
+    // Wizard should no longer appear in the list
+    await expect(page.getByText("Wizard To Delete")).not.toBeVisible();
+  });
+});
+
+// ── Test 10: Error Handling / API Failure Resilience ────────────────────
+test.describe("Error Handling and API Failure Resilience", () => {
+  test("Mark Complete is disabled when requirements are incomplete", async ({ page }) => {
+    test.setTimeout(60_000);
+    await createWizardViaUI(page, "Error Handling Test");
+
+    // Select a step with multiple requirements
+    await selectStep(page, "Risk Management System");
+
+    // Mark Complete should be disabled initially (no requirements checked)
+    const completeBtn = page.getByRole("button", { name: "Mark Complete" });
+    await expect(completeBtn).toBeDisabled();
+
+    // Check only one requirement (step has 5 required)
+    const firstCheckbox = page.locator("input[type='checkbox']").first();
+    await firstCheckbox.click();
+    await page.waitForTimeout(500);
+
+    // Mark Complete should still be disabled (not all required items checked)
+    await expect(completeBtn).toBeDisabled();
+  });
+
+  test("locked step buttons are disabled and not clickable", async ({ page }) => {
+    test.setTimeout(60_000);
+    await createWizardViaUI(page, "Locked Step Test");
+
+    // Phase 2+ steps should be locked/disabled
+    const lockedStep = page.getByRole("button", { name: "Technical Documentation" });
+    await expect(lockedStep).toBeDisabled();
+
+    // Verify multiple locked steps are disabled
+    await expect(page.getByRole("button", { name: "Human Oversight" })).toBeDisabled();
+    await expect(page.getByRole("button", { name: "Quality Management System" })).toBeDisabled();
+    await expect(page.getByRole("button", { name: "Post-Market Monitoring" })).toBeDisabled();
+
+    // Phase 1 steps should remain enabled
+    await expect(page.getByRole("button", { name: "Risk Management System" })).toBeEnabled();
+    await expect(page.getByRole("button", { name: "Data & Data Governance" })).toBeEnabled();
+  });
+});
+
+// ── Test 11: Document Readiness Check ───────────────────────────────────
+test.describe("Document Readiness Check", () => {
+  test("complete all steps → generate documents → verify documents displayed", async ({ page }) => {
+    test.setTimeout(180_000);
+    await createWizardViaUI(page, "Doc Generation Test");
+
+    // Complete all 12 steps in dependency order
+    // Phase 1
+    for (const title of ["Risk Management System", "Data & Data Governance", "Record-Keeping (Logging)"]) {
+      await selectStep(page, title);
+      await completeCurrentStep(page);
+    }
+
+    // Phase 2
+    for (const title of ["Technical Documentation", "Transparency & User Info", "Human Oversight", "Accuracy, Robustness & Cybersecurity"]) {
+      await selectStep(page, title);
+      await completeCurrentStep(page);
+    }
+
+    // Phase 3
+    for (const title of ["Quality Management System", "Obligations of Deployers", "EU Declaration of Conformity"]) {
+      await selectStep(page, title);
+      await completeCurrentStep(page);
+    }
+
+    // Phase 4
+    for (const title of ["Serious Incident Reporting", "Post-Market Monitoring"]) {
+      await selectStep(page, title);
+      await completeCurrentStep(page);
+    }
+
+    // Verify 100% progress
+    await expect(page.getByText("100%", { exact: true })).toBeVisible();
+
+    // Click "Generate Documents" to open the document panel
+    await page.getByRole("button", { name: "Generate Documents" }).click();
+    await page.waitForTimeout(1_000);
+
+    // Verify the Documents panel heading appears
+    await expect(page.getByRole("heading", { name: "Documents" })).toBeVisible();
+
+    // All steps complete → "Generate All" button should appear
+    const generateAllBtn = page.getByRole("button", { name: "Generate All" });
+    await expect(generateAllBtn).toBeVisible({ timeout: 10_000 });
+
+    // Click "Generate All" to trigger document generation
+    await generateAllBtn.click();
+    await page.waitForTimeout(2_000);
+
+    // Documents should now show "Ready - Download" status
+    await expect(page.getByText("Ready - Download").first()).toBeVisible({ timeout: 10_000 });
+  });
+});
+
+// ── Test 12: Evidence Upload UI Validation ──────────────────────────────
+test.describe("Evidence Upload UI Validation", () => {
+  test("evidence section visible with empty state on fresh step", async ({ page }) => {
+    test.setTimeout(60_000);
+    await createWizardViaUI(page, "Evidence UI Validation Test");
+
+    // Navigate to a step
+    await selectStep(page, "Data & Data Governance");
+
+    // Evidence heading should be visible
+    await expect(page.getByRole("heading", { name: "Evidence", exact: true })).toBeVisible();
+
+    // Should show empty state text
+    await expect(page.getByText("No evidence files attached yet.")).toBeVisible();
+
+    // Upload File button should be visible (step is editable)
+    await expect(page.getByRole("button", { name: "Upload File" })).toBeVisible();
+  });
+
+  test("evidence section becomes read-only after completing a step", async ({ page }) => {
+    test.setTimeout(60_000);
+    await createWizardViaUI(page, "Evidence Readonly Validation");
+
+    // Select a step and verify Upload File is available before completion
+    await selectStep(page, "Record-Keeping (Logging)");
+    await expect(page.getByRole("button", { name: "Upload File" })).toBeVisible();
+
+    // Complete the step
+    await completeCurrentStep(page);
+
+    // Re-select the now-completed step
+    await selectStep(page, "Record-Keeping (Logging)");
+
+    // Step should show completed and read-only state
+    await expect(page.getByText("Completed", { exact: true })).toBeVisible();
+    await expect(page.getByText("This step has been completed and is read-only.")).toBeVisible();
+
+    // Upload File button should NOT be visible for completed steps
+    await expect(page.getByRole("button", { name: "Upload File" })).not.toBeVisible();
+  });
+});
+
+// ── Test 13: Concurrent Operations (Multiple Wizards) ───────────────────
+test.describe("Concurrent Operations - Multiple Wizards", () => {
+  test("two wizards maintain independent state", async ({ page }) => {
+    test.setTimeout(60_000);
+
+    // Create first wizard
+    await createWizardViaUI(page, "Wizard Alpha");
+    await expect(page.getByRole("heading", { name: "Wizard Alpha" })).toBeVisible();
+
+    // Complete AIA-9 on the first wizard
+    await selectStep(page, "Risk Management System");
+    await completeCurrentStep(page);
+
+    // Verify progress shows 1 completed
+    await expect(page.getByText("1 completed")).toBeVisible();
+
+    // Navigate back to wizard list
+    await page.getByRole("link", { name: "Back" }).click();
+    await page.waitForURL(/\/compliance\/wizards$/, { timeout: 10_000 });
+
+    // Create second wizard
+    await createWizardViaUI(page, "Wizard Beta");
+    await expect(page.getByRole("heading", { name: "Wizard Beta" })).toBeVisible();
+
+    // Verify second wizard is at initial state (0 completed)
+    await expect(page.getByText("0 completed")).toBeVisible();
+
+    // Phase 1 steps should be available (not yet completed)
+    await expect(page.getByRole("button", { name: "Risk Management System" })).toBeEnabled();
+    await selectStep(page, "Risk Management System");
+
+    // Mark Complete should be disabled (no requirements checked yet)
+    await expect(page.getByRole("button", { name: "Mark Complete" })).toBeDisabled();
+
+    // Phase 2 steps should still be locked on the second wizard
+    await expect(page.getByRole("button", { name: "Technical Documentation" })).toBeDisabled();
+    await expect(page.getByRole("button", { name: "Transparency & User Info" })).toBeDisabled();
+
+    // Navigate back to list and verify both wizards appear
+    await page.getByRole("link", { name: "Back" }).click();
+    await page.waitForURL(/\/compliance\/wizards$/, { timeout: 10_000 });
+    await page.waitForLoadState("networkidle");
+
+    await expect(page.getByText("Wizard Alpha")).toBeVisible();
+    await expect(page.getByText("Wizard Beta")).toBeVisible();
+
+    // Re-open first wizard and verify its progress is preserved
+    const alphaRow = page.locator("tr", { hasText: "Wizard Alpha" });
+    await alphaRow.getByRole("link", { name: "Open" }).click();
+    await page.waitForURL(/\/compliance\/wizards\/wiz-/, { timeout: 10_000 });
+    await page.waitForLoadState("networkidle");
+
+    // First wizard should still show 1 completed
+    await expect(page.getByText("1 completed")).toBeVisible();
+
+    // AIA-9 should still be completed on first wizard
+    await selectStep(page, "Risk Management System");
+    await expect(page.getByText("Completed", { exact: true })).toBeVisible();
+  });
+});

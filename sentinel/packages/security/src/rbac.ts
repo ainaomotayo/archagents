@@ -64,6 +64,7 @@ export const API_PERMISSIONS: EndpointPermission[] = [
   { method: "DELETE", path: "/v1/compliance/wizards/:wizardId/steps/:code/evidence/:evidenceId", roles: ["admin", "manager"] },
   { method: "GET", path: "/v1/compliance/wizards/:wizardId/progress", roles: ["admin", "manager", "developer", "viewer"] },
   { method: "POST", path: "/v1/compliance/wizards/:wizardId/documents/generate", roles: ["admin", "manager"] },
+  { method: "GET", path: "/v1/compliance/wizards/:wizardId/documents/:docType/readiness", roles: ["admin", "manager", "developer", "viewer"] },
   { method: "GET", path: "/v1/compliance/wizards/:wizardId/documents", roles: ["admin", "manager", "developer", "viewer"] },
   // Gap Analysis
   { method: "GET", path: "/v1/compliance/gaps/:frameworkSlug", roles: ["admin", "manager"] },
