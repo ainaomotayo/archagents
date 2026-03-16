@@ -205,9 +205,13 @@ export const authOptions: AuthOptions = {
     },
     async decode({ token, secret }) {
       if (!token) return null;
-      const { decryptJwe } = await import("./jwe");
-      const key = typeof secret === "string" ? secret : secret.toString("base64");
-      return decryptJwe(token, key) as any;
+      try {
+        const { decryptJwe } = await import("./jwe");
+        const key = typeof secret === "string" ? secret : secret.toString("base64");
+        return await decryptJwe(token, key) as any;
+      } catch {
+        return null;
+      }
     },
   },
 

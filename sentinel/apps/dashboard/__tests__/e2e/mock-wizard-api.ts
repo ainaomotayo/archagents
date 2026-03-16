@@ -2,7 +2,7 @@
  * Lightweight mock API server for wizard E2E tests.
  * Maintains in-memory state with full DAG unlocking logic.
  */
-import { createServer, type IncomingMessage, type ServerResponse } from "http";
+import { createServer, request as httpRequest, type IncomingMessage, type ServerResponse } from "http";
 
 // ── Control definitions (mirrors backend) ──────────────────────────────
 interface ControlDef {
@@ -446,7 +446,19 @@ export function createMockServer(port = 8081): Promise<ReturnType<typeof createS
     const route = matchRoute(method, url);
 
     if (!route) {
-      return notFound(res, `Route ${method}:${url} not found`);
+      // Proxy unhandled requests to the real API on port 8080
+      const proxyReq = httpRequest(
+        { hostname: "localhost", port: 8080, path: req.url, method, headers: req.headers },
+        (proxyRes) => {
+          res.writeHead(proxyRes.statusCode ?? 502, proxyRes.headers);
+          proxyRes.pipe(res);
+        },
+      );
+      proxyReq.on("error", () => {
+        json(res, { error: "Upstream API unavailable" }, 502);
+      });
+      req.pipe(proxyReq);
+      return;
     }
 
     try {

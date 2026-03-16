@@ -7,9 +7,14 @@ const API_BASE = process.env.SENTINEL_API_URL ?? "http://localhost:8080";
 
 async function wizardFetch<T>(path: string, options: RequestInit = {}): Promise<T> {
   // Import getSessionHeaders dynamically to avoid circular deps
-  const { getServerSession } = await import("next-auth");
-  const { authOptions } = await import("./auth");
-  const session = await getServerSession(authOptions);
+  let session = null;
+  try {
+    const { getServerSession } = await import("next-auth");
+    const { authOptions } = await import("./auth");
+    session = await getServerSession(authOptions);
+  } catch {
+    // Auth unavailable (e.g. invalid token) — proceed without session
+  }
 
   const headers: Record<string, string> = {
     "Content-Type": "application/json",

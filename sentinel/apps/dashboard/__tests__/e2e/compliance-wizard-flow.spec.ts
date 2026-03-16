@@ -5,21 +5,11 @@
  * Dashboard must be started with SENTINEL_API_URL=http://localhost:8081.
  */
 import { test, expect, type Page } from "@playwright/test";
-import { createMockServer, resetState } from "./mock-wizard-api";
-import type { Server } from "http";
+import { resetState } from "./mock-wizard-api";
+import { SESSION_COOKIE } from "./e2e-helpers";
 
-// Force all tests in this file to run in a single worker (mock server binds port 8081).
+// Force all tests in this file to run in a single worker (shared mock state).
 test.describe.configure({ mode: "serial" });
-
-let mockServer: Server;
-
-test.beforeAll(async () => {
-  mockServer = await createMockServer(8081);
-});
-
-test.afterAll(async () => {
-  await new Promise<void>((resolve) => mockServer.close(() => resolve()));
-});
 
 test.beforeEach(async () => {
   resetState();
@@ -27,17 +17,33 @@ test.beforeEach(async () => {
 
 // ── Helpers ────────────────────────────────────────────────────────────
 
+/** Navigate with auth cookie — re-adds cookie before every goto to prevent loss under load */
+async function gotoWithAuth(page: Page, url: string, options?: Parameters<typeof page.goto>[1]) {
+  await page.context().addCookies([SESSION_COOKIE]);
+  try {
+    await page.goto(url, options);
+  } catch (err: any) {
+    if (err.message?.includes("ERR_ABORTED")) {
+      await page.waitForTimeout(2_000);
+      await page.context().addCookies([SESSION_COOKIE]);
+      await page.goto(url, options);
+    } else {
+      throw err;
+    }
+  }
+}
+
 /** Create a wizard via the UI and navigate to its detail page */
 async function createWizardViaUI(page: Page, name: string): Promise<void> {
-  await page.context().addCookies([
-    { name: "next-auth.session-token", value: "e2e-test-session", domain: "localhost", path: "/" },
-  ]);
-  await page.goto("/compliance/wizards/new", { waitUntil: "domcontentloaded" });
+  await gotoWithAuth(page, "/compliance/wizards/new");
   await page.waitForLoadState("networkidle");
+
   const input = page.getByPlaceholder("e.g. Q1 2026 AI System Assessment");
-  await input.pressSequentially(name, { delay: 20 });
+  await input.fill(name);
+
   await page.getByRole("button", { name: "Create Wizard" }).click();
-  // Wait for navigation to wizard detail (generous timeout for parallel test runs)
+
+  // Wait for navigation to the wizard detail page
   await page.waitForURL(/\/compliance\/wizards\/wiz-/, { timeout: 30_000 });
   await page.waitForLoadState("networkidle");
 }
@@ -384,8 +390,9 @@ test.describe("Resume Wizard", () => {
     // The wizard list should show our wizard
     await expect(page.getByText("Resume Test")).toBeVisible();
 
-    // Navigate back to the wizard detail via the "Open" link in the table row
-    await page.getByRole("link", { name: "Open" }).click();
+    // Navigate back to the wizard detail via the "Open" link in the row containing our wizard
+    const row = page.locator("tr", { hasText: "Resume Test" });
+    await row.getByRole("link", { name: "Open" }).click();
     await page.waitForURL(/\/compliance\/wizards\/wiz-/, { timeout: 10_000 });
     await page.waitForLoadState("networkidle");
 

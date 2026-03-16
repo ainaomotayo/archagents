@@ -1,17 +1,15 @@
 import { test, expect } from "@playwright/test";
+import { SESSION_COOKIE } from "./e2e-helpers";
+
+/** Ensure session cookie is set then navigate — re-adds cookie before every goto to prevent loss under load */
+async function gotoWithAuth(page: import("@playwright/test").Page, url: string, options?: Parameters<typeof page.goto>[1]) {
+  await page.context().addCookies([SESSION_COOKIE]);
+  await page.goto(url, options);
+}
 
 test.describe("Attestation Management Flow", () => {
   test.beforeEach(async ({ page }) => {
-    // Some attestation sub-pages check auth at the page level (getServerSession).
-    // Set a fake session cookie so the middleware and page-level checks allow access.
-    await page.context().addCookies([
-      {
-        name: "next-auth.session-token",
-        value: "e2e-test-session",
-        domain: "localhost",
-        path: "/",
-      },
-    ]);
+    await page.context().addCookies([SESSION_COOKIE]);
   });
 
   test("navigates to attestations page from sidebar", async ({ page }) => {
@@ -45,11 +43,12 @@ test.describe("Attestation Management Flow", () => {
   });
 
   test("navigates to create new attestation", async ({ page }) => {
-    await page.goto("/compliance/attestations");
+    await gotoWithAuth(page, "/compliance/attestations");
     await page.waitForLoadState("networkidle");
     const link = page.getByRole("link", { name: "New Attestation" });
     const href = await link.getAttribute("href");
-    await page.goto(href!);
+    // Re-add cookie before second navigation to prevent loss under parallel load
+    await gotoWithAuth(page, href!);
     await expect(page).toHaveURL(/\/compliance\/attestations\/new/);
     await expect(page.getByText("New Attestation")).toBeVisible();
   });
@@ -70,20 +69,21 @@ test.describe("Attestation Management Flow", () => {
   });
 
   test("view attestation detail page", async ({ page }) => {
-    await page.goto("/compliance/attestations");
+    await gotoWithAuth(page, "/compliance/attestations");
     await page.waitForLoadState("networkidle");
 
     // Get the href of the first attestation detail link
     const detailLink = page.locator("a[href*='/compliance/attestations/att-']").first();
-    await detailLink.waitFor({ state: "visible" });
+    await detailLink.waitFor({ state: "visible", timeout: 15_000 });
     const href = await detailLink.getAttribute("href");
 
-    // Navigate directly to the detail page (click + client routing is unreliable under load)
-    await page.goto(href!);
+    // Re-add cookie before second navigation to prevent loss under parallel load
+    await gotoWithAuth(page, href!);
+    await page.waitForLoadState("domcontentloaded");
     await expect(page).toHaveURL(/\/compliance\/attestations\/att-/);
 
-    // Should show detail components
-    await expect(page.getByText("Approval Pipeline")).toBeVisible();
+    // Should show detail components (generous timeout for slow dev server)
+    await expect(page.getByText("Approval Pipeline")).toBeVisible({ timeout: 15_000 });
     await expect(page.getByText("Description")).toBeVisible();
     await expect(page.getByText(/Evidence/)).toBeVisible();
   });
