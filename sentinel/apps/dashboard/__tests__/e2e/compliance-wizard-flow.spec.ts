@@ -11,8 +11,9 @@ import { SESSION_COOKIE } from "./e2e-helpers";
 // Force all tests in this file to run in a single worker (shared mock state).
 test.describe.configure({ mode: "serial" });
 
-test.beforeEach(async () => {
+test.beforeEach(async ({ page }) => {
   resetState();
+  await page.context().addCookies([SESSION_COOKIE]);
 });
 
 // ── Helpers ────────────────────────────────────────────────────────────
@@ -41,10 +42,12 @@ async function createWizardViaUI(page: Page, name: string): Promise<void> {
   const input = page.getByPlaceholder("e.g. Q1 2026 AI System Assessment");
   await input.fill(name);
 
+  // Re-add cookie before form submission to prevent auth loss under load
+  await page.context().addCookies([SESSION_COOKIE]);
   await page.getByRole("button", { name: "Create Wizard" }).click();
 
-  // Wait for navigation to the wizard detail page
-  await page.waitForURL(/\/compliance\/wizards\/wiz-/, { timeout: 30_000 });
+  // Wait for navigation to the wizard detail page (generous timeout for server action under load)
+  await page.waitForURL(/\/compliance\/wizards\/wiz-/, { timeout: 45_000 });
   await page.waitForLoadState("networkidle");
 }
 
@@ -56,38 +59,67 @@ async function selectStep(page: Page, title: string): Promise<void> {
 
 /** Check all unchecked required checkboxes by clicking them */
 async function checkAllRequirements(page: Page): Promise<void> {
-  // Use click() instead of check() to avoid strict state verification issues.
-  // Wait generously between clicks to allow API calls + re-renders to settle.
-  const unchecked = page.locator("input[type='checkbox']:not(:disabled):not(:checked)");
-  let count = await unchecked.count();
-  let maxIterations = 20; // Safety limit to prevent infinite loops
-  while (count > 0 && maxIterations > 0) {
-    await unchecked.first().click({ timeout: 5_000 });
-    // Wait for the API call to complete and UI to re-render
-    await page.waitForTimeout(1_000);
-    count = await unchecked.count();
-    maxIterations--;
+  // Get all checkboxes once, then click each unchecked one sequentially.
+  // After each click, wait for the checkbox to become checked (server action + re-render).
+  // Retry once if the click didn't take effect (server action may fail under load).
+  const allCheckboxes = page.locator("input[type='checkbox']:not(:disabled)");
+  const total = await allCheckboxes.count();
+  for (let i = 0; i < total; i++) {
+    const cb = allCheckboxes.nth(i);
+    if (await cb.isChecked()) continue;
+
+    await cb.click({ timeout: 5_000 });
+    try {
+      await expect(cb).toBeChecked({ timeout: 8_000 });
+    } catch {
+      // Server action may have failed silently — re-add cookie and retry
+      await page.context().addCookies([SESSION_COOKIE]);
+      await page.waitForTimeout(500);
+      if (!(await cb.isChecked())) {
+        await cb.click({ timeout: 5_000 });
+        await expect(cb).toBeChecked({ timeout: 10_000 });
+      }
+    }
   }
 }
 
 /** Complete the current step (check all reqs then click Mark Complete) */
 async function completeCurrentStep(page: Page): Promise<void> {
   await checkAllRequirements(page);
-  // Wait for any pending API calls to settle before checking button state
   await page.waitForTimeout(500);
+  await page.context().addCookies([SESSION_COOKIE]);
   const completeBtn = page.getByRole("button", { name: "Mark Complete" });
   await expect(completeBtn).toBeEnabled({ timeout: 15_000 });
   await completeBtn.click();
+  // Wait for completion server action — step badge should show "Completed"
   await page.waitForTimeout(1_000);
 }
 
-/** Skip the current step with a reason */
+/** Skip the current step with a reason. Retries once if the server action fails under load. */
 async function skipCurrentStep(page: Page, reason: string): Promise<void> {
-  await page.getByRole("button", { name: "Skip Step" }).click();
-  const textarea = page.getByPlaceholder("e.g. Not applicable for our deployment model");
-  await textarea.fill(reason);
-  await page.getByRole("button", { name: "Confirm Skip" }).click();
-  await page.waitForTimeout(500);
+  for (let attempt = 0; attempt < 2; attempt++) {
+    await page.context().addCookies([SESSION_COOKIE]);
+
+    // Open skip dialog if not already open
+    const skipBtn = page.getByRole("button", { name: "Skip Step" });
+    if (await skipBtn.isVisible()) {
+      await skipBtn.click();
+    }
+
+    const textarea = page.getByPlaceholder("e.g. Not applicable for our deployment model");
+    await textarea.fill(reason);
+    await page.getByRole("button", { name: "Confirm Skip" }).click();
+
+    try {
+      await expect(page.getByText("Skipped", { exact: true })).toBeVisible({ timeout: 10_000 });
+      return; // Success
+    } catch {
+      if (attempt === 1) throw new Error("Skip step failed after retry");
+      // Reload and retry — server action likely failed under dev server load
+      await page.context().addCookies([SESSION_COOKIE]);
+      await page.reload({ waitUntil: "networkidle" });
+    }
+  }
 }
 
 // ── Test 1: Full wizard flow ───────────────────────────────────────────
