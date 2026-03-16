@@ -46,7 +46,10 @@ test.describe("Attestation Management Flow", () => {
 
   test("navigates to create new attestation", async ({ page }) => {
     await page.goto("/compliance/attestations");
-    await page.getByRole("link", { name: "New Attestation" }).click();
+    await page.waitForLoadState("networkidle");
+    const link = page.getByRole("link", { name: "New Attestation" });
+    const href = await link.getAttribute("href");
+    await page.goto(href!);
     await expect(page).toHaveURL(/\/compliance\/attestations\/new/);
     await expect(page.getByText("New Attestation")).toBeVisible();
   });

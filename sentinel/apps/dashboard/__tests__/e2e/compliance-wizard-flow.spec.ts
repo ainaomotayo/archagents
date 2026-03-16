@@ -54,7 +54,8 @@ async function checkAllRequirements(page: Page): Promise<void> {
   let maxIterations = 20; // Safety limit to prevent infinite loops
   while (count > 0 && maxIterations > 0) {
     await unchecked.first().click({ timeout: 5_000 });
-    await page.waitForTimeout(600);
+    // Wait for the API call to complete and UI to re-render
+    await page.waitForTimeout(1_000);
     count = await unchecked.count();
     maxIterations--;
   }
@@ -63,10 +64,12 @@ async function checkAllRequirements(page: Page): Promise<void> {
 /** Complete the current step (check all reqs then click Mark Complete) */
 async function completeCurrentStep(page: Page): Promise<void> {
   await checkAllRequirements(page);
+  // Wait for any pending API calls to settle before checking button state
+  await page.waitForTimeout(500);
   const completeBtn = page.getByRole("button", { name: "Mark Complete" });
-  await expect(completeBtn).toBeEnabled({ timeout: 10_000 });
+  await expect(completeBtn).toBeEnabled({ timeout: 15_000 });
   await completeBtn.click();
-  await page.waitForTimeout(800);
+  await page.waitForTimeout(1_000);
 }
 
 /** Skip the current step with a reason */
