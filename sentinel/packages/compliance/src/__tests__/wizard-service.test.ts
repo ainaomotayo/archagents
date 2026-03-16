@@ -27,6 +27,10 @@ function createMockDb() {
     },
     wizardDocument: {
       upsert: vi.fn(),
+      update: vi.fn(),
+    },
+    report: {
+      create: vi.fn(),
     },
   };
 }
@@ -267,14 +271,18 @@ describe("WizardService", () => {
     });
 
     it("creates WizardDocument rows", async () => {
-      db.complianceWizard.findUnique.mockResolvedValue({ id: "wiz-1", status: "active" });
-      db.complianceWizard.update.mockResolvedValue({});
       // All steps completed for prereq check
       const allCompleted = makeSteps(
         Object.fromEntries(EU_AI_ACT_CONTROLS.map((c) => [c.code, "completed"])),
-      );
+      ).map((s) => ({ ...s, evidence: [] }));
+      db.complianceWizard.findUnique.mockResolvedValue({
+        id: "wiz-1", orgId: "org-1", status: "active", name: "Test", metadata: {},
+        steps: allCompleted,
+      });
+      db.complianceWizard.update.mockResolvedValue({});
       db.wizardStep.findMany.mockResolvedValue(allCompleted);
-      db.wizardDocument.upsert.mockResolvedValue({ id: "doc-1", documentType: "technical_documentation", status: "pending" });
+      db.wizardDocument.upsert.mockResolvedValue({ id: "doc-1", documentType: "technical_documentation", status: "generating" });
+      db.wizardDocument.update.mockResolvedValue({ id: "doc-1", documentType: "technical_documentation", status: "ready" });
 
       const result = await service.generateDocuments("wiz-1", ["technical_documentation"], "user-1");
       expect(result.documents).toHaveLength(1);

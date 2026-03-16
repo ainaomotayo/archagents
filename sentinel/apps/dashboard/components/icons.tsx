@@ -230,6 +230,19 @@ export function IconWrench(props: React.SVGProps<SVGSVGElement>) {
   );
 }
 
+export function IconListChecks(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg {...iconProps} {...props}>
+      <line x1="10" y1="6" x2="21" y2="6" />
+      <line x1="10" y1="12" x2="21" y2="12" />
+      <line x1="10" y1="18" x2="21" y2="18" />
+      <polyline points="3 6 4 7 6 5" />
+      <polyline points="3 12 4 13 6 11" />
+      <polyline points="3 18 4 19 6 17" />
+    </svg>
+  );
+}
+
 export function IconClipboardCheck(props: React.SVGProps<SVGSVGElement>) {
   return (
     <svg {...iconProps} {...props}>
@@ -327,6 +340,7 @@ export const ICON_MAP: Record<string, React.ComponentType<React.SVGProps<SVGSVGE
   settings: IconSettings,
   grid: IconGrid,
   "clipboard-check": IconClipboardCheck,
+  "list-checks": IconListChecks,
   "check-circle": IconCheckCircle,
   wrench: IconWrench,
   chart: IconBarChart,
