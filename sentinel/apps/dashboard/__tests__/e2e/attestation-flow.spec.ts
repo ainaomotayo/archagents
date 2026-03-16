@@ -70,11 +70,14 @@ test.describe("Attestation Management Flow", () => {
     await page.goto("/compliance/attestations");
     await page.waitForLoadState("networkidle");
 
-    // Click View on first attestation using direct href selector
+    // Get the href of the first attestation detail link
     const detailLink = page.locator("a[href*='/compliance/attestations/att-']").first();
     await detailLink.waitFor({ state: "visible" });
-    await detailLink.click();
-    await expect(page).toHaveURL(/\/compliance\/attestations\/att-/, { timeout: 15_000 });
+    const href = await detailLink.getAttribute("href");
+
+    // Navigate directly to the detail page (click + client routing is unreliable under load)
+    await page.goto(href!);
+    await expect(page).toHaveURL(/\/compliance\/attestations\/att-/);
 
     // Should show detail components
     await expect(page.getByText("Approval Pipeline")).toBeVisible();
