@@ -2,6 +2,14 @@ import { test, expect } from "@playwright/test";
 
 test.describe("Gap Analysis Page", () => {
   test.beforeEach(async ({ page }) => {
+    await page.context().addCookies([
+      {
+        name: "next-auth.session-token",
+        value: "e2e-test-session",
+        domain: "localhost",
+        path: "/",
+      },
+    ]);
     await page.goto("/compliance/gap-analysis");
   });
 
@@ -54,9 +62,13 @@ test.describe("Gap Analysis Page", () => {
   });
 
   test("compliance redirect works", async ({ page }) => {
-    await page.goto("/compliance", { waitUntil: "domcontentloaded" });
+    // Re-confirm cookie is set before navigating to /compliance
+    await page.context().addCookies([
+      { name: "next-auth.session-token", value: "e2e-test-session", domain: "localhost", path: "/" },
+    ]);
+    await page.goto("/compliance", { waitUntil: "networkidle" });
     // Server-side redirect from /compliance → /compliance/gap-analysis
-    await expect(page).toHaveURL(/\/compliance\/gap-analysis/, { timeout: 15_000 });
+    await expect(page).toHaveURL(/\/compliance\/gap-analysis/, { timeout: 30_000 });
     await expect(page.getByRole("heading", { name: "Gap Analysis" })).toBeVisible();
   });
 

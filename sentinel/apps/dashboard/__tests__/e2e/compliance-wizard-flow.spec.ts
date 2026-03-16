@@ -29,6 +29,9 @@ test.beforeEach(async () => {
 
 /** Create a wizard via the UI and navigate to its detail page */
 async function createWizardViaUI(page: Page, name: string): Promise<void> {
+  await page.context().addCookies([
+    { name: "next-auth.session-token", value: "e2e-test-session", domain: "localhost", path: "/" },
+  ]);
   await page.goto("/compliance/wizards/new", { waitUntil: "domcontentloaded" });
   await page.waitForLoadState("networkidle");
   const input = page.getByPlaceholder("e.g. Q1 2026 AI System Assessment");

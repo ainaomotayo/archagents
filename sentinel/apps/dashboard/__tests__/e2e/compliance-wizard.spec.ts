@@ -1,7 +1,15 @@
 import { test, expect } from "@playwright/test";
 
+const SESSION_COOKIE = {
+  name: "next-auth.session-token",
+  value: "e2e-test-session",
+  domain: "localhost",
+  path: "/",
+};
+
 test.describe("Compliance Wizard – List Page", () => {
   test.beforeEach(async ({ page }) => {
+    await page.context().addCookies([SESSION_COOKIE]);
     await page.goto("/compliance/wizards");
   });
 
@@ -40,6 +48,7 @@ test.describe("Compliance Wizard – List Page", () => {
 
 test.describe("Compliance Wizard – Create Page", () => {
   test.beforeEach(async ({ page }) => {
+    await page.context().addCookies([SESSION_COOKIE]);
     await page.goto("/compliance/wizards/new", { waitUntil: "domcontentloaded" });
   });
 

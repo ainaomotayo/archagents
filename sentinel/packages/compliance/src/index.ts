@@ -103,5 +103,17 @@ export { PageFooter } from "./reports/components/index.js";
 export { type ReportStorage, LocalReportStorage } from "./reports/storage.js";
 export { S3ReportStorage, type S3StorageConfig } from "./reports/s3-storage.js";
 
+// EU AI Act PDF Generators
+export {
+  generateEuAiActTechnicalDocPdf,
+  generateEuAiActDeclarationPdf,
+  generateEuAiActInstructionsPdf,
+  generateEuAiActMonitoringPdf,
+  type TechnicalDocData,
+  type DeclarationData,
+  type InstructionsData,
+  type MonitoringPlanData,
+} from "./reports/generator.js";
+
 // Wizard
 export * from "./wizard/index.js";
