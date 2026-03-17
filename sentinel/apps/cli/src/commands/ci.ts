@@ -1,3 +1,4 @@
+import { writeFileSync } from "fs";
 import { signRequest } from "@sentinel/auth";
 import type {
   AssessmentStatus,
@@ -7,7 +8,9 @@ import type {
   SentinelDiffPayload,
 } from "@sentinel/shared";
 import { parseDiff } from "../git/diff.js";
-import { detectCiProvider } from "../ci-providers/index.js";
+import { detectCiEnvironment, type CiEnvironment } from "../ci-providers/index.js";
+import { pollWithBackoff } from "../poll.js";
+import { formatGitLabSast } from "../formatters/gitlab-sast.js";
 
 // ── Options & types ────────────────────────────────────────────────
 
@@ -18,6 +21,10 @@ export interface CiOptions {
   timeout: number;
   json: boolean;
   sarif: boolean;
+  gitlabSast: boolean;
+  stream: boolean;
+  failOn: string;
+  output?: string;
   /** Allow injecting a custom fetch for testing. */
   fetchFn?: typeof globalThis.fetch;
   /** Allow injecting stdin content for testing. */
@@ -73,14 +80,13 @@ function detectLanguage(filePath: string): string {
   return langMap[ext] ?? "unknown";
 }
 
-function buildPayload(rawDiff: string): SentinelDiffPayload {
+function buildPayload(rawDiff: string, env: CiEnvironment): SentinelDiffPayload {
   const diffFiles = parseDiff(rawDiff);
-  const ci = detectCiProvider();
   return {
-    projectId: process.env.SENTINEL_PROJECT_ID ?? ci.projectId ?? "default",
-    commitHash: process.env.SENTINEL_COMMIT_HASH ?? process.env.SENTINEL_COMMIT ?? ci.commitHash ?? "unknown",
-    branch: process.env.SENTINEL_BRANCH ?? ci.branch ?? "unknown",
-    author: process.env.SENTINEL_AUTHOR ?? ci.author ?? "unknown",
+    projectId: process.env.SENTINEL_PROJECT_ID ?? "default",
+    commitHash: process.env.SENTINEL_COMMIT_HASH ?? env.commitSha,
+    branch: process.env.SENTINEL_BRANCH ?? env.branch,
+    author: process.env.SENTINEL_AUTHOR ?? env.actor,
     timestamp: new Date().toISOString(),
     files: diffFiles.map((f) => ({
       path: f.path,
@@ -98,10 +104,11 @@ function buildPayload(rawDiff: string): SentinelDiffPayload {
 
 async function submitScan(
   diff: string,
+  env: CiEnvironment,
   options: Pick<CiOptions, "apiUrl" | "apiKey" | "secret" | "fetchFn">,
 ): Promise<string> {
   const fetchFn = options.fetchFn ?? globalThis.fetch;
-  const payload = buildPayload(diff);
+  const payload = buildPayload(diff, env);
   const body = JSON.stringify(payload);
   const signature = signRequest(body, options.secret);
 
@@ -132,43 +139,36 @@ export async function pollForResult(
   options: Pick<CiOptions, "apiUrl" | "timeout" | "secret" | "fetchFn">,
 ): Promise<PollResult> {
   const fetchFn = options.fetchFn ?? globalThis.fetch;
-  const deadline = Date.now() + options.timeout * 1000;
-  const INITIAL_INTERVAL_MS = 1000;
-  const BACKOFF_FACTOR = 2;
-  const MAX_INTERVAL_MS = 16000;
-  const MAX_JITTER_MS = 500;
-  let currentInterval = INITIAL_INTERVAL_MS;
 
-  while (Date.now() < deadline) {
-    const signature = signRequest("", options.secret);
-    const res = await fetchFn(
-      `${options.apiUrl}/v1/scans/${scanId}/poll`,
-      {
-        headers: {
-          "X-Sentinel-Signature": signature,
-          "X-Sentinel-API-Key": "cli",
-          "X-Sentinel-Role": "service",
+  return pollWithBackoff<PollResult>(
+    async () => {
+      const signature = signRequest("", options.secret);
+      const res = await fetchFn(
+        `${options.apiUrl}/v1/scans/${scanId}/poll`,
+        {
+          headers: {
+            "X-Sentinel-Signature": signature,
+            "X-Sentinel-API-Key": "cli",
+            "X-Sentinel-Role": "service",
+          },
         },
-      },
-    );
+      );
 
-    if (!res.ok) {
-      throw new Error(`Poll error: ${res.status} ${res.statusText}`);
-    }
+      if (!res.ok) {
+        throw new Error(`Poll error: ${res.status} ${res.statusText}`);
+      }
 
-    const data = (await res.json()) as PollResult;
-
-    if (data.status !== "pending" && data.status !== "scanning") {
-      return data;
-    }
-
-    // Wait before next poll (exponential backoff with jitter)
-    const jitter = Math.floor(Math.random() * MAX_JITTER_MS);
-    await new Promise((resolve) => setTimeout(resolve, currentInterval + jitter));
-    currentInterval = Math.min(currentInterval * BACKOFF_FACTOR, MAX_INTERVAL_MS);
-  }
-
-  throw new Error(`Scan timed out after ${options.timeout}s`);
+      const data = (await res.json()) as PollResult;
+      const done = data.status !== "pending" && data.status !== "scanning";
+      return { done, value: data };
+    },
+    {
+      initialDelayMs: 1000,
+      maxDelayMs: 16_000,
+      maxJitterMs: 500,
+      timeoutMs: options.timeout * 1000,
+    },
+  );
 }
 
 // ── Formatting ─────────────────────────────────────────────────────
@@ -300,17 +300,20 @@ export function formatSarif(findings: Finding[]): object {
 
 export async function runCi(options: CiOptions): Promise<number> {
   try {
-    // 1. Read diff from stdin
+    // 1. Detect CI environment
+    const env = detectCiEnvironment();
+
+    // 2. Read diff from stdin
     const diff = options.stdinContent ?? (await readStdin());
     if (!diff.trim()) {
       console.error("Error: no diff provided on stdin");
       return EXIT_ERROR;
     }
 
-    // 2. Submit scan
-    const scanId = await submitScan(diff, options);
+    // 3. Submit scan
+    const scanId = await submitScan(diff, env, options);
 
-    // 3. Poll for result
+    // 4. Poll for result
     const result = await pollForResult(scanId, options);
 
     if (!result.assessment) {
@@ -318,13 +321,35 @@ export async function runCi(options: CiOptions): Promise<number> {
       return EXIT_ERROR;
     }
 
-    // 4. Output
+    // 5. Output
+    let outputContent: string;
     if (options.sarif) {
-      console.log(JSON.stringify(formatSarif(result.assessment.findings), null, 2));
+      outputContent = JSON.stringify(formatSarif(result.assessment.findings), null, 2);
     } else if (options.json) {
-      console.log(JSON.stringify(result.assessment, null, 2));
+      outputContent = JSON.stringify(result.assessment, null, 2);
     } else {
-      console.log(formatSummary(result.assessment));
+      outputContent = formatSummary(result.assessment);
+    }
+
+    if (options.output) {
+      writeFileSync(options.output, outputContent);
+    } else {
+      console.log(outputContent);
+    }
+
+    // 6. Write GitLab SAST report when requested or auto-detected
+    if (options.gitlabSast || env.provider === "gitlab") {
+      const sastReport = formatGitLabSast(result.assessment.findings);
+      writeFileSync("gl-sast-report.json", JSON.stringify(sastReport, null, 2));
+    }
+
+    // 7. Check fail-on severity threshold
+    if (options.failOn) {
+      const thresholds = options.failOn.split(",").map((s) => s.trim().toLowerCase());
+      const hasBlockingFinding = result.assessment.findings.some((f) =>
+        thresholds.includes(f.severity),
+      );
+      if (hasBlockingFinding) return EXIT_FAIL;
     }
 
     return exitCodeFromStatus(result.assessment.status);

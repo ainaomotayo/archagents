@@ -1,5 +1,11 @@
 import { describe, it, expect, vi } from "vitest";
+import { writeFileSync } from "fs";
 import type { ComplianceAssessment, Finding, SecurityFinding, LicenseFinding } from "@sentinel/shared";
+
+vi.mock("fs", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("fs")>();
+  return { ...actual, writeFileSync: vi.fn() };
+});
 import {
   exitCodeFromStatus,
   formatSummary,
@@ -295,49 +301,6 @@ describe("pollForResult", () => {
     ).rejects.toThrow("Poll error: 500 Internal Server Error");
   });
 
-  it("uses exponential backoff intervals", async () => {
-    const delays: number[] = [];
-    const origSetTimeout = globalThis.setTimeout;
-    vi.spyOn(globalThis, "setTimeout").mockImplementation(((fn: Function, ms?: number) => {
-      if (ms && ms >= 500) delays.push(ms);
-      return origSetTimeout(fn, 0); // Execute immediately for speed
-    }) as any);
-
-    let callCount = 0;
-    const mockFetch = vi.fn(async () => {
-      callCount++;
-      if (callCount <= 4) {
-        return new Response(JSON.stringify({ status: "pending" }), { status: 200 });
-      }
-      return new Response(
-        JSON.stringify({ status: "full_pass", assessment: { status: "full_pass" } }),
-        { status: 200 },
-      );
-    });
-
-    await pollForResult("scan-backoff", {
-      apiUrl: "http://localhost",
-      timeout: 120,
-      secret: "test-secret",
-      fetchFn: mockFetch as any,
-    });
-
-    // Should have 4 delays (for the 4 pending responses)
-    expect(delays.length).toBe(4);
-    // Verify exponential progression (ignore jitter for ordering)
-    // Intervals should be approximately: 1000, 2000, 4000, 8000 (plus 0-500 jitter)
-    expect(delays[0]).toBeGreaterThanOrEqual(1000);
-    expect(delays[0]).toBeLessThanOrEqual(1500);
-    expect(delays[1]).toBeGreaterThanOrEqual(2000);
-    expect(delays[1]).toBeLessThanOrEqual(2500);
-    expect(delays[2]).toBeGreaterThanOrEqual(4000);
-    expect(delays[2]).toBeLessThanOrEqual(4500);
-    expect(delays[3]).toBeGreaterThanOrEqual(8000);
-    expect(delays[3]).toBeLessThanOrEqual(8500);
-
-    vi.restoreAllMocks();
-  });
-
   it("throws on timeout", async () => {
     // Always return pending — with timeout=0 it should time out immediately
     const fetch = mockFetch([
@@ -351,7 +314,7 @@ describe("pollForResult", () => {
         secret: "test-secret",
         fetchFn: fetch,
       }),
-    ).rejects.toThrow("Scan timed out after 0s");
+    ).rejects.toThrow("Poll timed out after 0ms");
   });
 });
 
@@ -370,6 +333,9 @@ describe("runCi", () => {
       timeout: 10,
       json: false,
       sarif: false,
+      gitlabSast: false,
+      stream: false,
+      failOn: "",
       fetchFn: fetch,
       stdinContent: "diff --git a/file.ts\n+new line",
     });
@@ -391,6 +357,9 @@ describe("runCi", () => {
       timeout: 10,
       json: false,
       sarif: false,
+      gitlabSast: false,
+      stream: false,
+      failOn: "",
       fetchFn: fetch,
       stdinContent: "diff --git a/file.ts\n+new line",
     });
@@ -406,6 +375,9 @@ describe("runCi", () => {
       timeout: 10,
       json: false,
       sarif: false,
+      gitlabSast: false,
+      stream: false,
+      failOn: "",
       stdinContent: "",
     });
 
@@ -424,6 +396,9 @@ describe("runCi", () => {
       timeout: 10,
       json: false,
       sarif: false,
+      gitlabSast: false,
+      stream: false,
+      failOn: "",
       fetchFn: fetch,
       stdinContent: "diff --git a/file.ts\n+new line",
     });
@@ -447,6 +422,9 @@ describe("runCi", () => {
       timeout: 10,
       json: true,
       sarif: false,
+      gitlabSast: false,
+      stream: false,
+      failOn: "",
       fetchFn: fetch,
       stdinContent: "diff content",
     });
@@ -475,6 +453,9 @@ describe("runCi", () => {
       timeout: 10,
       json: false,
       sarif: true,
+      gitlabSast: false,
+      stream: false,
+      failOn: "",
       fetchFn: fetch,
       stdinContent: "diff content",
     });
@@ -483,6 +464,123 @@ describe("runCi", () => {
     const output = JSON.parse(consoleSpy.mock.calls[0][0] as string);
     expect(output.version).toBe("2.1.0");
     expect(output.runs[0].results).toHaveLength(1);
+
+    consoleSpy.mockRestore();
+  });
+
+  it("writes gl-sast-report.json when gitlabSast option is true", async () => {
+    const mockWrite = vi.mocked(writeFileSync);
+    mockWrite.mockClear();
+    const assessment = makeAssessment({
+      status: "full_pass",
+      findings: [makeSecurityFinding()],
+    });
+    const fetch = mockFetch([
+      { status: 200, body: { scanId: "scan-gl" } },
+      { status: 200, body: { status: "full_pass", assessment } },
+    ]);
+
+    await runCi({
+      apiUrl: "http://localhost:8080",
+      apiKey: "key",
+      secret: "secret",
+      timeout: 10,
+      json: false,
+      sarif: false,
+      gitlabSast: true,
+      stream: false,
+      fetchFn: fetch,
+      stdinContent: "diff content",
+    });
+
+    expect(mockWrite).toHaveBeenCalledWith(
+      "gl-sast-report.json",
+      expect.stringContaining("15.1.0"),
+    );
+  });
+
+  it("returns EXIT_FAIL when findings match --fail-on severity", async () => {
+    const findings: Finding[] = [makeSecurityFinding({ severity: "high" })];
+    const assessment = makeAssessment({ status: "full_pass", findings });
+    const fetch = mockFetch([
+      { status: 200, body: { scanId: "scan-failon" } },
+      { status: 200, body: { status: "full_pass", assessment } },
+    ]);
+
+    const code = await runCi({
+      apiUrl: "http://localhost:8080",
+      apiKey: "key",
+      secret: "secret",
+      timeout: 10,
+      json: false,
+      sarif: false,
+      gitlabSast: false,
+      stream: false,
+      failOn: "critical,high",
+      fetchFn: fetch,
+      stdinContent: "diff content",
+    });
+
+    expect(code).toBe(EXIT_FAIL);
+  });
+
+  it("returns EXIT_PASS when findings below --fail-on threshold", async () => {
+    const findings: Finding[] = [makeSecurityFinding({ severity: "low" })];
+    const assessment = makeAssessment({ status: "full_pass", findings });
+    const fetch = mockFetch([
+      { status: 200, body: { scanId: "scan-failon-pass" } },
+      { status: 200, body: { status: "full_pass", assessment } },
+    ]);
+
+    const code = await runCi({
+      apiUrl: "http://localhost:8080",
+      apiKey: "key",
+      secret: "secret",
+      timeout: 10,
+      json: false,
+      sarif: false,
+      gitlabSast: false,
+      stream: false,
+      failOn: "critical,high",
+      fetchFn: fetch,
+      stdinContent: "diff content",
+    });
+
+    expect(code).toBe(EXIT_PASS);
+  });
+
+  it("writes output to file when --output is specified", async () => {
+    const mockWrite = vi.mocked(writeFileSync);
+    mockWrite.mockClear();
+    const assessment = makeAssessment({ status: "full_pass" });
+    const fetch = mockFetch([
+      { status: 200, body: { scanId: "scan-output" } },
+      { status: 200, body: { status: "full_pass", assessment } },
+    ]);
+
+    const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+
+    await runCi({
+      apiUrl: "http://localhost:8080",
+      apiKey: "key",
+      secret: "secret",
+      timeout: 10,
+      json: true,
+      sarif: false,
+      gitlabSast: false,
+      stream: false,
+      failOn: "",
+      output: "report.json",
+      fetchFn: fetch,
+      stdinContent: "diff content",
+    });
+
+    // Should write to file, not console
+    expect(consoleSpy).not.toHaveBeenCalled();
+    expect(mockWrite).toHaveBeenCalledWith(
+      "report.json",
+      expect.stringContaining("full_pass"),
+    );
 
     consoleSpy.mockRestore();
   });

@@ -1,23 +1,60 @@
 # SENTINEL Scan - GitLab CI Integration Template
 #
-# Add this job to your .gitlab-ci.yml or include it via CI/CD includes.
+# Add this to your .gitlab-ci.yml or include via CI/CD includes.
 # Required CI/CD variables (Settings > CI/CD > Variables):
-#   - SENTINEL_API_URL: Your SENTINEL API endpoint
+#   - SENTINEL_API_URL: Your SENTINEL API endpoint (masked)
 #   - SENTINEL_API_KEY: Your SENTINEL API key (masked)
 #   - SENTINEL_SECRET: Your HMAC shared secret (masked)
+#
+# Documentation: https://docs.sentinel.dev/integrations/gitlab
 
-sentinel-scan:
-  stage: test
+variables:
+  SENTINEL_CLI_VERSION: "latest"
+  SENTINEL_FAIL_ON: "critical,high"
+  SENTINEL_TIMEOUT: "10m"
+  SENTINEL_OUTPUT_FORMAT: "text"
+
+.sentinel-base:
   image: node:22-alpine
   before_script:
-    - npm install -g @sentinel/cli
-  script:
-    - sentinel ci --api-url $SENTINEL_API_URL
+    - npm install -g @sentinel/cli@${SENTINEL_CLI_VERSION}
   variables:
-    SENTINEL_API_KEY: $SENTINEL_API_KEY
-    SENTINEL_SECRET: $SENTINEL_SECRET
+    GIT_DEPTH: 0
+
+sentinel-scan:
+  extends: .sentinel-base
+  stage: test
+  script:
+    - |
+      sentinel ci \
+        --api-url "${SENTINEL_API_URL}" \
+        --fail-on "${SENTINEL_FAIL_ON}" \
+        --timeout "${SENTINEL_TIMEOUT}" \
+        --format "${SENTINEL_OUTPUT_FORMAT}"
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
     - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+  artifacts:
+    when: always
+    reports:
+      sast: gl-sast-report.json
+    paths:
+      - sentinel-report.json
+      - gl-sast-report.json
+    expire_in: 30 days
   timeout: 10m
   allow_failure: false
+
+sentinel-scan-sarif:
+  extends: .sentinel-base
+  stage: test
+  script:
+    - sentinel ci --api-url "${SENTINEL_API_URL}" --format sarif --output sentinel.sarif
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      when: manual
+      allow_failure: true
+  artifacts:
+    paths:
+      - sentinel.sarif
+    expire_in: 30 days

@@ -1,15 +1,22 @@
-export interface CiProviderInfo {
-  provider: string;
-  commitHash: string;
+export type CiProviderName = "github" | "gitlab" | "azure_devops" | "generic";
+
+export interface CiEnvironment {
+  provider: CiProviderName;
+  commitSha: string;
   branch: string;
-  author: string;
-  prNumber?: number;
-  projectId: string;
-  repositoryUrl?: string;
+  baseBranch?: string;
+  actor: string;
+  repository: string;
+  mergeRequestId?: string;
+  pipelineId?: string;
+  pipelineUrl?: string;
+  projectId?: string;
+  serverUrl?: string;
 }
 
 export interface CiProviderDetector {
-  readonly name: string;
+  readonly name: CiProviderName;
+  readonly priority: number;
   canDetect(): boolean;
-  detect(): CiProviderInfo;
+  detect(): CiEnvironment;
 }

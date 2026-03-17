@@ -1,0 +1,73 @@
+# GitLab CI/CD Component — SENTINEL Security Scan
+# Publish to GitLab's component catalog for organization-wide reuse.
+#
+# Usage:
+#   include:
+#     - component: gitlab.com/YOUR_ORG/sentinel-ci/sentinel-scan@1.0.0
+#       inputs:
+#         api-url: https://api.sentinel.dev
+
+spec:
+  inputs:
+    api-url:
+      description: "Sentinel API endpoint URL"
+      type: string
+    api-key:
+      description: "Sentinel API key (use CI/CD variable reference)"
+      type: string
+      default: "$SENTINEL_API_KEY"
+    secret:
+      description: "HMAC shared secret (use CI/CD variable reference)"
+      type: string
+      default: "$SENTINEL_SECRET"
+    fail-on:
+      description: "Comma-separated severity threshold: critical, high, medium, low"
+      type: string
+      default: "critical,high"
+    timeout:
+      description: "Scan timeout duration"
+      type: string
+      default: "10m"
+    cli-version:
+      description: "Sentinel CLI version to install"
+      type: string
+      default: "latest"
+    enable-sast-report:
+      description: "Generate GitLab SAST report for Security Dashboard"
+      type: boolean
+      default: true
+    stage:
+      description: "Pipeline stage to run in"
+      type: string
+      default: "test"
+
+---
+
+sentinel-scan:
+  stage: $[[ inputs.stage ]]
+  image: node:22-alpine
+  variables:
+    GIT_DEPTH: 0
+    SENTINEL_API_KEY: $[[ inputs.api-key ]]
+    SENTINEL_SECRET: $[[ inputs.secret ]]
+  before_script:
+    - npm install -g @sentinel/cli@$[[ inputs.cli-version ]]
+  script:
+    - |
+      sentinel ci \
+        --api-url "$[[ inputs.api-url ]]" \
+        --fail-on "$[[ inputs.fail-on ]]" \
+        --timeout "$[[ inputs.timeout ]]"
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+  artifacts:
+    when: always
+    reports:
+      sast: gl-sast-report.json
+    paths:
+      - sentinel-report.json
+      - gl-sast-report.json
+    expire_in: 30 days
+  timeout: $[[ inputs.timeout ]]
+  allow_failure: false

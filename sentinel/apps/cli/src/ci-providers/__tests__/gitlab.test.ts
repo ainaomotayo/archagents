@@ -1,65 +1,108 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { GitLabCiDetector } from "../gitlab.js";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { GitLabDetector } from "../gitlab.js";
 
-describe("GitLabCiDetector", () => {
-  const detector = new GitLabCiDetector();
+describe("GitLabDetector", () => {
+  let savedEnv: NodeJS.ProcessEnv;
 
   beforeEach(() => {
-    vi.stubEnv("GITLAB_CI", "true");
-    vi.stubEnv("CI_COMMIT_SHA", "abc123def");
-    vi.stubEnv("CI_COMMIT_BRANCH", "feature/my-branch");
-    vi.stubEnv("GITLAB_USER_NAME", "Jane Dev");
-    vi.stubEnv("CI_PROJECT_PATH", "my-group/my-project");
-    vi.stubEnv("CI_PROJECT_URL", "https://gitlab.com/my-group/my-project");
+    savedEnv = { ...process.env };
+    delete process.env.GITLAB_CI;
+    delete process.env.CI_COMMIT_SHA;
+    delete process.env.CI_COMMIT_REF_NAME;
+    delete process.env.GITLAB_USER_LOGIN;
+    delete process.env.CI_PROJECT_PATH;
+    delete process.env.CI_MERGE_REQUEST_IID;
+    delete process.env.CI_MERGE_REQUEST_TARGET_BRANCH_NAME;
+    delete process.env.CI_PIPELINE_ID;
+    delete process.env.CI_PIPELINE_URL;
+    delete process.env.CI_PROJECT_ID;
+    delete process.env.CI_SERVER_URL;
   });
 
   afterEach(() => {
-    vi.unstubAllEnvs();
+    process.env = savedEnv;
   });
 
-  describe("canDetect", () => {
-    it("returns true when GITLAB_CI is true", () => {
-      expect(detector.canDetect()).toBe(true);
-    });
+  it("has name='gitlab' and priority=20", () => {
+    const detector = new GitLabDetector();
+    expect(detector.name).toBe("gitlab");
+    expect(detector.priority).toBe(20);
+  });
 
-    it("returns false when GITLAB_CI is not set", () => {
-      vi.stubEnv("GITLAB_CI", "");
-      expect(detector.canDetect()).toBe(false);
+  it("canDetect returns true when GITLAB_CI is set", () => {
+    process.env.GITLAB_CI = "true";
+    const detector = new GitLabDetector();
+    expect(detector.canDetect()).toBe(true);
+  });
+
+  it("canDetect returns false when GITLAB_CI is not set", () => {
+    const detector = new GitLabDetector();
+    expect(detector.canDetect()).toBe(false);
+  });
+
+  it("detect extracts full MR context", () => {
+    process.env.GITLAB_CI = "true";
+    process.env.CI_COMMIT_SHA = "def456";
+    process.env.CI_COMMIT_REF_NAME = "feature/mr-test";
+    process.env.GITLAB_USER_LOGIN = "gluser";
+    process.env.CI_PROJECT_PATH = "group/project";
+    process.env.CI_MERGE_REQUEST_IID = "42";
+    process.env.CI_MERGE_REQUEST_TARGET_BRANCH_NAME = "main";
+    process.env.CI_PIPELINE_ID = "99999";
+    process.env.CI_PIPELINE_URL = "https://gitlab.com/group/project/-/pipelines/99999";
+    process.env.CI_PROJECT_ID = "12345";
+    process.env.CI_SERVER_URL = "https://gitlab.com";
+
+    const detector = new GitLabDetector();
+    const env = detector.detect();
+
+    expect(env).toEqual({
+      provider: "gitlab",
+      commitSha: "def456",
+      branch: "feature/mr-test",
+      baseBranch: "main",
+      actor: "gluser",
+      repository: "group/project",
+      mergeRequestId: "42",
+      pipelineId: "99999",
+      pipelineUrl: "https://gitlab.com/group/project/-/pipelines/99999",
+      projectId: "12345",
+      serverUrl: "https://gitlab.com",
     });
   });
 
-  describe("detect", () => {
-    it("maps environment variables correctly", () => {
-      const info = detector.detect();
-      expect(info).toEqual({
-        provider: "gitlab",
-        commitHash: "abc123def",
-        branch: "feature/my-branch",
-        author: "Jane Dev",
-        prNumber: undefined,
-        projectId: "my-group/my-project",
-        repositoryUrl: "https://gitlab.com/my-group/my-project",
-      });
-    });
+  it("detect handles push context (no MR vars)", () => {
+    process.env.GITLAB_CI = "true";
+    process.env.CI_COMMIT_SHA = "def456";
+    process.env.CI_COMMIT_REF_NAME = "main";
+    process.env.GITLAB_USER_LOGIN = "gluser";
+    process.env.CI_PROJECT_PATH = "group/project";
+    process.env.CI_PIPELINE_ID = "99999";
+    process.env.CI_PIPELINE_URL = "https://gitlab.com/group/project/-/pipelines/99999";
+    process.env.CI_PROJECT_ID = "12345";
+    process.env.CI_SERVER_URL = "https://gitlab.com";
 
-    it("parses MR IID when present", () => {
-      vi.stubEnv("CI_MERGE_REQUEST_IID", "99");
-      expect(detector.detect().prNumber).toBe(99);
-    });
+    const detector = new GitLabDetector();
+    const env = detector.detect();
 
-    it("falls back to MR source branch when CI_COMMIT_BRANCH is empty", () => {
-      vi.stubEnv("CI_COMMIT_BRANCH", "");
-      vi.stubEnv("CI_MERGE_REQUEST_SOURCE_BRANCH_NAME", "mr-branch");
-      expect(detector.detect().branch).toBe("mr-branch");
-    });
+    expect(env.baseBranch).toBeUndefined();
+    expect(env.mergeRequestId).toBeUndefined();
+    expect(env.branch).toBe("main");
+  });
 
-    it("handles missing env vars gracefully", () => {
-      vi.unstubAllEnvs();
-      const info = detector.detect();
-      expect(info.commitHash).toBe("");
-      expect(info.branch).toBe("");
-      expect(info.author).toBe("");
-      expect(info.projectId).toBe("");
-    });
+  it("detect throws when CI_COMMIT_SHA is missing", () => {
+    process.env.GITLAB_CI = "true";
+    process.env.CI_PROJECT_PATH = "group/project";
+
+    const detector = new GitLabDetector();
+    expect(() => detector.detect()).toThrow("CI_COMMIT_SHA");
+  });
+
+  it("detect throws when CI_PROJECT_PATH is missing", () => {
+    process.env.GITLAB_CI = "true";
+    process.env.CI_COMMIT_SHA = "def456";
+
+    const detector = new GitLabDetector();
+    expect(() => detector.detect()).toThrow("CI_PROJECT_PATH");
   });
 });

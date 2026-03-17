@@ -1,75 +1,97 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { GitHubCiDetector } from "../github.js";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { GitHubDetector } from "../github.js";
 
-describe("GitHubCiDetector", () => {
-  const detector = new GitHubCiDetector();
+describe("GitHubDetector", () => {
+  let savedEnv: NodeJS.ProcessEnv;
 
   beforeEach(() => {
-    vi.stubEnv("GITHUB_ACTIONS", "true");
-    vi.stubEnv("GITHUB_SHA", "abc123def");
-    vi.stubEnv("GITHUB_REF_NAME", "feature/my-branch");
-    vi.stubEnv("GITHUB_ACTOR", "octocat");
-    vi.stubEnv("GITHUB_REPOSITORY", "my-org/my-repo");
-    vi.stubEnv("GITHUB_SERVER_URL", "https://github.com");
-    vi.stubEnv("GITHUB_EVENT_NAME", "push");
+    savedEnv = { ...process.env };
+    delete process.env.GITHUB_ACTIONS;
+    delete process.env.GITHUB_SHA;
+    delete process.env.GITHUB_REF_NAME;
+    delete process.env.GITHUB_ACTOR;
+    delete process.env.GITHUB_REPOSITORY;
+    delete process.env.GITHUB_BASE_REF;
+    delete process.env.GITHUB_RUN_ID;
+    delete process.env.GITHUB_SERVER_URL;
   });
 
   afterEach(() => {
-    vi.unstubAllEnvs();
+    process.env = savedEnv;
   });
 
-  describe("canDetect", () => {
-    it("returns true when GITHUB_ACTIONS is true", () => {
-      expect(detector.canDetect()).toBe(true);
-    });
+  it("has name='github' and priority=10", () => {
+    const detector = new GitHubDetector();
+    expect(detector.name).toBe("github");
+    expect(detector.priority).toBe(10);
+  });
 
-    it("returns false when GITHUB_ACTIONS is not set", () => {
-      vi.stubEnv("GITHUB_ACTIONS", "");
-      expect(detector.canDetect()).toBe(false);
+  it("canDetect returns true when GITHUB_ACTIONS is set", () => {
+    process.env.GITHUB_ACTIONS = "true";
+    const detector = new GitHubDetector();
+    expect(detector.canDetect()).toBe(true);
+  });
+
+  it("canDetect returns false when GITHUB_ACTIONS is not set", () => {
+    const detector = new GitHubDetector();
+    expect(detector.canDetect()).toBe(false);
+  });
+
+  it("detect extracts full PR context", () => {
+    process.env.GITHUB_ACTIONS = "true";
+    process.env.GITHUB_SHA = "abc123";
+    process.env.GITHUB_REF_NAME = "feature/test";
+    process.env.GITHUB_ACTOR = "testuser";
+    process.env.GITHUB_REPOSITORY = "org/repo";
+    process.env.GITHUB_BASE_REF = "main";
+    process.env.GITHUB_RUN_ID = "12345";
+    process.env.GITHUB_SERVER_URL = "https://github.com";
+
+    const detector = new GitHubDetector();
+    const env = detector.detect();
+
+    expect(env).toEqual({
+      provider: "github",
+      commitSha: "abc123",
+      branch: "feature/test",
+      baseBranch: "main",
+      actor: "testuser",
+      repository: "org/repo",
+      pipelineId: "12345",
+      pipelineUrl: "https://github.com/org/repo/actions/runs/12345",
+      serverUrl: "https://github.com",
     });
   });
 
-  describe("detect", () => {
-    it("maps environment variables correctly for push", () => {
-      const info = detector.detect();
-      expect(info).toEqual({
-        provider: "github",
-        commitHash: "abc123def",
-        branch: "feature/my-branch",
-        author: "octocat",
-        prNumber: undefined,
-        projectId: "my-org/my-repo",
-        repositoryUrl: "https://github.com/my-org/my-repo",
-      });
-    });
+  it("detect handles push context (no base ref)", () => {
+    process.env.GITHUB_ACTIONS = "true";
+    process.env.GITHUB_SHA = "abc123";
+    process.env.GITHUB_REF_NAME = "main";
+    process.env.GITHUB_ACTOR = "testuser";
+    process.env.GITHUB_REPOSITORY = "org/repo";
+    process.env.GITHUB_RUN_ID = "12345";
+    process.env.GITHUB_SERVER_URL = "https://github.com";
 
-    it("parses PR number from ref name for pull_request events", () => {
-      vi.stubEnv("GITHUB_EVENT_NAME", "pull_request");
-      vi.stubEnv("GITHUB_REF_NAME", "42/merge");
-      expect(detector.detect().prNumber).toBe(42);
-    });
+    const detector = new GitHubDetector();
+    const env = detector.detect();
 
-    it("returns undefined prNumber for push events", () => {
-      expect(detector.detect().prNumber).toBeUndefined();
-    });
+    expect(env.baseBranch).toBeUndefined();
+    expect(env.branch).toBe("main");
+  });
 
-    it("constructs repositoryUrl from server URL and repository", () => {
-      const info = detector.detect();
-      expect(info.repositoryUrl).toBe("https://github.com/my-org/my-repo");
-    });
+  it("detect throws when GITHUB_SHA is missing", () => {
+    process.env.GITHUB_ACTIONS = "true";
+    process.env.GITHUB_REPOSITORY = "org/repo";
 
-    it("returns undefined repositoryUrl when server URL missing", () => {
-      vi.stubEnv("GITHUB_SERVER_URL", "");
-      expect(detector.detect().repositoryUrl).toBeUndefined();
-    });
+    const detector = new GitHubDetector();
+    expect(() => detector.detect()).toThrow("GITHUB_SHA");
+  });
 
-    it("handles missing env vars gracefully", () => {
-      vi.unstubAllEnvs();
-      const info = detector.detect();
-      expect(info.commitHash).toBe("");
-      expect(info.branch).toBe("");
-      expect(info.author).toBe("");
-      expect(info.projectId).toBe("");
-    });
+  it("detect throws when GITHUB_REPOSITORY is missing", () => {
+    process.env.GITHUB_ACTIONS = "true";
+    process.env.GITHUB_SHA = "abc123";
+
+    const detector = new GitHubDetector();
+    expect(() => detector.detect()).toThrow("GITHUB_REPOSITORY");
   });
 });
