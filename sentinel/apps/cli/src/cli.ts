@@ -58,6 +58,8 @@ program
       timeout: parseInt(opts.timeout, 10),
       json: opts.json ?? false,
       sarif: opts.sarif ?? false,
+      gitlabSast: false,
+      stream: false,
       stdinContent: diff,
     });
     process.exit(code);
@@ -70,6 +72,10 @@ program
   .option("--timeout <seconds>", "Poll timeout in seconds", "120")
   .option("--json", "Output machine-readable JSON report")
   .option("--sarif", "Output findings in SARIF 2.1.0 format")
+  .option("--gitlab-sast", "Write gl-sast-report.json for GitLab Security Dashboard")
+  .option("--stream", "Use SSE streaming instead of polling (requires server support)")
+  .option("--fail-on <severities>", "Comma-separated severity threshold", "critical,high")
+  .option("--format <format>", "Output format: text, json, sarif, gitlab-sast", "text")
   .action(async (opts) => {
     const { runCi } = await import("./commands/ci.js");
     const code = await runCi({
@@ -77,8 +83,10 @@ program
       apiKey: process.env.SENTINEL_API_KEY ?? "",
       secret: process.env.SENTINEL_SECRET ?? "",
       timeout: parseInt(opts.timeout, 10),
-      json: opts.json ?? false,
-      sarif: opts.sarif ?? false,
+      json: opts.json ?? opts.format === "json",
+      sarif: opts.sarif ?? opts.format === "sarif",
+      gitlabSast: opts.gitlabSast ?? opts.format === "gitlab-sast",
+      stream: opts.stream ?? false,
     });
     process.exit(code);
   });
