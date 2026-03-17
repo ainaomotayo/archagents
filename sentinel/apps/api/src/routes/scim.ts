@@ -531,4 +531,31 @@ export function registerScimRoutes(app: FastifyInstance) {
     await db.orgMembership.deleteMany({ where: { orgId, role } });
     return reply.status(204).send();
   });
+
+  // GET /v1/scim/status — SCIM sync status for the org (uses SCIM auth)
+  app.get("/v1/scim/status", { preHandler: scimAuth }, async (request: FastifyRequest, reply: FastifyReply) => {
+    const { getDb } = await import("@sentinel/db");
+    const db = getDb();
+    const orgId = (request as any).orgId;
+
+    const syncState = await db.scimSyncState.findFirst({
+      where: { orgId },
+      orderBy: { lastSyncAt: "desc" },
+    });
+
+    if (!syncState) {
+      return reply.send({ state: null });
+    }
+
+    return reply.send({
+      state: {
+        lastSyncAt: syncState.lastSyncAt,
+        usersCreated: syncState.usersCreated ?? 0,
+        usersUpdated: syncState.usersUpdated ?? 0,
+        usersDeleted: syncState.usersDeleted ?? 0,
+        status: syncState.status ?? "idle",
+        errorDetail: syncState.errorDetail ?? undefined,
+      },
+    });
+  });
 }

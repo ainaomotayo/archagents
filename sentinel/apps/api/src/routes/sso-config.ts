@@ -2,6 +2,30 @@ import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 
 const VALID_PROVIDERS = ["oidc", "saml", "github", "gitlab", "google", "microsoft"];
 
+export async function testConnectionHandler(config: any) {
+  const { createDefaultRegistry } = await import("@sentinel/auth");
+  const registry = createDefaultRegistry();
+
+  if (!config.providerType) {
+    return { success: false, latencyMs: 0, error: "providerType is required for connection testing" };
+  }
+
+  const provider = registry.resolve(config.providerType);
+  if (!provider) {
+    return { success: false, latencyMs: 0, error: `Provider type '${config.providerType}' is not supported` };
+  }
+
+  return provider.testConnection({
+    provider: config.providerType,
+    clientId: config.clientId,
+    clientSecret: config.clientSecret,
+    issuerUrl: config.issuerUrl,
+    tenantId: config.tenantId,
+    metadataUrl: config.metadataUrl,
+    samlMetadata: config.samlMetadata,
+  });
+}
+
 export function registerSsoConfigRoutes(app: FastifyInstance, authHook: any) {
   // GET /v1/sso-configs — list org SSO configs (no secrets)
   app.get("/v1/sso-configs", { preHandler: authHook }, async (request: FastifyRequest, reply: FastifyReply) => {
@@ -14,20 +38,63 @@ export function registerSsoConfigRoutes(app: FastifyInstance, authHook: any) {
     return reply.send({ ssoConfigs: configs });
   });
 
+  // GET /v1/sso-configs/health — provider health status
+  app.get("/v1/sso-configs/health", { preHandler: authHook }, async (_request, reply) => {
+    const { ProviderHealthMonitor } = await import("@sentinel/security");
+    const monitor = (app as any).providerHealthMonitor as InstanceType<typeof ProviderHealthMonitor> | undefined;
+    return reply.send({ providers: monitor ? monitor.getAll() : {} });
+  });
+
   // POST /v1/sso-configs — create SSO config
   app.post("/v1/sso-configs", { preHandler: authHook }, async (request: FastifyRequest, reply: FastifyReply) => {
-    const { provider, displayName, clientId, clientSecret, issuerUrl, samlMetadata, enforced } = request.body as any;
-    if (!provider || !displayName || !clientId || !clientSecret) {
-      return reply.status(400).send({ error: "provider, displayName, clientId, and clientSecret are required" });
+    const { provider, providerType, displayName, clientId, clientSecret, issuerUrl, tenantId, metadataUrl, domainRestriction, samlMetadata, enforced, settings } = request.body as any;
+    if (!provider || !displayName || !clientId) {
+      return reply.status(400).send({ error: "provider, displayName, and clientId are required" });
     }
     if (!VALID_PROVIDERS.includes(provider)) {
       return reply.status(400).send({ error: `provider must be one of: ${VALID_PROVIDERS.join(", ")}` });
     }
 
+    // Run provider-specific validation if providerType is set
+    if (providerType) {
+      const { createDefaultRegistry } = await import("@sentinel/auth");
+      const registry = createDefaultRegistry();
+      const ssoProvider = registry.resolve(providerType);
+      if (ssoProvider) {
+        const validation = ssoProvider.validateConfig({
+          provider: providerType,
+          clientId,
+          clientSecret: clientSecret ?? "",
+          issuerUrl,
+          tenantId,
+          metadataUrl,
+          domainRestriction,
+          samlMetadata,
+        });
+        if (!validation.valid) {
+          return reply.status(400).send({ error: "Validation failed", details: validation.errors });
+        }
+      }
+    }
+
     const { getDb } = await import("@sentinel/db");
     const db = getDb();
     const config = await db.ssoConfig.create({
-      data: { orgId: (request as any).orgId, provider, displayName, clientId, clientSecret, issuerUrl, samlMetadata, enforced: enforced ?? false },
+      data: {
+        orgId: (request as any).orgId,
+        provider,
+        providerType: providerType ?? null,
+        displayName,
+        clientId,
+        clientSecret: clientSecret ?? null,
+        issuerUrl: issuerUrl ?? null,
+        tenantId: tenantId ?? null,
+        metadataUrl: metadataUrl ?? null,
+        domainRestriction: domainRestriction ?? null,
+        samlMetadata: samlMetadata ?? null,
+        enforced: enforced ?? false,
+        settings: settings ?? {},
+      },
     });
     return reply.status(201).send({ id: config.id, provider: config.provider, displayName: config.displayName });
   });
@@ -90,5 +157,21 @@ export function registerSsoConfigRoutes(app: FastifyInstance, authHook: any) {
     });
 
     return reply.send({ scimToken: token, message: "Store this token securely. It will not be shown again." });
+  });
+
+  // POST /v1/sso-configs/:id/test-connection — test SSO provider connectivity
+  app.post("/v1/sso-configs/:id/test-connection", { preHandler: authHook }, async (request, reply) => {
+    const { getDb } = await import("@sentinel/db");
+    const db = getDb();
+    const config = await db.ssoConfig.findFirst({
+      where: { id: (request.params as any).id, orgId: (request as any).orgId },
+    });
+    if (!config) return reply.status(404).send({ error: "SSO config not found" });
+    const result = await testConnectionHandler(config);
+    await db.ssoConfig.update({
+      where: { id: config.id },
+      data: { lastTestedAt: new Date(), lastTestResult: result as any },
+    });
+    return reply.send(result);
   });
 }

@@ -12,9 +12,9 @@ import {
   shutdownTracing,
 } from "@sentinel/telemetry";
 import { isArchiveEnabled, archiveToS3, getArchiveConfig } from "@sentinel/security";
-import { AIMetricsService, enrichTracesForScan } from "@sentinel/compliance";
-import http from "node:http";
+import { AIMetricsService, enrichTracesForScan, generateSpdxExport, generateCycloneDxExport } from "@sentinel/compliance";
 import { createAssessmentStore } from "./stores.js";
+import { createWorkerHealthServer } from "./worker-metrics.js";
 
 if (process.env.OTEL_EXPORTER_OTLP_ENDPOINT) {
   initTracing({ serviceName: "sentinel-worker" });
@@ -116,6 +116,24 @@ async function finalizeScan(scanId: string, hasTimeouts: boolean) {
       }
     } catch (enrichErr) {
       logger.error({ scanId, err: enrichErr }, "Failed to enrich decision traces (non-fatal)");
+    }
+
+    // Post-persist hook: publish IP attribution export event
+    try {
+      const ipCert = await db.iPAttributionCertificate.findUnique({
+        where: { scanId },
+        select: { id: true },
+      });
+      if (ipCert) {
+        await eventBus.publish("sentinel.ip-attribution.export", {
+          scanId,
+          orgId: scan.orgId,
+          certificateId: ipCert.id,
+        });
+        logger.info({ scanId, certificateId: ipCert.id }, "IP attribution export event published");
+      }
+    } catch (ipErr) {
+      logger.error({ scanId, err: ipErr }, "Failed to publish IP attribution export event (non-fatal)");
     }
 
     // --- Approval gate check ---
@@ -328,17 +346,40 @@ async function finalizeScan(scanId: string, hasTimeouts: boolean) {
   }
 }
 
-const healthPort = parseInt(process.env.WORKER_HEALTH_PORT ?? "9092", 10);
-const healthServer = http.createServer((req, res) => {
-  if (req.url === "/health") {
-    res.writeHead(200, { "Content-Type": "application/json" });
-    res.end(JSON.stringify({ status: "ok", uptime: process.uptime() }));
-  } else {
-    res.writeHead(404);
-    res.end();
+async function handleIPAttributionExport(_id: string, data: Record<string, unknown>) {
+  const { scanId, orgId, certificateId } = data as { scanId: string; orgId: string; certificateId: string };
+
+  try {
+    const cert = await db.iPAttributionCertificate.findUnique({
+      where: { id: certificateId },
+    });
+    if (!cert) {
+      logger.warn({ certificateId }, "IP attribution certificate not found for export");
+      return;
+    }
+
+    const doc = cert.document as any;
+
+    // Generate SPDX and CycloneDX inline (stored in DB, not S3)
+    const spdxContent = generateSpdxExport(doc);
+    const cyclonedxContent = generateCycloneDxExport(doc);
+
+    await db.iPAttributionCertificate.update({
+      where: { id: certificateId },
+      data: {
+        spdxExport: spdxContent,
+        cyclonedxExport: cyclonedxContent,
+      },
+    });
+
+    logger.info({ scanId, certificateId }, "IP attribution exports generated and stored");
+  } catch (err) {
+    logger.error({ scanId, certificateId, err }, "Failed to generate IP attribution exports");
   }
-});
-healthServer.listen(healthPort);
+}
+
+const healthPort = parseInt(process.env.WORKER_HEALTH_PORT ?? "9092", 10);
+const healthServer = createWorkerHealthServer(healthPort);
 logger.info({ port: healthPort }, "Worker health server listening");
 
 // Graceful shutdown
@@ -372,3 +413,13 @@ eventBus.subscribe(
 );
 
 logger.info("Assessor worker started, consuming sentinel.findings...");
+
+// Consume IP attribution export events
+eventBus.subscribe(
+  "sentinel.ip-attribution.export",
+  "ip-attribution-exporters",
+  `ip-exporter-${process.pid}`,
+  handleIPAttributionExport,
+);
+
+logger.info("IP attribution export handler started, consuming sentinel.ip-attribution.export...");

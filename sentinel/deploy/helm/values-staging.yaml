@@ -1,0 +1,35 @@
+api:
+  replicaCount: 1
+  resources:
+    requests: { cpu: 100m, memory: 128Mi }
+    limits: { cpu: 500m, memory: 256Mi }
+dashboard:
+  replicaCount: 1
+workers:
+  assessor: { replicaCount: 1, scaling: { enabled: false } }
+  scheduler: { replicaCount: 1 }
+  report: { replicaCount: 1, scaling: { enabled: false } }
+  notification: { replicaCount: 1, scaling: { enabled: false } }
+  githubBridge: { replicaCount: 1, scaling: { enabled: false } }
+agents:
+  critical:
+    security: { scaling: { minReplicas: 1, maxReplicas: 2, targetCPU: 80 } }
+    dependency: { scaling: { minReplicas: 1, maxReplicas: 2, targetCPU: 80 } }
+pdb:
+  api: null
+  dashboard: null
+ingress:
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-staging
+  hosts:
+    - host: sentinel-staging.example.com
+      paths:
+        - { path: /v1, pathType: Prefix, service: api, port: 8080 }
+        - { path: /, pathType: Prefix, service: dashboard, port: 3000 }
+  tls:
+    - secretName: sentinel-staging-tls
+      hosts: [sentinel-staging.example.com]
+monitoring:
+  grafana: { enabled: true }
+  prometheus: { enabled: true }
+  otel: { enabled: false }

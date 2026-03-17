@@ -10,9 +10,13 @@ RUN pnpm turbo build --filter=@sentinel/dashboard
 FROM node:22-alpine
 WORKDIR /app
 RUN apk add --no-cache wget
-COPY --from=builder /app/apps/dashboard/.next/standalone ./
-COPY --from=builder /app/apps/dashboard/.next/static ./apps/dashboard/.next/static
-COPY --from=builder /app/apps/dashboard/public ./apps/dashboard/public
+RUN addgroup -g 1001 -S sentinel && adduser -u 1001 -S sentinel -G sentinel
+COPY --from=builder --chown=sentinel:sentinel /app/apps/dashboard/.next/standalone ./
+COPY --from=builder --chown=sentinel:sentinel /app/apps/dashboard/.next/static ./apps/dashboard/.next/static
+COPY --from=builder --chown=sentinel:sentinel /app/apps/dashboard/public ./apps/dashboard/public
 EXPOSE 3000
 ENV NODE_ENV=production
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD wget -qO- http://localhost:3000/api/health || exit 1
+USER sentinel
 CMD ["node", "apps/dashboard/server.js"]

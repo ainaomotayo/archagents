@@ -1,94 +1,267 @@
 global:
-  namespace: sentinel
-  imageTag: latest
-
-api:
-  replicas: 2
-  image: sentinel/api
-  port: 8080
-  resources:
-    requests:
-      cpu: 250m
-      memory: 256Mi
-    limits:
-      cpu: "1"
-      memory: 512Mi
-
-worker:
-  replicas: 1
-  image: sentinel/api
-
-dashboard:
-  replicas: 2
-  image: sentinel/dashboard
-  port: 3000
-  resources:
-    requests:
-      cpu: 100m
-      memory: 128Mi
-    limits:
-      cpu: 500m
-      memory: 256Mi
-
-ingress:
-  enabled: true
-  host: sentinel.example.com
-  tls: true
-  clusterIssuer: letsencrypt-prod
-
-autoscaling:
-  enabled: true
-  api:
-    minReplicas: 2
-    maxReplicas: 10
-    targetCPUUtilization: 70
-  dashboard:
-    minReplicas: 2
-    maxReplicas: 5
-    targetCPUUtilization: 80
+  imageRegistry: ""
+  imagePullSecrets: []
+  storageClass: ""
 
 config:
   nodeEnv: production
   logLevel: info
-  corsOrigin: "https://sentinel.example.com"
+  corsOrigin: "*"
   rateLimitMax: "100"
 
 secrets:
-  databaseUrl: ""
-  redisUrl: ""
-  sentinelSecret: ""
-  nextauthSecret: ""
-  githubAppId: ""
-  githubPrivateKey: ""
-  githubWebhookSecret: ""
-  s3ArchiveBucket: ""
-  s3ArchivePrefix: "sentinel"
-  s3RetentionDays: "2555"
-  awsRegion: "us-east-1"
-  kmsMasterKeyId: ""
-  cloudProvider: ""
-  archiveBucket: ""
-  archivePrefix: "sentinel"
-  archiveRetentionDays: "2555"
-  gcpProjectId: ""
-  gcsArchiveBucket: ""
-  gcpKmsLocation: "global"
-  gcpKmsKeyRing: "sentinel"
-  gcpKmsKeyId: "sentinel-master"
-  azureStorageAccountUrl: ""
-  azureArchiveContainer: ""
-  azureKeyVaultUrl: ""
-  azureKeyName: "sentinel-master"
+  provider: kubernetes  # kubernetes | aws | gcp | azure | vault
+  aws: { region: us-east-1, secretName: sentinel/production }
+  gcp: { project: "", secretName: sentinel-production }
+  azure: { vaultUrl: "", tenantId: "" }
+  vault: { address: "", role: sentinel, path: secret/data/sentinel }
 
-sso:
-  gitlabClientId: ""
-  gitlabClientSecret: ""
-  gitlabUrl: "https://gitlab.com"
-  oidcClientId: ""
-  oidcClientSecret: ""
-  oidcIssuer: ""
-  oidcProviderName: "SSO"
-  samlJacksonUrl: ""
-  samlJacksonProduct: "sentinel"
-  samlClientId: "dummy"
-  samlClientSecret: "dummy"
+api:
+  replicaCount: 2
+  image: { repository: sentinel-api, tag: "", pullPolicy: IfNotPresent }
+  resources:
+    requests: { cpu: 250m, memory: 256Mi }
+    limits: { cpu: "1", memory: 512Mi }
+  probes:
+    readiness: { path: /health, port: 8080, initialDelaySeconds: 10, periodSeconds: 10 }
+    liveness: { path: /health, port: 8080, initialDelaySeconds: 15, periodSeconds: 20 }
+  serviceAccount: { create: true, annotations: {} }
+  topologySpreadConstraints:
+    - maxSkew: 1
+      topologyKey: topology.kubernetes.io/zone
+      whenUnsatisfied: DoNotSchedule
+      labelSelector:
+        matchLabels:
+          app.kubernetes.io/component: api
+
+dashboard:
+  replicaCount: 2
+  image: { repository: sentinel-dashboard, tag: "", pullPolicy: IfNotPresent }
+  resources:
+    requests: { cpu: 100m, memory: 128Mi }
+    limits: { cpu: 500m, memory: 256Mi }
+  env:
+    SENTINEL_API_URL: http://sentinel-api:8080
+  probes:
+    readiness: { path: /api/health, port: 3000, initialDelaySeconds: 15 }
+    liveness: { path: /api/health, port: 3000, initialDelaySeconds: 20 }
+  topologySpreadConstraints:
+    - maxSkew: 1
+      topologyKey: topology.kubernetes.io/zone
+      whenUnsatisfied: DoNotSchedule
+      labelSelector:
+        matchLabels:
+          app.kubernetes.io/component: dashboard
+
+workers:
+  assessor:
+    enabled: true
+    replicaCount: 1
+    command: ["node", "apps/api/dist/workers/assessor.js"]
+    resources:
+      requests: { cpu: 250m, memory: 256Mi }
+      limits: { cpu: "1", memory: 512Mi }
+    scaling: { enabled: true, minReplicas: 1, maxReplicas: 5, targetCPU: 75 }
+  scheduler:
+    enabled: true
+    replicaCount: 1
+    command: ["node", "apps/api/dist/workers/scheduler.js"]
+    resources:
+      requests: { cpu: 100m, memory: 128Mi }
+      limits: { cpu: 500m, memory: 256Mi }
+    scaling: { enabled: false }
+    leaderElection: true
+  report:
+    enabled: true
+    replicaCount: 1
+    command: ["node", "apps/api/dist/workers/report.js"]
+    resources:
+      requests: { cpu: 200m, memory: 256Mi }
+      limits: { cpu: "1", memory: 512Mi }
+    scaling: { enabled: true, minReplicas: 1, maxReplicas: 3, targetCPU: 75 }
+  notification:
+    enabled: true
+    replicaCount: 1
+    command: ["node", "apps/api/dist/workers/notification.js"]
+    resources:
+      requests: { cpu: 100m, memory: 128Mi }
+      limits: { cpu: 500m, memory: 512Mi }
+    scaling: { enabled: true, minReplicas: 1, maxReplicas: 3, targetCPU: 75 }
+  githubBridge:
+    enabled: true
+    replicaCount: 1
+    command: ["node", "apps/api/dist/workers/github-bridge.js"]
+    resources:
+      requests: { cpu: 200m, memory: 256Mi }
+      limits: { cpu: "1", memory: 512Mi }
+    scaling: { enabled: true, minReplicas: 1, maxReplicas: 3, targetCPU: 75 }
+
+agents:
+  critical:
+    security:
+      enabled: true
+      image: { repository: sentinel-agent-security, tag: "" }
+      resources:
+        requests: { cpu: 500m, memory: 512Mi }
+        limits: { cpu: "2", memory: 1Gi }
+      scaling: { minReplicas: 1, maxReplicas: 5, targetCPU: 70 }
+      priorityClassName: sentinel-critical
+    dependency:
+      enabled: true
+      image: { repository: sentinel-agent-dependency, tag: "" }
+      resources:
+        requests: { cpu: 250m, memory: 256Mi }
+        limits: { cpu: "1", memory: 512Mi }
+      scaling: { minReplicas: 1, maxReplicas: 5, targetCPU: 70 }
+      priorityClassName: sentinel-critical
+  batch:
+    ipLicense:
+      enabled: false
+      image: { repository: sentinel-agent-ip-license, tag: "" }
+      resources:
+        requests: { cpu: 200m, memory: 256Mi }
+        limits: { cpu: "1", memory: 512Mi }
+      scaling: { minReplicas: 1, maxReplicas: 3, targetCPU: 80 }
+      priorityClassName: sentinel-batch
+    quality:
+      enabled: false
+      image: { repository: sentinel-agent-quality, tag: "" }
+      resources:
+        requests: { cpu: 200m, memory: 256Mi }
+        limits: { cpu: "1", memory: 512Mi }
+      scaling: { minReplicas: 1, maxReplicas: 3, targetCPU: 80 }
+      priorityClassName: sentinel-batch
+    aiDetector:
+      enabled: false
+      image: { repository: sentinel-agent-ai-detector, tag: "" }
+      resources:
+        requests: { cpu: 200m, memory: 256Mi }
+        limits: { cpu: "1", memory: 512Mi }
+      scaling: { minReplicas: 1, maxReplicas: 3, targetCPU: 80 }
+      priorityClassName: sentinel-batch
+    policy:
+      enabled: false
+      image: { repository: sentinel-agent-policy, tag: "" }
+      resources:
+        requests: { cpu: 200m, memory: 256Mi }
+        limits: { cpu: "1", memory: 512Mi }
+      scaling: { minReplicas: 1, maxReplicas: 3, targetCPU: 80 }
+      priorityClassName: sentinel-batch
+  common:
+    env:
+      AGENT_LOG_LEVEL: info
+    healthCheck:
+      path: /health
+      port: 8000
+
+samlJackson:
+  enabled: true
+  image: { repository: boxyhq/jackson, tag: "1.30.2" }
+  replicaCount: 1
+  resources:
+    requests: { cpu: 100m, memory: 128Mi }
+    limits: { cpu: 500m, memory: 256Mi }
+
+migration:
+  image: { repository: sentinel-migration, tag: "" }
+  command: ["npx", "prisma", "migrate", "deploy", "--schema=./packages/db/prisma/schema.prisma"]
+  resources:
+    requests: { cpu: 100m, memory: 256Mi }
+    limits: { cpu: 500m, memory: 512Mi }
+  backoffLimit: 3
+  activeDeadlineSeconds: 300
+
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/rate-limit: "100"
+    nginx.ingress.kubernetes.io/rate-limit-window: "1m"
+  hosts:
+    - host: sentinel.example.com
+      paths:
+        - path: /v1
+          pathType: Prefix
+          service: api
+          port: 8080
+        - path: /webhooks
+          pathType: Prefix
+          service: api
+          port: 8080
+        - path: /metrics
+          pathType: Exact
+          service: api
+          port: 8080
+        - path: /
+          pathType: Prefix
+          service: dashboard
+          port: 3000
+  tls:
+    - secretName: sentinel-tls
+      hosts: [sentinel.example.com]
+  mesh:
+    enabled: false
+    provider: istio
+
+networkPolicy:
+  enabled: true
+
+pdb:
+  api: { minAvailable: 1 }
+  dashboard: { minAvailable: 1 }
+  agents:
+    critical: { minAvailable: 1 }
+
+priorityClasses:
+  critical: { value: 1000, description: "Critical Sentinel services" }
+  standard: { value: 500, description: "Standard Sentinel workers" }
+  batch: { value: 100, description: "Batch analysis agents" }
+
+keda:
+  enabled: false
+  redis:
+    address: ""
+    streamName: sentinel.diffs
+    consumerGroup: ""
+    pendingThreshold: "50"
+
+monitoring:
+  prometheus:
+    enabled: true
+    serviceMonitor:
+      enabled: true
+      interval: 30s
+  grafana:
+    enabled: true
+    dashboards: true
+  otel:
+    enabled: false
+    image: otel/opentelemetry-collector-contrib:0.96.0
+    exporters:
+      otlp: { endpoint: "" }
+      datadog: { apiKey: "" }
+
+postgresql:
+  enabled: true
+  auth:
+    username: sentinel
+    database: sentinel
+    existingSecret: sentinel-db-credentials
+  primary:
+    persistence: { size: 50Gi }
+    resources:
+      requests: { cpu: 500m, memory: 1Gi }
+      limits: { cpu: "2", memory: 2Gi }
+
+redis:
+  enabled: true
+  auth: { enabled: false }
+  master:
+    persistence: { size: 10Gi }
+    configuration: |
+      appendonly yes
+      maxmemory-policy noeviction
+    resources:
+      requests: { cpu: 250m, memory: 512Mi }
+      limits: { cpu: "1", memory: 1Gi }

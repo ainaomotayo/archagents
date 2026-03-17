@@ -1,45 +1,63 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: sentinel-dashboard
-  namespace: {{ .Values.global.namespace }}
+  name: {{ include "sentinel.fullname" . }}-dashboard
   labels:
-    app: sentinel-dashboard
     {{- include "sentinel.labels" . | nindent 4 }}
+    app.kubernetes.io/component: dashboard
 spec:
-  replicas: {{ .Values.dashboard.replicas }}
+  replicas: {{ .Values.dashboard.replicaCount }}
   selector:
     matchLabels:
-      app: sentinel-dashboard
+      {{- include "sentinel.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: dashboard
   template:
     metadata:
       labels:
-        app: sentinel-dashboard
+        {{- include "sentinel.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: dashboard
+        sentinel.io/tier: critical
     spec:
+      securityContext:
+        {{- include "sentinel.podSecurityContext" . | nindent 8 }}
+      priorityClassName: sentinel-critical
+      {{- with .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.dashboard.topologySpreadConstraints }}
+      topologySpreadConstraints:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       containers:
         - name: dashboard
-          image: "{{ .Values.dashboard.image }}:{{ .Values.global.imageTag }}"
+          image: {{ include "sentinel.image" (dict "global" .Values.global "repository" .Values.dashboard.image.repository "tag" (.Values.dashboard.image.tag | default .Chart.AppVersion)) }}
+          imagePullPolicy: {{ .Values.dashboard.image.pullPolicy }}
           ports:
-            - containerPort: {{ .Values.dashboard.port }}
-          envFrom:
-            - configMapRef:
-                name: sentinel-config
-            - secretRef:
-                name: sentinel-secrets
+            - name: http
+              containerPort: 3000
           env:
             - name: SENTINEL_API_URL
-              value: "http://sentinel-api:{{ .Values.api.port }}"
+              value: {{ .Values.dashboard.env.SENTINEL_API_URL | quote }}
           readinessProbe:
             httpGet:
-              path: /api/health
-              port: {{ .Values.dashboard.port }}
-            initialDelaySeconds: 15
-            periodSeconds: 10
+              path: {{ .Values.dashboard.probes.readiness.path }}
+              port: {{ .Values.dashboard.probes.readiness.port }}
+            initialDelaySeconds: {{ .Values.dashboard.probes.readiness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.dashboard.probes.readiness.periodSeconds | default 10 }}
           livenessProbe:
             httpGet:
-              path: /api/health
-              port: {{ .Values.dashboard.port }}
-            initialDelaySeconds: 30
-            periodSeconds: 15
+              path: {{ .Values.dashboard.probes.liveness.path }}
+              port: {{ .Values.dashboard.probes.liveness.port }}
+            initialDelaySeconds: {{ .Values.dashboard.probes.liveness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.dashboard.probes.liveness.periodSeconds | default 20 }}
           resources:
             {{- toYaml .Values.dashboard.resources | nindent 12 }}
+          securityContext:
+            {{- include "sentinel.containerSecurityContext" . | nindent 12 }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}

@@ -1,5 +1,4 @@
 import { createHash } from "node:crypto";
-import http from "node:http";
 import { Redis } from "ioredis";
 import { EventBus, withRetry } from "@sentinel/events";
 import { getDb, disconnectDb } from "@sentinel/db";
@@ -12,12 +11,14 @@ import {
   TopicTrie,
   type NotificationEvent,
 } from "@sentinel/notifications";
+import { buildDigestEmailHtml } from "@sentinel/compliance";
 import { createLogger, initTracing, shutdownTracing } from "@sentinel/telemetry";
 import {
   notificationDeliveriesTotal,
   notificationDeliveryDuration,
   notificationRetryQueueDepth,
 } from "@sentinel/telemetry";
+import { createWorkerHealthServer } from "./worker-metrics.js";
 
 const logger = createLogger({ name: "notification-worker" });
 
@@ -195,6 +196,51 @@ export async function processRetryQueue(deps: WorkerDeps): Promise<void> {
   }
 }
 
+export async function handleDigestEvent(
+  event: NotificationEvent,
+  deps: WorkerDeps & { dashboardUrl: string },
+): Promise<void> {
+  const { scheduleId, recipients, parameters } = event.payload as any;
+  if (!recipients || !Array.isArray(recipients) || recipients.length === 0) return;
+
+  // Read today's digest snapshot
+  const today = new Date();
+  today.setUTCHours(0, 0, 0, 0);
+  let snapshot = await deps.db.digestSnapshot.findFirst({
+    where: { orgId: event.orgId, snapshotDate: today },
+  });
+
+  if (!snapshot) {
+    // Fallback: try yesterday
+    const yesterday = new Date(today.getTime() - 86400000);
+    snapshot = await deps.db.digestSnapshot.findFirst({
+      where: { orgId: event.orgId, snapshotDate: yesterday },
+    });
+    if (!snapshot) return; // No snapshot available
+  }
+
+  const orgName = parameters?.orgName ?? event.orgId;
+  const html = buildDigestEmailHtml(orgName, snapshot.metrics, deps.dashboardUrl);
+
+  const emailAdapter = deps.registry.get("email");
+  if (!emailAdapter) return;
+
+  for (const recipient of recipients) {
+    await emailAdapter.deliver(
+      { channelType: "email", channelConfig: { to: [recipient], subject: "SENTINEL Weekly Digest — {{topic}}" } } as any,
+      { ...event, topic: "compliance.digest" },
+    );
+  }
+
+  // Update schedule status
+  if (scheduleId) {
+    await deps.db.reportSchedule.update({
+      where: { id: scheduleId },
+      data: { lastStatus: "delivered" },
+    }).catch(() => {});
+  }
+}
+
 // --- Main process (only when executed directly) ---
 
 if (process.env.NODE_ENV !== "test") {
@@ -226,9 +272,64 @@ if (process.env.NODE_ENV !== "test") {
     logger.info({ host: process.env.SMTP_HOST }, "Email adapter registered");
   }
 
+  const dashboardUrl = process.env.DASHBOARD_URL ?? "https://sentinel.example.com";
   const wrappedHandler = withRetry(redis, "sentinel.notifications", async (_id: string, data: Record<string, unknown>) => {
     const event = data as unknown as NotificationEvent;
-    await processNotificationEvent(event, { db, registry, redisPub });
+    if (event.topic === "compliance.digest_ready") {
+      await handleDigestEvent(event, { db, registry, redisPub, dashboardUrl });
+    } else if (event.topic === "compliance.report_ready" && event.payload?.delivery === "email") {
+      const { reportId, type, storageKey, fileSize } = event.payload;
+      if (storageKey) {
+        const { createReportStorage } = await import("./report-storage-factory.js");
+        const reportStorage = createReportStorage();
+        const downloadUrl = await reportStorage.getSignedUrl(String(storageKey), 7 * 24 * 3600);
+        const sizeMB = typeof fileSize === "number" ? (fileSize / (1024 * 1024)).toFixed(1) : "unknown";
+
+        // Look up the report and requesting user's email
+        const report = await db.report.findUnique({ where: { id: String(reportId) } });
+        let recipientEmail: string | undefined;
+        if (report?.requestedBy) {
+          const user = await db.user.findUnique({ where: { id: report.requestedBy }, select: { email: true } });
+          recipientEmail = user?.email;
+        }
+
+        if (!recipientEmail) {
+          logger.warn({ reportId }, "No recipient email found for report delivery");
+        } else {
+          const emailAdapter = registry.get("email");
+          if (emailAdapter) {
+            const reportEvent: NotificationEvent = {
+              id: `${event.id}-email`,
+              orgId: event.orgId,
+              topic: "compliance.report_ready",
+              timestamp: event.timestamp,
+              payload: {
+                "Report Type": String(type).replace(/_/g, " "),
+                "Report ID": String(reportId),
+                "Download Link": downloadUrl,
+                "File Size": `${sizeMB} MB`,
+                "Link Expires": "7 days",
+              },
+            };
+            await emailAdapter.deliver(
+              {
+                channelType: "email",
+                channelConfig: {
+                  to: [recipientEmail],
+                  subject: "SENTINEL Report Ready: {{topic}}",
+                },
+              } as any,
+              reportEvent,
+            );
+            logger.info({ reportId, type, recipientEmail, sizeMB }, "Report email delivered");
+          } else {
+            logger.warn({ reportId }, "Email adapter not configured — skipping email delivery");
+          }
+        }
+      }
+    } else {
+      await processNotificationEvent(event, { db, registry, redisPub });
+    }
   }, { maxRetries: 3, baseDelayMs: 1000 });
 
   eventBus.subscribe("sentinel.notifications", "notification-workers", `notif-${process.pid}`, wrappedHandler);
@@ -238,13 +339,7 @@ if (process.env.NODE_ENV !== "test") {
   }, 5_000);
 
   const healthPort = parseInt(process.env.NOTIFICATION_WORKER_PORT ?? "9095", 10);
-  const healthServer = http.createServer((req, res) => {
-    if (req.url === "/health") {
-      res.writeHead(200, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ status: "ok", uptime: process.uptime() }));
-    } else { res.writeHead(404); res.end(); }
-  });
-  healthServer.listen(healthPort);
+  const healthServer = createWorkerHealthServer(healthPort);
   logger.info({ port: healthPort }, "Notification worker health server listening");
 
   const shutdown = async () => {

@@ -113,6 +113,15 @@ export function createSentinelLspServer(deps: ServerDeps) {
     }
   }
 
+  async function handleFindingDetail(findingId: string): Promise<Record<string, unknown>> {
+    try {
+      return await apiClient.getFindingDetail(findingId);
+    } catch {
+      const cached = findingCache.getAll().find((f) => f.id === findingId);
+      return cached ? { finding: cached } : {};
+    }
+  }
+
   return {
     onInitialize,
     getDiagnosticsForFile,
@@ -120,6 +129,7 @@ export function createSentinelLspServer(deps: ServerDeps) {
     getCodeLensesForFile,
     handleCommand,
     handleSseEvent,
+    handleFindingDetail,
     setWorkspaceRoot,
   };
 }

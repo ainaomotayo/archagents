@@ -27,9 +27,12 @@ import { buildRemediationRoutes } from "./routes/remediations.js";
 import { buildAIMetricsRoutes } from "./routes/ai-metrics.js";
 import { buildRiskTrendRoutes } from "./routes/risk-trends.js";
 import { buildDecisionTraceRoutes } from "./routes/decision-traces.js";
+import { buildIPAttributionRoutes } from "./routes/ip-attribution.js";
 import { buildBAARoutes } from "./routes/baa.js";
 import { buildAttestationRoutes } from "./routes/attestations.js";
+import { buildWizardRoutes } from "./routes/compliance-wizards.js";
 import { buildNotificationRuleRoutes } from "./routes/notification-rules.js";
+import { buildReportScheduleRoutes } from "./routes/report-schedules.js";
 import { HttpWebhookAdapter, SseManager } from "@sentinel/notifications";
 import { randomUUID } from "node:crypto";
 import { createScanStore, createAuditEventStore } from "./stores.js";
@@ -42,7 +45,13 @@ import { registerOrgMembershipRoutes } from "./routes/org-memberships.js";
 import { registerScimRoutes } from "./routes/scim.js";
 import { registerEncryptionAdminRoutes } from "./routes/encryption-admin.js";
 import { registerDomainRoutes } from "./routes/domain-verification.js";
+import { registerMetricsRoute } from "./metrics.js";
+import { registerJitRoutes } from "./routes/jit-provision.js";
+import { registerSessionRoutes } from "./routes/sessions.js";
+import { registerAuditEventRoutes } from "./routes/audit-events.js";
+import { registerOrgSettingsRoutes } from "./routes/org-settings.js";
 import { registerVcsWebhookRoutes } from "./routes/vcs-webhooks.js";
+import { registerVcsInstallationRoutes } from "./routes/vcs-installations.js";
 import { VcsProviderRegistry, GitHubProvider, GitLabProvider, BitbucketProvider, AzureDevOpsProvider } from "@sentinel/vcs";
 import { DekCache, EnvelopeEncryption, LocalKmsProvider } from "@sentinel/security";
 
@@ -119,9 +128,12 @@ const gapRoutes = buildGapAnalysisRoutes({ db });
 const remediationRoutes = buildRemediationRoutes({ db });
 const baaRoutes = buildBAARoutes({ db });
 const attestationRoutes = buildAttestationRoutes({ db });
+const wizardRoutes = buildWizardRoutes({ db });
 const aiMetricsRoutes = buildAIMetricsRoutes({ db });
 const riskTrendRoutes = buildRiskTrendRoutes({ db });
 const decisionTraceRoutes = buildDecisionTraceRoutes({ db });
+const ipAttributionRoutes = buildIPAttributionRoutes({ db, secret: process.env.SENTINEL_SECRET! });
+const reportScheduleRoutes = buildReportScheduleRoutes({ db, eventBus });
 
 // --- Evidence upload service (stub S3 presigner until real provider is configured) ---
 const stubS3Presigner = {
@@ -152,6 +164,9 @@ const webhookSecret = process.env.GITHUB_WEBHOOK_SECRET ?? "";
 if (webhookSecret) {
   registerWebhookRoutes(app, { eventBus, webhookSecret, db });
 }
+
+// --- VCS installation management routes ---
+registerVcsInstallationRoutes(app, { db });
 
 // --- Multi-VCS webhook routes ---
 const vcsRegistry = new VcsProviderRegistry();
@@ -1680,6 +1695,150 @@ app.post("/v1/compliance/attestations/:id/renew", { preHandler: authHook }, asyn
   }
 });
 
+// --- Compliance Wizard routes ---
+app.post("/v1/compliance/wizards", { preHandler: authHook }, async (request, reply) => {
+  const orgId = (request as any).orgId ?? "default";
+  const userId = (request as any).userId ?? "unknown";
+  const result = await withTenant(db, orgId, () => wizardRoutes.createWizard(orgId, userId, request.body));
+  if (result.error) { reply.code(result.status ?? 400).send({ error: result.error }); return; }
+  reply.code(201).send(result);
+});
+
+app.get("/v1/compliance/wizards", { preHandler: authHook }, async (request) => {
+  const orgId = (request as any).orgId ?? "default";
+  return withTenant(db, orgId, () => wizardRoutes.listWizards(orgId));
+});
+
+app.get("/v1/compliance/wizards/:wizardId", { preHandler: authHook }, async (request, reply) => {
+  const orgId = (request as any).orgId ?? "default";
+  const { wizardId } = request.params as { wizardId: string };
+  return withTenant(db, orgId, async () => {
+    const wizard = await wizardRoutes.getWizard(wizardId, orgId);
+    if (!wizard) { reply.code(404).send({ error: "Not found" }); return; }
+    return wizard;
+  });
+});
+
+app.delete("/v1/compliance/wizards/:wizardId", { preHandler: authHook }, async (request, reply) => {
+  const orgId = (request as any).orgId ?? "default";
+  const { wizardId } = request.params as { wizardId: string };
+  return withTenant(db, orgId, async () => {
+    const result = await wizardRoutes.deleteWizard(wizardId, orgId);
+    if (!result) { reply.code(404).send({ error: "Not found" }); return; }
+    return result;
+  });
+});
+
+app.patch("/v1/compliance/wizards/:wizardId", { preHandler: authHook }, async (request, reply) => {
+  const orgId = (request as any).orgId ?? "default";
+  const { wizardId } = request.params as { wizardId: string };
+  return withTenant(db, orgId, async () => {
+    const result = await wizardRoutes.updateWizardMetadata(wizardId, orgId, request.body as Record<string, unknown>);
+    if (!result) { reply.code(404).send({ error: "Not found" }); return; }
+    return result;
+  });
+});
+
+app.get("/v1/compliance/wizards/:wizardId/steps/:code", { preHandler: authHook }, async (request, reply) => {
+  const orgId = (request as any).orgId ?? "default";
+  const { wizardId, code } = request.params as { wizardId: string; code: string };
+  return withTenant(db, orgId, async () => {
+    const step = await wizardRoutes.getStep(wizardId, code, orgId);
+    if (!step) { reply.code(404).send({ error: "Not found" }); return; }
+    return step;
+  });
+});
+
+app.patch("/v1/compliance/wizards/:wizardId/steps/:code", { preHandler: authHook }, async (request, reply) => {
+  const orgId = (request as any).orgId ?? "default";
+  const userId = (request as any).userId ?? "unknown";
+  const { wizardId, code } = request.params as { wizardId: string; code: string };
+  return withTenant(db, orgId, async () => {
+    const result = await wizardRoutes.updateStep(wizardId, code, request.body, userId);
+    if (!result) { reply.code(404).send({ error: "Not found" }); return; }
+    return result;
+  });
+});
+
+app.post("/v1/compliance/wizards/:wizardId/steps/:code/complete", { preHandler: authHook }, async (request, reply) => {
+  const orgId = (request as any).orgId ?? "default";
+  const userId = (request as any).userId ?? "unknown";
+  const { wizardId, code } = request.params as { wizardId: string; code: string };
+  return withTenant(db, orgId, async () => {
+    const result = await wizardRoutes.completeStep(wizardId, code, userId);
+    if (!result) { reply.code(404).send({ error: "Not found" }); return; }
+    return result;
+  });
+});
+
+app.post("/v1/compliance/wizards/:wizardId/steps/:code/skip", { preHandler: authHook }, async (request, reply) => {
+  const orgId = (request as any).orgId ?? "default";
+  const userId = (request as any).userId ?? "unknown";
+  const { wizardId, code } = request.params as { wizardId: string; code: string };
+  return withTenant(db, orgId, async () => {
+    const result = await wizardRoutes.skipStep(wizardId, code, request.body, userId);
+    if (!result) { reply.code(404).send({ error: "Not found" }); return; }
+    return result;
+  });
+});
+
+app.post("/v1/compliance/wizards/:wizardId/steps/:code/evidence", { preHandler: authHook }, async (request, reply) => {
+  const orgId = (request as any).orgId ?? "default";
+  const userId = (request as any).userId ?? "unknown";
+  const { wizardId, code } = request.params as { wizardId: string; code: string };
+  return withTenant(db, orgId, async () => {
+    const result = await wizardRoutes.uploadEvidence(wizardId, code, request.body, userId);
+    if (!result) { reply.code(404).send({ error: "Not found" }); return; }
+    reply.code(201).send(result);
+  });
+});
+
+app.delete("/v1/compliance/wizards/:wizardId/steps/:code/evidence/:evidenceId", { preHandler: authHook }, async (request, reply) => {
+  const orgId = (request as any).orgId ?? "default";
+  const userId = (request as any).userId ?? "unknown";
+  const { wizardId, code, evidenceId } = request.params as { wizardId: string; code: string; evidenceId: string };
+  return withTenant(db, orgId, async () => {
+    const result = await wizardRoutes.deleteEvidence(wizardId, code, evidenceId, userId);
+    if (!result) { reply.code(404).send({ error: "Not found" }); return; }
+    return result;
+  });
+});
+
+app.get("/v1/compliance/wizards/:wizardId/progress", { preHandler: authHook }, async (request, reply) => {
+  const orgId = (request as any).orgId ?? "default";
+  const { wizardId } = request.params as { wizardId: string };
+  return withTenant(db, orgId, async () => {
+    const result = await wizardRoutes.getProgress(wizardId, orgId);
+    if (!result) { reply.code(404).send({ error: "Not found" }); return; }
+    return result;
+  });
+});
+
+app.get("/v1/compliance/wizards/:wizardId/documents/:docType/readiness", { preHandler: authHook }, async (request) => {
+  const orgId = (request as any).orgId ?? "default";
+  const { wizardId, docType } = request.params as { wizardId: string; docType: string };
+  return withTenant(db, orgId, () => wizardRoutes.canGenerateDocument(wizardId, docType));
+});
+
+app.post("/v1/compliance/wizards/:wizardId/documents/generate", { preHandler: authHook }, async (request, reply) => {
+  const orgId = (request as any).orgId ?? "default";
+  const userId = (request as any).userId ?? "unknown";
+  const { wizardId } = request.params as { wizardId: string };
+  const result = await withTenant(db, orgId, () => wizardRoutes.generateDocuments(wizardId, request.body, userId));
+  if (result.error) { reply.code(result.status ?? 400).send({ error: result.error }); return; }
+  reply.code(202).send(result);
+});
+
+app.get("/v1/compliance/wizards/:wizardId/documents", { preHandler: authHook }, async (request, reply) => {
+  const orgId = (request as any).orgId ?? "default";
+  const { wizardId } = request.params as { wizardId: string };
+  return withTenant(db, orgId, async () => {
+    const docs = await wizardRoutes.listDocuments(wizardId, orgId);
+    if (!docs) { reply.code(404).send({ error: "Not found" }); return; }
+    return docs;
+  });
+});
+
 // --- Evidence ---
 app.get("/v1/evidence", { preHandler: authHook }, async (request) => {
   const orgId = (request as any).orgId ?? "default";
@@ -1716,15 +1875,34 @@ app.get("/v1/evidence/verify", { preHandler: authHook }, async (request) => {
 // --- Reports ---
 app.post("/v1/reports", { preHandler: authHook }, async (request, reply) => {
   const orgId = (request as any).orgId ?? "default";
-  const { type, frameworkId, parameters } = request.body as any;
+  const { type, frameworkId, parameters, batchId, delivery } = request.body as any;
+
+  if (process.env.PDF_EXPORT_ENABLED !== "true") {
+    reply.code(404).send({ error: "PDF export is not enabled" });
+    return;
+  }
+
   if (!VALID_REPORT_TYPES.includes(type)) {
     reply.code(400).send({ error: `Invalid report type. Must be one of: ${VALID_REPORT_TYPES.join(", ")}` });
     return;
   }
+
   const report = await db.report.create({
-    data: { orgId, type, frameworkId, parameters: parameters ?? {}, requestedBy: "api" },
+    data: {
+      orgId,
+      type,
+      frameworkId,
+      parameters: parameters ?? {},
+      batchId: batchId ?? null,
+      delivery: delivery ?? "download",
+      requestedBy: (request as any).userId ?? "api",
+    },
   });
-  await eventBus.publish("sentinel.reports", { reportId: report.id, orgId, type, frameworkId, parameters });
+
+  await eventBus.publish("sentinel.reports", {
+    reportId: report.id, orgId, type, frameworkId, parameters, batchId, delivery,
+  });
+
   reply.code(202).send(report);
 });
 
@@ -1748,6 +1926,189 @@ app.get("/v1/reports/:id", { preHandler: authHook }, async (request, reply) => {
   });
   if (!report) { reply.code(404).send({ error: "Report not found" }); return; }
   return report;
+});
+
+app.get("/v1/reports/:id/download", { preHandler: authHook }, async (request, reply) => {
+  const orgId = (request as any).orgId ?? "default";
+  const { id } = request.params as { id: string };
+
+  const report = await withTenant(db, orgId, async (tx) => {
+    return tx.report.findUnique({ where: { id } });
+  });
+
+  if (!report) {
+    reply.code(404).send({ error: "Report not found" });
+    return;
+  }
+
+  if (report.expiresAt && report.expiresAt < new Date()) {
+    reply.code(410).send({ error: "Report expired" });
+    return;
+  }
+
+  if (report.status !== "completed" || !report.storageKey) {
+    reply.code(404).send({ error: "Report not ready for download" });
+    return;
+  }
+
+  const { createReportStorage } = await import("./report-storage-factory.js");
+  const storage = createReportStorage();
+  const url = await storage.getSignedUrl(report.storageKey, 900);
+
+  reply.code(302).header("Location", url).send();
+});
+
+app.get("/v1/reports/:id/status", { preHandler: authHook }, async (request, reply) => {
+  const orgId = (request as any).orgId ?? "default";
+  const { id } = request.params as { id: string };
+
+  const report = await withTenant(db, orgId, async (tx) => {
+    return tx.report.findUnique({ where: { id } });
+  });
+  if (!report) {
+    reply.code(404).send({ error: "Report not found" });
+    return;
+  }
+
+  reply.raw.writeHead(200, {
+    "Content-Type": "text/event-stream",
+    "Cache-Control": "no-cache",
+    "Connection": "keep-alive",
+    "X-Accel-Buffering": "no",
+  });
+
+  reply.raw.write(`data: ${JSON.stringify({ status: report.status })}\n\n`);
+
+  if (["completed", "failed"].includes(report.status)) {
+    reply.raw.end();
+    return;
+  }
+
+  const { Redis: RedisClient } = await import("ioredis");
+  const sub = new RedisClient(process.env.REDIS_URL ?? "redis://localhost:6379");
+  const channel = `report:${id}:status`;
+
+  const listener = (_ch: string, message: string) => {
+    reply.raw.write(`data: ${message}\n\n`);
+    try {
+      const parsed = JSON.parse(message);
+      if (["completed", "failed"].includes(parsed.status)) {
+        sub.unsubscribe(channel);
+        sub.disconnect();
+        reply.raw.end();
+      }
+    } catch {}
+  };
+
+  sub.subscribe(channel);
+  sub.on("message", listener);
+
+  request.raw.on("close", () => {
+    sub.unsubscribe(channel);
+    sub.disconnect();
+  });
+});
+
+app.get("/v1/report-batches/:batchId", { preHandler: authHook }, async (request, reply) => {
+  const orgId = (request as any).orgId ?? "default";
+  const { batchId } = request.params as { batchId: string };
+
+  const reports = await withTenant(db, orgId, async (tx) => {
+    return tx.report.findMany({ where: { batchId }, orderBy: { createdAt: "asc" } });
+  });
+
+  if (reports.length === 0) {
+    reply.code(404).send({ error: "Batch not found" });
+    return;
+  }
+
+  const statuses = reports.map((r: any) => r.status);
+  const allCompleted = statuses.every((s: string) => s === "completed");
+  const allFailed = statuses.every((s: string) => s === "failed");
+  const anyFailed = statuses.some((s: string) => s === "failed");
+
+  let batchStatus: string;
+  if (allCompleted) batchStatus = "completed";
+  else if (allFailed) batchStatus = "failed";
+  else if (anyFailed && statuses.some((s: string) => s === "completed")) batchStatus = "partial";
+  else batchStatus = "in_progress";
+
+  return { batchId, status: batchStatus, total: reports.length, reports };
+});
+
+// --- Report Schedules ---
+app.get("/v1/report-schedules", { preHandler: authHook }, async (request) => {
+  const orgId = (request as any).orgId ?? "default";
+  const { limit = "50", offset = "0" } = request.query as any;
+  const result = await reportScheduleRoutes.list(orgId, { limit: Number(limit), offset: Number(offset) });
+  return result;
+});
+
+app.get("/v1/report-schedules/:id", { preHandler: authHook }, async (request, reply) => {
+  const orgId = (request as any).orgId ?? "default";
+  const { id } = request.params as { id: string };
+  const schedule = await reportScheduleRoutes.get(orgId, id);
+  if (!schedule) { reply.code(404).send({ error: "Schedule not found" }); return; }
+  return schedule;
+});
+
+app.post("/v1/report-schedules", { preHandler: authHook }, async (request, reply) => {
+  const orgId = (request as any).orgId ?? "default";
+  const role = (request as any).role ?? "unknown";
+  if (!["admin", "manager", "service"].includes(role)) {
+    reply.code(403).send({ error: "Admin or manager role required" }); return;
+  }
+  try {
+    const schedule = await reportScheduleRoutes.create(orgId, request.body as any, (request as any).userId ?? role);
+    reply.code(201).send(schedule);
+  } catch (err: any) {
+    reply.code(400).send({ error: err.message });
+  }
+});
+
+app.put("/v1/report-schedules/:id", { preHandler: authHook }, async (request, reply) => {
+  const orgId = (request as any).orgId ?? "default";
+  const role = (request as any).role ?? "unknown";
+  if (!["admin", "manager", "service"].includes(role)) {
+    reply.code(403).send({ error: "Admin or manager role required" }); return;
+  }
+  const { id } = request.params as { id: string };
+  try {
+    const schedule = await reportScheduleRoutes.update(orgId, id, request.body as any);
+    return schedule;
+  } catch (err: any) {
+    reply.code(err.message.includes("not found") ? 404 : 400).send({ error: err.message });
+  }
+});
+
+app.delete("/v1/report-schedules/:id", { preHandler: authHook }, async (request, reply) => {
+  const orgId = (request as any).orgId ?? "default";
+  const role = (request as any).role ?? "unknown";
+  if (!["admin", "manager", "service"].includes(role)) {
+    reply.code(403).send({ error: "Admin or manager role required" }); return;
+  }
+  const { id } = request.params as { id: string };
+  try {
+    await reportScheduleRoutes.remove(orgId, id);
+    reply.code(204).send();
+  } catch (err: any) {
+    reply.code(404).send({ error: err.message });
+  }
+});
+
+app.post("/v1/report-schedules/:id/trigger", { preHandler: authHook }, async (request, reply) => {
+  const orgId = (request as any).orgId ?? "default";
+  const role = (request as any).role ?? "unknown";
+  if (!["admin", "manager", "service"].includes(role)) {
+    reply.code(403).send({ error: "Admin or manager role required" }); return;
+  }
+  const { id } = request.params as { id: string };
+  try {
+    const result = await reportScheduleRoutes.trigger(orgId, id);
+    return result;
+  } catch (err: any) {
+    reply.code(404).send({ error: err.message });
+  }
 });
 
 // --- Webhooks ---
@@ -1876,6 +2237,10 @@ registerDiscoveryRoutes(app);  // Public, no auth
 registerSamlMetadataRoute(app);  // Public, no auth
 registerOrgMembershipRoutes(app, authHook);
 registerScimRoutes(app);  // Uses own SCIM auth
+registerJitRoutes(app);  // Public, called by NextAuth signIn callback
+registerSessionRoutes(app);  // Public, called by NextAuth jwt callback + signIn event
+registerAuditEventRoutes(app, auditLog);  // Public, called by NextAuth audit emitter
+registerOrgSettingsRoutes(app, authHook);  // Org settings (session policy, etc.)
 // --- Encryption wiring ---
 dekCache = new DekCache();
 const kms = new LocalKmsProvider();
@@ -1999,6 +2364,82 @@ app.get("/v1/scans/:id/traces", { preHandler: authHook }, async (request) => {
   return withTenant(db, orgId, () => decisionTraceRoutes.getByScan(id));
 });
 
+// ── IP Attribution ────────────────────────────────────────
+app.get("/v1/scans/:id/ip-attribution", { preHandler: authHook }, async (request) => {
+  const orgId = (request as any).orgId ?? "default";
+  const { id } = request.params as { id: string };
+  return withTenant(db, orgId, () => ipAttributionRoutes.getByScan(id));
+});
+
+app.get("/v1/scans/:id/ip-attribution/document", { preHandler: authHook }, async (request) => {
+  const orgId = (request as any).orgId ?? "default";
+  const { id } = request.params as { id: string };
+  return withTenant(db, orgId, () => ipAttributionRoutes.getDocument(id));
+});
+
+app.get("/v1/scans/:id/ip-attribution/verify", { preHandler: authHook }, async (request) => {
+  const orgId = (request as any).orgId ?? "default";
+  const { id } = request.params as { id: string };
+  return withTenant(db, orgId, () => ipAttributionRoutes.verify(id));
+});
+
+app.get("/v1/scans/:id/ip-attribution/files", { preHandler: authHook }, async (request) => {
+  const orgId = (request as any).orgId ?? "default";
+  const { id } = request.params as { id: string };
+  return withTenant(db, orgId, () => ipAttributionRoutes.getAttributions(id));
+});
+
+app.get("/v1/scans/:id/ip-attribution/files/:file", { preHandler: authHook }, async (request) => {
+  const orgId = (request as any).orgId ?? "default";
+  const { id, file } = request.params as { id: string; file: string };
+  return withTenant(db, orgId, () => ipAttributionRoutes.getFileEvidence(id, decodeURIComponent(file)));
+});
+
+app.get("/v1/scans/:id/ip-attribution/export/spdx", { preHandler: authHook }, async (request) => {
+  const orgId = (request as any).orgId ?? "default";
+  const { id } = request.params as { id: string };
+  return withTenant(db, orgId, () => ipAttributionRoutes.downloadSpdx(id));
+});
+
+app.get("/v1/scans/:id/ip-attribution/export/cyclonedx", { preHandler: authHook }, async (request) => {
+  const orgId = (request as any).orgId ?? "default";
+  const { id } = request.params as { id: string };
+  return withTenant(db, orgId, () => ipAttributionRoutes.downloadCycloneDx(id));
+});
+
+app.get("/v1/scans/:id/ip-attribution/export/pdf", { preHandler: authHook }, async (request, reply) => {
+  const orgId = (request as any).orgId ?? "default";
+  const { id } = request.params as { id: string };
+  const result = await withTenant(db, orgId, () => ipAttributionRoutes.downloadPdf(id));
+  if (result.error) return result;
+  reply.header("Content-Type", "application/pdf");
+  reply.header("Content-Disposition", `attachment; filename="ip-attribution-${id}.pdf"`);
+  return reply.send(result.content);
+});
+
+app.get("/v1/ip-attribution/tools", { preHandler: authHook }, async (request) => {
+  const orgId = (request as any).orgId ?? "default";
+  return withTenant(db, orgId, () => ipAttributionRoutes.getOrgToolBreakdown(orgId));
+});
+
+app.get("/v1/ip-attribution/files/:file/history", { preHandler: authHook }, async (request) => {
+  const orgId = (request as any).orgId ?? "default";
+  const { file } = request.params as { file: string };
+  return withTenant(db, orgId, () => ipAttributionRoutes.getFileHistory(orgId, decodeURIComponent(file)));
+});
+
+app.get("/v1/ip-attribution/ai-trend", { preHandler: authHook }, async (request) => {
+  const orgId = (request as any).orgId ?? "default";
+  const { days = "90" } = request.query as any;
+  return withTenant(db, orgId, () => ipAttributionRoutes.getOrgAiTrend(orgId, parseInt(days, 10)));
+});
+
+app.post("/v1/scans/:id/ip-attribution/generate", { preHandler: authHook }, async (request) => {
+  const orgId = (request as any).orgId ?? "default";
+  const { id } = request.params as { id: string };
+  return withTenant(db, orgId, () => ipAttributionRoutes.generate(id, orgId));
+});
+
 // --- Graceful shutdown ---
 const shutdown = async () => {
   app.log.info("Shutting down...");
@@ -2010,6 +2451,9 @@ const shutdown = async () => {
 };
 process.on("SIGTERM", shutdown);
 process.on("SIGINT", shutdown);
+
+// ── Prometheus Metrics ────────────────────────────────
+registerMetricsRoute(app);
 
 // --- Start ---
 const port = parseInt(process.env.PORT ?? "8080", 10);

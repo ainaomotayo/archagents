@@ -34,6 +34,7 @@ function createMockDeps(): ServerDeps {
       unsuppressFinding: vi.fn().mockResolvedValue({}),
       triggerScan: vi.fn().mockResolvedValue({}),
       getProjects: vi.fn().mockResolvedValue([]),
+      getFindingDetail: vi.fn().mockResolvedValue({}),
     } as any,
     sseListener: {
       connect: vi.fn(),
@@ -190,5 +191,54 @@ describe("createSentinelLspServer", () => {
     const clearOrder = (deps.findingCache.clear as ReturnType<typeof vi.fn>).mock.invocationCallOrder[0];
     const upsertOrder = (deps.findingCache.upsert as ReturnType<typeof vi.fn>).mock.invocationCallOrder[0];
     expect(clearOrder).toBeLessThan(upsertOrder);
+  });
+
+  describe("handleFindingDetail", () => {
+    it("returns enriched data from API", async () => {
+      const enrichedData = {
+        id: "f-1",
+        title: "SQL Injection detected",
+        history: [{ action: "created", timestamp: "2026-03-10T00:00:00Z" }],
+        compliance: [{ framework: "OWASP", control: "A03:2021" }],
+        trace: [{ agent: "security", step: "semgrep-scan" }],
+        related: [{ id: "f-2", similarity: 0.87 }],
+      };
+
+      const deps = createMockDeps();
+      (deps.apiClient.getFindingDetail as ReturnType<typeof vi.fn>).mockResolvedValue(enrichedData);
+      const server = createSentinelLspServer(deps);
+
+      const result = await server.handleFindingDetail("f-1");
+
+      expect(result).toEqual(enrichedData);
+      expect(deps.apiClient.getFindingDetail).toHaveBeenCalledWith("f-1");
+    });
+
+    it("falls back to cache on API failure", async () => {
+      const deps = createMockDeps();
+      const cachedFinding = makeFinding({ id: "f-42" });
+      (deps.apiClient.getFindingDetail as ReturnType<typeof vi.fn>).mockRejectedValue(
+        new Error("503 Service Unavailable"),
+      );
+      (deps.findingCache.getAll as ReturnType<typeof vi.fn>).mockReturnValue([cachedFinding]);
+      const server = createSentinelLspServer(deps);
+
+      const result = await server.handleFindingDetail("f-42");
+
+      expect(result).toEqual({ finding: cachedFinding });
+    });
+
+    it("returns empty object when API fails and finding not in cache", async () => {
+      const deps = createMockDeps();
+      (deps.apiClient.getFindingDetail as ReturnType<typeof vi.fn>).mockRejectedValue(
+        new Error("404 Not Found"),
+      );
+      (deps.findingCache.getAll as ReturnType<typeof vi.fn>).mockReturnValue([]);
+      const server = createSentinelLspServer(deps);
+
+      const result = await server.handleFindingDetail("nonexistent");
+
+      expect(result).toEqual({});
+    });
   });
 });

@@ -1,0 +1,109 @@
+groups:
+  - name: sentinel.availability
+    rules:
+      - alert: SentinelAPIDown
+        expr: up{job="sentinel-api"} == 0
+        for: 2m
+        labels: { severity: critical, component: api }
+        annotations:
+          summary: "Sentinel API is down"
+      - alert: SentinelDashboardDown
+        expr: up{job="sentinel-dashboard"} == 0
+        for: 2m
+        labels: { severity: critical, component: dashboard }
+        annotations:
+          summary: "Sentinel Dashboard is down"
+      - alert: CriticalAgentDown
+        expr: up{job="sentinel-agents", tier="critical"} == 0
+        for: 5m
+        labels: { severity: critical }
+        annotations:
+          summary: "Critical agent {{ $labels.agent }} is down"
+      - alert: BatchAgentDown
+        expr: up{job="sentinel-agents", tier="batch"} == 0
+        for: 15m
+        labels: { severity: warning }
+        annotations:
+          summary: "Batch agent {{ $labels.agent }} is down"
+
+  - name: sentinel.performance
+    rules:
+      - alert: APIHighLatency
+        expr: histogram_quantile(0.99, rate(sentinel_api_http_request_duration_seconds_bucket[5m])) > 2
+        for: 5m
+        labels: { severity: warning, component: api }
+        annotations:
+          summary: "API p99 latency is {{ $value | humanize }}s"
+      - alert: APIHighErrorRate
+        expr: |
+          sum(rate(sentinel_api_http_requests_total{status_code=~"5.."}[5m]))
+          / sum(rate(sentinel_api_http_requests_total[5m])) > 0.05
+        for: 5m
+        labels: { severity: critical, component: api }
+        annotations:
+          summary: "API 5xx error rate is {{ $value | humanizePercentage }}"
+      - alert: AgentSlowProcessing
+        expr: histogram_quantile(0.95, rate(sentinel_agent_diff_processing_duration_seconds_bucket[10m])) > 60
+        for: 10m
+        labels: { severity: warning }
+        annotations:
+          summary: "Agent {{ $labels.agent }} p95 processing time is {{ $value | humanize }}s"
+
+  - name: sentinel.pipeline
+    rules:
+      - alert: StreamBacklogGrowing
+        expr: sentinel_agent_stream_lag > 100
+        for: 10m
+        labels: { severity: warning }
+        annotations:
+          summary: "Stream backlog for {{ $labels.agent }}: {{ $value }} pending"
+      - alert: PipelineStalled
+        expr: |
+          increase(sentinel_agent_diffs_processed_total[30m]) == 0
+          and sentinel_agent_stream_lag > 0
+        for: 30m
+        labels: { severity: critical }
+        annotations:
+          summary: "Pipeline stalled: no diffs processed in 30m with pending backlog"
+      - alert: WorkerConsumerLag
+        expr: sentinel_worker_stream_consumer_lag > 50
+        for: 10m
+        labels: { severity: warning }
+        annotations:
+          summary: "Worker {{ $labels.worker }} consumer lag: {{ $value }}"
+
+  - name: sentinel.resources
+    rules:
+      - alert: PodHighMemory
+        expr: |
+          container_memory_working_set_bytes{namespace="sentinel"}
+          / container_spec_memory_limit_bytes{namespace="sentinel"} > 0.9
+        for: 5m
+        labels: { severity: warning }
+        annotations:
+          summary: "Pod {{ $labels.pod }} memory at {{ $value | humanizePercentage }}"
+      - alert: PVCNearFull
+        expr: |
+          kubelet_volume_stats_used_bytes{namespace="sentinel"}
+          / kubelet_volume_stats_capacity_bytes{namespace="sentinel"} > 0.85
+        for: 10m
+        labels: { severity: warning }
+        annotations:
+          summary: "PVC {{ $labels.persistentvolumeclaim }} is {{ $value | humanizePercentage }} full"
+
+  - name: sentinel.security
+    rules:
+      - alert: SSOBruteForceDetected
+        expr: increase(sentinel_api_sso_auth_attempts_total{result="rate_limited"}[5m]) > 10
+        for: 1m
+        labels: { severity: critical, component: sso }
+        annotations:
+          summary: "Possible brute force: {{ $value }} rate-limited SSO attempts in 5min"
+      - alert: SSOHighFailureRate
+        expr: |
+          sum(rate(sentinel_api_sso_auth_attempts_total{result="failure"}[10m]))
+          / sum(rate(sentinel_api_sso_auth_attempts_total[10m])) > 0.3
+        for: 10m
+        labels: { severity: warning, component: sso }
+        annotations:
+          summary: "SSO failure rate is {{ $value | humanizePercentage }}"

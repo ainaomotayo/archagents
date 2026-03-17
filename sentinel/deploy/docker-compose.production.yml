@@ -1,0 +1,376 @@
+# =============================================================================
+# SENTINEL Production Compose Override
+# =============================================================================
+# Usage:
+#   docker compose -f docker-compose.yml -f deploy/docker-compose.production.yml \
+#     --profile all-agents --profile sso --profile monitoring \
+#     --env-file deploy/.env up -d
+#
+# This override:
+#   - Adds nginx for TLS termination (ports 80/443)
+#   - Sets restart: always on all services
+#   - Adds resource limits to all services
+#   - Adds log rotation on all services
+#   - Scales API + dashboard to 2 replicas
+#   - Scales critical agents to 2 replicas
+#   - Uses ${VAR} interpolation from .env file
+# =============================================================================
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "50m"
+    max-file: "5"
+
+services:
+
+  # ---------- Reverse Proxy ----------
+
+  nginx:
+    image: nginx:1.27-alpine
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ${NGINX_CONF:-./deploy/nginx.conf}:/etc/nginx/nginx.conf:ro
+      - ${TLS_CERT_PATH:-./deploy/certs/fullchain.pem}:/etc/nginx/ssl/fullchain.pem:ro
+      - ${TLS_KEY_PATH:-./deploy/certs/privkey.pem}:/etc/nginx/ssl/privkey.pem:ro
+    depends_on:
+      api:
+        condition: service_healthy
+      dashboard:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:80/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+    logging: *logging
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 256M
+
+  # ---------- Infrastructure ----------
+
+  postgres:
+    restart: always
+    ports: !reset []
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    logging: *logging
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 2G
+
+  redis:
+    restart: always
+    ports: !reset []
+    logging: *logging
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 1G
+
+  # ---------- Application ----------
+
+  api:
+    restart: always
+    ports: !reset []
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: ${REDIS_URL}
+      RUN_MIGRATIONS: "true"
+      SENTINEL_SECRET: ${SENTINEL_SECRET}
+      NODE_ENV: production
+      CLOUD_PROVIDER: ${CLOUD_PROVIDER:-}
+      ARCHIVE_BUCKET: ${ARCHIVE_BUCKET:-}
+      ARCHIVE_PREFIX: ${ARCHIVE_PREFIX:-sentinel}
+      ARCHIVE_RETENTION_DAYS: ${ARCHIVE_RETENTION_DAYS:-2555}
+      AWS_REGION: ${AWS_REGION:-us-east-1}
+      S3_ARCHIVE_BUCKET: ${S3_ARCHIVE_BUCKET:-}
+      KMS_MASTER_KEY_ID: ${KMS_MASTER_KEY_ID:-}
+      GCP_PROJECT_ID: ${GCP_PROJECT_ID:-}
+      GCS_ARCHIVE_BUCKET: ${GCS_ARCHIVE_BUCKET:-}
+      GCP_KMS_LOCATION: ${GCP_KMS_LOCATION:-global}
+      GCP_KMS_KEY_RING: ${GCP_KMS_KEY_RING:-sentinel}
+      GCP_KMS_KEY_ID: ${GCP_KMS_KEY_ID:-sentinel-master}
+      AZURE_STORAGE_ACCOUNT_URL: ${AZURE_STORAGE_ACCOUNT_URL:-}
+      AZURE_ARCHIVE_CONTAINER: ${AZURE_ARCHIVE_CONTAINER:-}
+      AZURE_KEY_VAULT_URL: ${AZURE_KEY_VAULT_URL:-}
+      AZURE_KEY_NAME: ${AZURE_KEY_NAME:-sentinel-master}
+    logging: *logging
+    deploy:
+      replicas: 2
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 1G
+
+  dashboard:
+    restart: always
+    ports: !reset []
+    environment:
+      NEXTAUTH_URL: ${NEXTAUTH_URL}
+      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET}
+      GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID:-}
+      GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET:-}
+      SENTINEL_API_URL: http://api:8080
+      SENTINEL_SECRET: ${SENTINEL_SECRET}
+      SENTINEL_ROLE_MAP: ${SENTINEL_ROLE_MAP:-}
+      GITLAB_CLIENT_ID: ${GITLAB_CLIENT_ID:-}
+      GITLAB_CLIENT_SECRET: ${GITLAB_CLIENT_SECRET:-}
+      GITLAB_URL: ${GITLAB_URL:-https://gitlab.com}
+      OIDC_CLIENT_ID: ${OIDC_CLIENT_ID:-}
+      OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET:-}
+      OIDC_ISSUER: ${OIDC_ISSUER:-}
+      OIDC_PROVIDER_NAME: ${OIDC_PROVIDER_NAME:-SSO}
+      SAML_JACKSON_URL: ${SAML_JACKSON_URL:-}
+      SAML_JACKSON_PRODUCT: ${SAML_JACKSON_PRODUCT:-sentinel}
+      SAML_CLIENT_ID: ${SAML_CLIENT_ID:-dummy}
+      SAML_CLIENT_SECRET: ${SAML_CLIENT_SECRET:-dummy}
+    logging: *logging
+    deploy:
+      replicas: 2
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 1G
+
+  # ---------- Workers ----------
+
+  assessor-worker:
+    restart: always
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: ${REDIS_URL}
+      SENTINEL_SECRET: ${SENTINEL_SECRET}
+      NODE_ENV: production
+      CLOUD_PROVIDER: ${CLOUD_PROVIDER:-}
+      ARCHIVE_BUCKET: ${ARCHIVE_BUCKET:-}
+      ARCHIVE_PREFIX: ${ARCHIVE_PREFIX:-sentinel}
+      ARCHIVE_RETENTION_DAYS: ${ARCHIVE_RETENTION_DAYS:-2555}
+      AWS_REGION: ${AWS_REGION:-us-east-1}
+      S3_ARCHIVE_BUCKET: ${S3_ARCHIVE_BUCKET:-}
+      KMS_MASTER_KEY_ID: ${KMS_MASTER_KEY_ID:-}
+      GCP_PROJECT_ID: ${GCP_PROJECT_ID:-}
+      GCS_ARCHIVE_BUCKET: ${GCS_ARCHIVE_BUCKET:-}
+      GCP_KMS_LOCATION: ${GCP_KMS_LOCATION:-global}
+      GCP_KMS_KEY_RING: ${GCP_KMS_KEY_RING:-sentinel}
+      GCP_KMS_KEY_ID: ${GCP_KMS_KEY_ID:-sentinel-master}
+      AZURE_STORAGE_ACCOUNT_URL: ${AZURE_STORAGE_ACCOUNT_URL:-}
+      AZURE_ARCHIVE_CONTAINER: ${AZURE_ARCHIVE_CONTAINER:-}
+      AZURE_KEY_VAULT_URL: ${AZURE_KEY_VAULT_URL:-}
+      AZURE_KEY_NAME: ${AZURE_KEY_NAME:-sentinel-master}
+      WORKER_HEALTH_PORT: "9092"
+    logging: *logging
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 1G
+
+  scheduler:
+    restart: always
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: ${REDIS_URL}
+      SELF_SCAN_ENABLED: ${SELF_SCAN_ENABLED:-true}
+      SCHEDULER_LEASE_TTL: ${SCHEDULER_LEASE_TTL:-15000}
+      SCAN_TIMEOUT_MS: ${SCAN_TIMEOUT_MS:-300000}
+      SCHEDULER_PORT: "9091"
+      NODE_ENV: production
+    logging: *logging
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 512M
+
+  report-worker:
+    restart: always
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: ${REDIS_URL}
+      SENTINEL_SECRET: ${SENTINEL_SECRET}
+      NODE_ENV: production
+      CLOUD_PROVIDER: ${CLOUD_PROVIDER:-}
+      ARCHIVE_BUCKET: ${ARCHIVE_BUCKET:-}
+      ARCHIVE_PREFIX: ${ARCHIVE_PREFIX:-sentinel}
+      REPORT_WORKER_PORT: "9094"
+    logging: *logging
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 512M
+
+  notification-worker:
+    restart: always
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: ${REDIS_URL}
+      NOTIFICATION_WORKER_PORT: "9095"
+      NODE_ENV: production
+    logging: *logging
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 512M
+
+  github-bridge:
+    restart: always
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: ${REDIS_URL}
+      GITHUB_APP_ID: ${GITHUB_APP_ID:-}
+      GITHUB_PRIVATE_KEY: ${GITHUB_PRIVATE_KEY:-}
+      GITHUB_BRIDGE_PORT: "9092"
+      NODE_ENV: production
+    logging: *logging
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 512M
+
+  # ---------- Core Agents (critical — 2 replicas) ----------
+
+  agent-security:
+    restart: always
+    environment:
+      REDIS_URL: ${REDIS_URL}
+    logging: *logging
+    deploy:
+      replicas: 2
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 1G
+
+  agent-dependency:
+    restart: always
+    environment:
+      REDIS_URL: ${REDIS_URL}
+    logging: *logging
+    deploy:
+      replicas: 2
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 1G
+
+  # ---------- Batch Agents ----------
+
+  agent-ip-license:
+    restart: always
+    environment:
+      REDIS_URL: ${REDIS_URL}
+    logging: *logging
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 512M
+
+  agent-quality:
+    restart: always
+    environment:
+      REDIS_URL: ${REDIS_URL}
+    logging: *logging
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 512M
+
+  agent-ai-detector:
+    restart: always
+    environment:
+      REDIS_URL: ${REDIS_URL}
+    logging: *logging
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 512M
+
+  agent-policy:
+    restart: always
+    environment:
+      REDIS_URL: ${REDIS_URL}
+    logging: *logging
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 512M
+
+  # ---------- SSO ----------
+
+  saml-jackson:
+    restart: always
+    ports: !reset []
+    environment:
+      JACKSON_URL: http://saml-jackson:5225
+      DB_ENGINE: sql
+      DB_TYPE: postgres
+      DB_URL: ${DATABASE_URL}
+      NEXTAUTH_URL: ${NEXTAUTH_URL:-http://dashboard:3000}
+      JACKSON_API_KEYS: ${JACKSON_API_KEYS:-}
+    logging: *logging
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 512M
+
+  # ---------- Monitoring ----------
+
+  prometheus:
+    restart: always
+    ports: !reset []
+    logging: *logging
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 512M
+
+  grafana:
+    restart: always
+    ports: !reset []
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GF_SECURITY_ADMIN_PASSWORD:-admin}
+      GF_SERVER_HTTP_PORT: "3001"
+    logging: *logging
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 512M
+
+  otel-collector:
+    restart: always
+    ports: !reset []
+    logging: *logging
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 512M
+
+networks:
+  internal:
+    driver: bridge
+    internal: true
+  external:
+    driver: bridge

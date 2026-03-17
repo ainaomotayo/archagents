@@ -1,4 +1,3 @@
-import http from "node:http";
 import { Redis } from "ioredis";
 import { EventBus, withRetry } from "@sentinel/events";
 import { getDb, disconnectDb } from "@sentinel/db";
@@ -6,6 +5,7 @@ import { configureGitHubApp, getInstallationOctokit, isGitHubAppConfigured } fro
 import { createLogger, initTracing, shutdownTracing } from "@sentinel/telemetry";
 import { handleScanTrigger } from "./github/trigger-consumer.js";
 import { handleScanResult } from "./github/results-consumer.js";
+import { createWorkerHealthServer } from "./worker-metrics.js";
 
 if (process.env.OTEL_EXPORTER_OTLP_ENDPOINT) {
   initTracing({ serviceName: "github-bridge" });
@@ -40,19 +40,10 @@ const resultsBus = new EventBus(new Redis(redisUrl));
 // Shared EventBus for publishing (non-blocking)
 const publishBus = new EventBus(new Redis(redisUrl));
 
-// --- Health server ---
+// --- Health server (also serves /metrics for Prometheus) ---
 
 const healthPort = parseInt(process.env.GITHUB_BRIDGE_PORT ?? "9092", 10);
-const healthServer = http.createServer((req, res) => {
-  if (req.url === "/health") {
-    res.writeHead(200, { "Content-Type": "application/json" });
-    res.end(JSON.stringify({ status: "ok", uptime: process.uptime() }));
-  } else {
-    res.writeHead(404);
-    res.end();
-  }
-});
-healthServer.listen(healthPort);
+const healthServer = createWorkerHealthServer(healthPort);
 logger.info({ port: healthPort }, "Health server listening");
 
 // --- Consumer 1: scan-triggers ---

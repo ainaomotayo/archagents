@@ -1,0 +1,12 @@
+{{- range $name, $pc := .Values.priorityClasses }}
+---
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: sentinel-{{ $name }}
+  labels:
+    {{- include "sentinel.labels" $ | nindent 4 }}
+globalDefault: false
+value: {{ $pc.value }}
+description: {{ $pc.description | quote }}
+{{- end }}

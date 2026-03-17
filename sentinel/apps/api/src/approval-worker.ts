@@ -141,14 +141,10 @@ if (isMainModule) {
 
     let shuttingDown = false;
 
-    // --- Health server ---
-    const healthServer = http.createServer((_req, res) => {
-      res.writeHead(200, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ status: "ok", worker: "approval" }));
-    });
-    healthServer.listen(HEALTH_PORT, () => {
-      logger.info(`Approval worker health server on :${HEALTH_PORT}`);
-    });
+    // --- Health server (also serves /metrics for Prometheus) ---
+    const { createWorkerHealthServer } = await import("./worker-metrics.js");
+    const healthServer = createWorkerHealthServer(HEALTH_PORT);
+    logger.info(`Approval worker health server on :${HEALTH_PORT}`);
 
     // --- Sweep timer ---
     async function sweep() {

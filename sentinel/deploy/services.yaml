@@ -1,0 +1,583 @@
+# =============================================================================
+# SENTINEL Service Catalog — Single Source of Truth
+# =============================================================================
+# This file canonically defines every service in the Sentinel platform.
+# All deployment artifacts (Docker Compose, Helm charts, CI/CD pipelines)
+# MUST derive their configuration from this catalog.
+#
+# Tiers:
+#   critical       — user-facing or pipeline-critical; highest availability
+#   standard       — internal workers; moderate availability
+#   batch          — analysis agents that tolerate brief downtime
+#   infrastructure — backing stores and observability; managed separately
+# =============================================================================
+
+version: "1.0"
+
+# ---------------------------------------------------------------------------
+# Application & Worker Services
+# ---------------------------------------------------------------------------
+services:
+
+  # ── Critical tier ────────────────────────────────────────────────────────
+
+  api:
+    description: "Fastify REST API — primary ingress for dashboard and webhooks"
+    tier: critical
+    image: sentinel/api
+    dockerfile: docker/api.Dockerfile
+    command: null                         # default CMD from Dockerfile
+    ports:
+      - containerPort: 8080
+        protocol: TCP
+    healthCheck:
+      path: /health
+      port: 8080
+      initialDelaySeconds: 20
+      periodSeconds: 15
+      timeoutSeconds: 5
+      failureThreshold: 3
+    env:
+      - DATABASE_URL
+      - REDIS_URL
+      - SENTINEL_SECRET
+      - NODE_ENV
+      - CLOUD_PROVIDER
+      - ARCHIVE_BUCKET
+      - ARCHIVE_PREFIX
+      - ARCHIVE_RETENTION_DAYS
+      - AWS_REGION
+      - S3_ARCHIVE_BUCKET
+      - KMS_MASTER_KEY_ID
+      - GCP_PROJECT_ID
+      - GCS_ARCHIVE_BUCKET
+      - GCP_KMS_LOCATION
+      - GCP_KMS_KEY_RING
+      - GCP_KMS_KEY_ID
+      - AZURE_STORAGE_ACCOUNT_URL
+      - AZURE_ARCHIVE_CONTAINER
+      - AZURE_KEY_VAULT_URL
+      - AZURE_KEY_NAME
+    dependencies:
+      - postgres
+      - redis
+    scaling:
+      minReplicas: 2
+      maxReplicas: 10
+      cpuTargetPercent: 70
+
+  dashboard:
+    description: "Next.js 15 frontend — SSR dashboard with OAuth/SAML login"
+    tier: critical
+    image: sentinel/dashboard
+    dockerfile: docker/dashboard.Dockerfile
+    command: null
+    ports:
+      - containerPort: 3000
+        protocol: TCP
+    healthCheck:
+      path: /api/health
+      port: 3000
+      initialDelaySeconds: 30
+      periodSeconds: 15
+      timeoutSeconds: 5
+      failureThreshold: 3
+    env:
+      - NEXTAUTH_URL
+      - NEXTAUTH_SECRET
+      - GITHUB_CLIENT_ID
+      - GITHUB_CLIENT_SECRET
+      - SENTINEL_API_URL
+      - SENTINEL_SECRET
+      - SENTINEL_ROLE_MAP
+      - GITLAB_CLIENT_ID
+      - GITLAB_CLIENT_SECRET
+      - GITLAB_URL
+      - OIDC_CLIENT_ID
+      - OIDC_CLIENT_SECRET
+      - OIDC_ISSUER
+      - OIDC_PROVIDER_NAME
+      - SAML_JACKSON_URL
+      - SAML_JACKSON_PRODUCT
+      - SAML_CLIENT_ID
+      - SAML_CLIENT_SECRET
+    dependencies:
+      - api
+    scaling:
+      minReplicas: 2
+      maxReplicas: 5
+      cpuTargetPercent: 70
+
+  agent-security:
+    description: "Security analysis agent — Semgrep + custom rules"
+    tier: critical
+    image: sentinel/agent-security
+    dockerfile: agents/security/Dockerfile
+    command: null
+    ports:
+      - containerPort: 8081
+        protocol: TCP
+    healthCheck:
+      path: /health
+      port: 8081
+      initialDelaySeconds: 15
+      periodSeconds: 30
+      timeoutSeconds: 10
+      failureThreshold: 3
+    env:
+      - REDIS_URL
+    dependencies:
+      - redis
+    scaling:
+      minReplicas: 1
+      maxReplicas: 5
+      cpuTargetPercent: 75
+
+  agent-dependency:
+    description: "Dependency vulnerability agent — OSV.dev + manifest parsing"
+    tier: critical
+    image: sentinel/agent-dependency
+    dockerfile: agents/dependency/Dockerfile
+    command: null
+    ports:
+      - containerPort: 8083
+        protocol: TCP
+    healthCheck:
+      path: /health
+      port: 8083
+      initialDelaySeconds: 15
+      periodSeconds: 30
+      timeoutSeconds: 10
+      failureThreshold: 3
+    env:
+      - REDIS_URL
+    dependencies:
+      - redis
+    scaling:
+      minReplicas: 1
+      maxReplicas: 5
+      cpuTargetPercent: 75
+
+  # ── Standard tier ────────────────────────────────────────────────────────
+
+  assessor-worker:
+    description: "Assessor worker — aggregates findings into certificates"
+    tier: standard
+    image: sentinel/api
+    dockerfile: docker/api.Dockerfile
+    command: ["node", "apps/api/dist/worker.js"]
+    ports:
+      - containerPort: 9092
+        protocol: TCP
+    healthCheck:
+      command: ["node", "docker/healthcheck.js", "9092"]
+      port: 9092
+      initialDelaySeconds: 15
+      periodSeconds: 30
+      timeoutSeconds: 5
+      failureThreshold: 3
+    env:
+      - DATABASE_URL
+      - REDIS_URL
+      - SENTINEL_SECRET
+      - NODE_ENV
+      - WORKER_HEALTH_PORT
+      - CLOUD_PROVIDER
+      - ARCHIVE_BUCKET
+      - ARCHIVE_PREFIX
+      - ARCHIVE_RETENTION_DAYS
+      - AWS_REGION
+      - S3_ARCHIVE_BUCKET
+      - KMS_MASTER_KEY_ID
+      - GCP_PROJECT_ID
+      - GCS_ARCHIVE_BUCKET
+      - GCP_KMS_LOCATION
+      - GCP_KMS_KEY_RING
+      - GCP_KMS_KEY_ID
+      - AZURE_STORAGE_ACCOUNT_URL
+      - AZURE_ARCHIVE_CONTAINER
+      - AZURE_KEY_VAULT_URL
+      - AZURE_KEY_NAME
+    dependencies:
+      - postgres
+      - redis
+    scaling:
+      minReplicas: 1
+      maxReplicas: 5
+      cpuTargetPercent: 75
+
+  scheduler:
+    description: "Scheduler — cron-based scan orchestration (leader-elected singleton)"
+    tier: standard
+    image: sentinel/api
+    dockerfile: docker/api.Dockerfile
+    command: ["node", "apps/api/dist/scheduler.js"]
+    ports:
+      - containerPort: 9091
+        protocol: TCP
+    healthCheck:
+      command: ["node", "docker/healthcheck.js", "9091"]
+      port: 9091
+      initialDelaySeconds: 15
+      periodSeconds: 30
+      timeoutSeconds: 5
+      failureThreshold: 3
+    env:
+      - DATABASE_URL
+      - REDIS_URL
+      - SELF_SCAN_ENABLED
+      - SCHEDULER_LEASE_TTL
+      - SCAN_TIMEOUT_MS
+      - SCHEDULER_PORT
+      - NODE_ENV
+    dependencies:
+      - postgres
+      - redis
+    scaling:
+      replicas: 1               # singleton — leader election via Redis lease
+
+  report-worker:
+    description: "Report worker — generates compliance/audit PDF reports"
+    tier: standard
+    image: sentinel/api
+    dockerfile: docker/api.Dockerfile
+    command: ["node", "apps/api/dist/report-worker.js"]
+    ports:
+      - containerPort: 9094
+        protocol: TCP
+    healthCheck:
+      command: ["node", "docker/healthcheck.js", "9094"]
+      port: 9094
+      initialDelaySeconds: 15
+      periodSeconds: 30
+      timeoutSeconds: 5
+      failureThreshold: 3
+    env:
+      - DATABASE_URL
+      - REDIS_URL
+      - SENTINEL_SECRET
+      - NODE_ENV
+      - CLOUD_PROVIDER
+      - ARCHIVE_BUCKET
+      - ARCHIVE_PREFIX
+      - REPORT_WORKER_PORT
+    dependencies:
+      - postgres
+      - redis
+    scaling:
+      minReplicas: 1
+      maxReplicas: 3
+      cpuTargetPercent: 80
+
+  notification-worker:
+    description: "Notification worker — sends alerts via email/Slack/webhook"
+    tier: standard
+    image: sentinel/api
+    dockerfile: docker/api.Dockerfile
+    command: ["node", "apps/api/dist/notification-worker.js"]
+    ports:
+      - containerPort: 9095
+        protocol: TCP
+    healthCheck:
+      command: ["node", "docker/healthcheck.js", "9095"]
+      port: 9095
+      initialDelaySeconds: 15
+      periodSeconds: 30
+      timeoutSeconds: 5
+      failureThreshold: 3
+    env:
+      - DATABASE_URL
+      - REDIS_URL
+      - NOTIFICATION_WORKER_PORT
+    dependencies:
+      - postgres
+      - redis
+    scaling:
+      minReplicas: 1
+      maxReplicas: 3
+      cpuTargetPercent: 80
+
+  github-bridge:
+    description: "GitHub bridge — syncs check runs, PR statuses, and webhooks"
+    tier: standard
+    image: sentinel/api
+    dockerfile: docker/api.Dockerfile
+    command: ["node", "apps/api/dist/github-bridge.js"]
+    ports:
+      - containerPort: 9093
+        protocol: TCP
+    healthCheck:
+      command: ["node", "docker/healthcheck.js", "9093"]
+      port: 9093
+      initialDelaySeconds: 15
+      periodSeconds: 30
+      timeoutSeconds: 5
+      failureThreshold: 3
+    env:
+      - DATABASE_URL
+      - REDIS_URL
+      - SENTINEL_SECRET
+      - NODE_ENV
+      - GITHUB_APP_ID
+      - GITHUB_PRIVATE_KEY
+      - GITHUB_BRIDGE_PORT
+    dependencies:
+      - postgres
+      - redis
+    scaling:
+      minReplicas: 1
+      maxReplicas: 3
+      cpuTargetPercent: 75
+
+  saml-jackson:
+    description: "BoxyHQ SAML Jackson — SAML/OIDC identity federation"
+    tier: standard
+    image: boxyhq/jackson:latest
+    dockerfile: null                     # pre-built third-party image
+    command: null
+    ports:
+      - containerPort: 5225
+        protocol: TCP
+    healthCheck:
+      path: /api/v1/health
+      port: 5225
+      initialDelaySeconds: 30
+      periodSeconds: 30
+      timeoutSeconds: 5
+      failureThreshold: 3
+    env:
+      - JACKSON_URL
+      - DB_ENGINE
+      - DB_TYPE
+      - DB_URL
+      - NEXTAUTH_URL
+    dependencies:
+      - postgres
+    scaling:
+      replicas: 1
+
+  # ── Batch tier (analysis agents) ─────────────────────────────────────────
+
+  agent-ip-license:
+    description: "IP/License analysis agent — SPDX license detection and compliance"
+    tier: batch
+    image: sentinel/agent-ip-license
+    dockerfile: agents/ip-license/Dockerfile
+    command: null
+    ports:
+      - containerPort: 8000
+        protocol: TCP
+    healthCheck:
+      path: /health
+      port: 8000
+      initialDelaySeconds: 15
+      periodSeconds: 30
+      timeoutSeconds: 10
+      failureThreshold: 3
+    env:
+      - REDIS_URL
+    dependencies:
+      - redis
+    scaling:
+      minReplicas: 1
+      maxReplicas: 3
+      cpuTargetPercent: 80
+
+  agent-quality:
+    description: "Code quality agent — linting, complexity, and style analysis"
+    tier: batch
+    image: sentinel/agent-quality
+    dockerfile: docker/agent.Dockerfile
+    buildArgs:
+      AGENT_NAME: quality
+    command: null
+    ports:
+      - containerPort: 8000
+        protocol: TCP
+    healthCheck:
+      path: /health
+      port: 8000
+      initialDelaySeconds: 15
+      periodSeconds: 30
+      timeoutSeconds: 10
+      failureThreshold: 3
+    env:
+      - REDIS_URL
+    dependencies:
+      - redis
+    scaling:
+      minReplicas: 1
+      maxReplicas: 3
+      cpuTargetPercent: 80
+
+  agent-ai-detector:
+    description: "AI-generated code detector agent"
+    tier: batch
+    image: sentinel/agent-ai-detector
+    dockerfile: docker/agent.Dockerfile
+    buildArgs:
+      AGENT_NAME: ai-detector
+    command: null
+    ports:
+      - containerPort: 8000
+        protocol: TCP
+    healthCheck:
+      path: /health
+      port: 8000
+      initialDelaySeconds: 15
+      periodSeconds: 30
+      timeoutSeconds: 10
+      failureThreshold: 3
+    env:
+      - REDIS_URL
+    dependencies:
+      - redis
+    scaling:
+      minReplicas: 1
+      maxReplicas: 3
+      cpuTargetPercent: 80
+
+  agent-policy:
+    description: "Policy enforcement agent — org-specific governance rules"
+    tier: batch
+    image: sentinel/agent-policy
+    dockerfile: docker/agent.Dockerfile
+    buildArgs:
+      AGENT_NAME: policy
+    command: null
+    ports:
+      - containerPort: 8000
+        protocol: TCP
+    healthCheck:
+      path: /health
+      port: 8000
+      initialDelaySeconds: 15
+      periodSeconds: 30
+      timeoutSeconds: 10
+      failureThreshold: 3
+    env:
+      - REDIS_URL
+    dependencies:
+      - redis
+    scaling:
+      minReplicas: 1
+      maxReplicas: 3
+      cpuTargetPercent: 80
+
+  # ── Infrastructure tier (observability) ──────────────────────────────────
+
+  prometheus:
+    description: "Prometheus — metrics collection and alerting"
+    tier: infrastructure
+    image: prom/prometheus:v3.2
+    dockerfile: null
+    command: null
+    ports:
+      - containerPort: 9090
+        protocol: TCP
+    healthCheck:
+      path: /-/healthy
+      port: 9090
+      initialDelaySeconds: 10
+      periodSeconds: 30
+      timeoutSeconds: 5
+      failureThreshold: 3
+    env: []
+    dependencies: []
+    volumes:
+      - ./docker/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    scaling:
+      replicas: 1
+
+  grafana:
+    description: "Grafana — dashboards and visualization"
+    tier: infrastructure
+    image: grafana/grafana:11.5
+    dockerfile: null
+    command: null
+    ports:
+      - containerPort: 3001
+        protocol: TCP
+    healthCheck:
+      path: /api/health
+      port: 3001
+      initialDelaySeconds: 15
+      periodSeconds: 30
+      timeoutSeconds: 5
+      failureThreshold: 3
+    env:
+      - GF_SECURITY_ADMIN_PASSWORD
+      - GF_SERVER_HTTP_PORT
+    dependencies:
+      - prometheus
+    scaling:
+      replicas: 1
+
+  otel-collector:
+    description: "OpenTelemetry Collector — trace and metric pipeline"
+    tier: infrastructure
+    image: otel/opentelemetry-collector-contrib:0.120.0
+    dockerfile: null
+    command: null
+    ports:
+      - containerPort: 4317
+        protocol: TCP
+        name: grpc-otlp
+      - containerPort: 4318
+        protocol: TCP
+        name: http-otlp
+      - containerPort: 8888
+        protocol: TCP
+        name: metrics
+    healthCheck:
+      path: /
+      port: 13133
+      initialDelaySeconds: 10
+      periodSeconds: 30
+      timeoutSeconds: 5
+      failureThreshold: 3
+    env: []
+    dependencies: []
+    scaling:
+      replicas: 1
+
+# ---------------------------------------------------------------------------
+# Infrastructure (backing services — managed separately in production)
+# ---------------------------------------------------------------------------
+infrastructure:
+
+  postgres:
+    description: "PostgreSQL 16 — primary relational store"
+    image: postgres:16-alpine
+    ports:
+      - containerPort: 5432
+        protocol: TCP
+    healthCheck:
+      command: ["pg_isready", "-U", "${POSTGRES_USER}", "-d", "${POSTGRES_DB}"]
+      initialDelaySeconds: 30
+      periodSeconds: 10
+      timeoutSeconds: 5
+      failureThreshold: 5
+    env:
+      - POSTGRES_DB
+      - POSTGRES_USER
+      - POSTGRES_PASSWORD
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  redis:
+    description: "Redis 7 — event streams, caching, and leader election"
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - containerPort: 6379
+        protocol: TCP
+    healthCheck:
+      command: ["redis-cli", "ping"]
+      initialDelaySeconds: 10
+      periodSeconds: 10
+      timeoutSeconds: 5
+      failureThreshold: 5
+    env: []
+    volumes:
+      - redisdata:/data

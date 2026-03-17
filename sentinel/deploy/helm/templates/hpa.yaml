@@ -1,45 +1,196 @@
-{{- if .Values.autoscaling.enabled }}
+# API HPA
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
-  name: sentinel-api-hpa
-  namespace: {{ .Values.global.namespace }}
+  name: {{ include "sentinel.fullname" . }}-api
   labels:
     {{- include "sentinel.labels" . | nindent 4 }}
+    app.kubernetes.io/component: api
 spec:
   scaleTargetRef:
     apiVersion: apps/v1
     kind: Deployment
-    name: sentinel-api
-  minReplicas: {{ .Values.autoscaling.api.minReplicas }}
-  maxReplicas: {{ .Values.autoscaling.api.maxReplicas }}
+    name: {{ include "sentinel.fullname" . }}-api
+  minReplicas: {{ .Values.api.replicaCount }}
+  maxReplicas: 10
   metrics:
     - type: Resource
       resource:
         name: cpu
         target:
           type: Utilization
-          averageUtilization: {{ .Values.autoscaling.api.targetCPUUtilization }}
+          averageUtilization: 70
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+        - type: Pods
+          value: 1
+          periodSeconds: 60
+    scaleUp:
+      stabilizationWindowSeconds: 60
+      policies:
+        - type: Pods
+          value: 2
+          periodSeconds: 60
+---
+# Dashboard HPA
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ include "sentinel.fullname" . }}-dashboard
+  labels:
+    {{- include "sentinel.labels" . | nindent 4 }}
+    app.kubernetes.io/component: dashboard
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ include "sentinel.fullname" . }}-dashboard
+  minReplicas: {{ .Values.dashboard.replicaCount }}
+  maxReplicas: 5
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 80
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+        - type: Pods
+          value: 1
+          periodSeconds: 60
+    scaleUp:
+      stabilizationWindowSeconds: 60
+      policies:
+        - type: Pods
+          value: 2
+          periodSeconds: 60
+---
+# Worker HPAs (loop)
+{{- range $name, $worker := .Values.workers }}
+{{- if and $worker.enabled (hasKey $worker "scaling") }}
+{{- if $worker.scaling.enabled }}
 ---
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
-  name: sentinel-dashboard-hpa
-  namespace: {{ .Values.global.namespace }}
+  name: {{ include "sentinel.fullname" $ }}-worker-{{ $name }}
   labels:
-    {{- include "sentinel.labels" . | nindent 4 }}
+    {{- include "sentinel.labels" $ | nindent 4 }}
+    app.kubernetes.io/component: worker-{{ $name }}
 spec:
   scaleTargetRef:
     apiVersion: apps/v1
     kind: Deployment
-    name: sentinel-dashboard
-  minReplicas: {{ .Values.autoscaling.dashboard.minReplicas }}
-  maxReplicas: {{ .Values.autoscaling.dashboard.maxReplicas }}
+    name: {{ include "sentinel.fullname" $ }}-worker-{{ $name }}
+  minReplicas: {{ $worker.scaling.minReplicas }}
+  maxReplicas: {{ $worker.scaling.maxReplicas }}
   metrics:
     - type: Resource
       resource:
         name: cpu
         target:
           type: Utilization
-          averageUtilization: {{ .Values.autoscaling.dashboard.targetCPUUtilization }}
+          averageUtilization: {{ $worker.scaling.targetCPU }}
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+        - type: Pods
+          value: 1
+          periodSeconds: 60
+    scaleUp:
+      stabilizationWindowSeconds: 60
+      policies:
+        - type: Pods
+          value: 2
+          periodSeconds: 60
+{{- end }}
+{{- end }}
+{{- end }}
+---
+# Critical Agent HPAs
+{{- range $name, $agent := .Values.agents.critical }}
+{{- if $agent.enabled }}
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ include "sentinel.fullname" $ }}-agent-{{ $name }}
+  labels:
+    {{- include "sentinel.labels" $ | nindent 4 }}
+    app.kubernetes.io/component: agent-{{ $name }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ include "sentinel.fullname" $ }}-agent-{{ $name }}
+  minReplicas: {{ $agent.scaling.minReplicas }}
+  maxReplicas: {{ $agent.scaling.maxReplicas }}
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: {{ $agent.scaling.targetCPU }}
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+        - type: Pods
+          value: 1
+          periodSeconds: 60
+    scaleUp:
+      stabilizationWindowSeconds: 60
+      policies:
+        - type: Pods
+          value: 2
+          periodSeconds: 60
+{{- end }}
+{{- end }}
+---
+# Batch Agent HPAs
+{{- range $name, $agent := .Values.agents.batch }}
+{{- if $agent.enabled }}
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ include "sentinel.fullname" $ }}-agent-{{ $name }}
+  labels:
+    {{- include "sentinel.labels" $ | nindent 4 }}
+    app.kubernetes.io/component: agent-{{ $name }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ include "sentinel.fullname" $ }}-agent-{{ $name }}
+  minReplicas: {{ $agent.scaling.minReplicas }}
+  maxReplicas: {{ $agent.scaling.maxReplicas }}
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: {{ $agent.scaling.targetCPU }}
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+        - type: Pods
+          value: 1
+          periodSeconds: 60
+    scaleUp:
+      stabilizationWindowSeconds: 60
+      policies:
+        - type: Pods
+          value: 2
+          periodSeconds: 60
+{{- end }}
 {{- end }}

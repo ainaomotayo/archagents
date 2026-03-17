@@ -8,6 +8,7 @@ export type {
   FindingInput,
   ReportType,
   EvidenceEventType,
+  DigestMetrics,
 } from "./types.js";
 
 export { VALID_REPORT_TYPES, EVIDENCE_EVENT_TYPES } from "./types.js";
@@ -33,6 +34,8 @@ export {
   type HipaaAssessmentData,
 } from "./reports/generator.js";
 
+export { generateIPAttributionPdf } from "./reports/generator.js";
+
 export { computeGapAnalysis, type GapAnalysis, type GapItem } from "./gap-analysis/service.js";
 export { RemediationService, type CreateRemediationInput, type UpdateRemediationInput } from "./remediation/service.js";
 export { computePriorityScore, type PriorityScoreInput } from "./remediation/priority-score.js";
@@ -43,6 +46,7 @@ export { EvidenceService, type S3Presigner } from "./remediation/evidence-servic
 export { ChartsService } from "./remediation/charts-service.js";
 export { AutoFixService, type GitHubPRClient } from "./remediation/auto-fix-service.js";
 export { SyncHandler } from "./remediation/sync-handler.js";
+export { buildDigestEmailHtml } from "./reports/digest-email.js";
 
 // AI Metrics
 export { computeAIRatio, type FileSignal, type AIRatioResult } from "./ai-metrics/compute-ai-ratio.js";
@@ -67,3 +71,49 @@ export {
   type DeclaredTool,
   type SentinelAIConfig,
 } from "./decision-trace/enrichment.js";
+
+// IP Attribution
+export { reconcile } from "./ip-attribution/reconciler.js";
+export {
+  adaptAIDetector, adaptDeclared, adaptGit, adaptLicense,
+  AI_COAUTHOR_PATTERNS, BOT_AUTHOR_PATTERNS,
+} from "./ip-attribution/adapters.js";
+export {
+  generateIPAttributionCertificate, verifyIPAttributionCertificate,
+  buildIPAttributionSummary,
+} from "./ip-attribution/certificate.js";
+export { generateSpdxExport } from "./ip-attribution/spdx-export.js";
+export { generateCycloneDxExport } from "./ip-attribution/cyclonedx-export.js";
+export { IPAttributionService } from "./ip-attribution/service.js";
+export type {
+  Classification, SourceEvidence, ReconciledAttribution,
+  IPAttributionDocument, IPAttributionReportData,
+  ToolBreakdownSummary, GitMetadata, GitFileMetadata,
+} from "./ip-attribution/types.js";
+
+// Report Registry
+export { ReportRegistry, type ReportTemplate, type GatherContext } from "./reports/registry.js";
+export { type BrandingContext, getDefaultBranding } from "./reports/branding.js";
+export { createDefaultRegistry } from "./reports/templates/index.js";
+
+export { PageHeader } from "./reports/components/index.js";
+export { PageFooter } from "./reports/components/index.js";
+
+// Report Storage
+export { type ReportStorage, LocalReportStorage } from "./reports/storage.js";
+export { S3ReportStorage, type S3StorageConfig } from "./reports/s3-storage.js";
+
+// EU AI Act PDF Generators
+export {
+  generateEuAiActTechnicalDocPdf,
+  generateEuAiActDeclarationPdf,
+  generateEuAiActInstructionsPdf,
+  generateEuAiActMonitoringPdf,
+  type TechnicalDocData,
+  type DeclarationData,
+  type InstructionsData,
+  type MonitoringPlanData,
+} from "./reports/generator.js";
+
+// Wizard
+export * from "./wizard/index.js";

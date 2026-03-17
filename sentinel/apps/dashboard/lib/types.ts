@@ -346,3 +346,109 @@ export interface DecisionTrace {
   declaredModel: string | null;
   enrichedAt: string | null;
 }
+
+// IP Attribution
+export interface IPAttributionClassificationSummary {
+  files: number;
+  loc: number;
+  percentage: number;
+}
+
+export interface IPAttributionToolBreakdown {
+  tool: string;
+  model: string | null;
+  files: number;
+  loc: number;
+  percentage: number;
+  confirmedCount: number;
+  estimatedCount: number;
+}
+
+export interface IPAttributionFileEntry {
+  path: string;
+  classification: string;
+  confidence: number;
+  primarySource: string;
+  toolName: string | null;
+  toolModel: string | null;
+  loc: number;
+  fusionMethod: string;
+  conflicting: boolean;
+  evidence: Array<{
+    source: string;
+    classification: string;
+    confidence: number;
+  }>;
+}
+
+export interface IPAttributionCertificate {
+  id: string;
+  version: string;
+  subject: {
+    scanId: string;
+    projectId: string;
+    repository: string;
+    commitHash: string;
+    branch: string;
+    author: string;
+    timestamp: string;
+  };
+  summary: {
+    totalFiles: number;
+    totalLoc: number;
+    classifications: {
+      human: IPAttributionClassificationSummary;
+      aiGenerated: IPAttributionClassificationSummary;
+      aiAssisted: IPAttributionClassificationSummary;
+      mixed: IPAttributionClassificationSummary;
+      unknown: IPAttributionClassificationSummary;
+    };
+    overallAiRatio: number;
+    avgConfidence: number;
+    conflictingFiles: number;
+  };
+  toolBreakdown: IPAttributionToolBreakdown[];
+  files: IPAttributionFileEntry[];
+  methodology: {
+    algorithm: string;
+    algorithmVersion: string;
+    orgBaseRate: number;
+    sources: string[];
+    classificationThresholds: {
+      aiGenerated: number;
+      aiAssisted: number;
+    };
+  };
+  provenance: {
+    generatedBy: string;
+    generatedAt: string;
+    agentVersions: Record<string, string>;
+    evidenceChainHash: string;
+  };
+  signature: string;
+}
+
+export interface FileAttribution {
+  id: string;
+  certificateId: string;
+  file: string;
+  classification: string;
+  confidence: number;
+  primarySource: string;
+  toolName: string | null;
+  toolModel: string | null;
+  loc: number;
+  fusionMethod: string;
+  conflicting: boolean;
+}
+
+export interface AttributionEvidence {
+  id: string;
+  attributionId: string;
+  source: string;
+  classification: string;
+  confidence: number;
+  toolName: string | null;
+  toolModel: string | null;
+  rawEvidence: Record<string, unknown>;
+}

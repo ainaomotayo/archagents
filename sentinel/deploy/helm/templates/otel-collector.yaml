@@ -1,0 +1,72 @@
+{{- if .Values.monitoring.otel.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "sentinel.fullname" . }}-otel-config
+data:
+  config.yaml: |
+    receivers:
+      otlp:
+        protocols:
+          grpc: { endpoint: 0.0.0.0:4317 }
+          http: { endpoint: 0.0.0.0:4318 }
+    processors:
+      batch: { send_batch_size: 1024, timeout: 5s }
+      memory_limiter: { check_interval: 1s, limit_mib: 512, spike_limit_mib: 128 }
+      attributes:
+        actions:
+          - { key: environment, value: {{ .Release.Namespace }}, action: upsert }
+          - { key: service.namespace, value: sentinel, action: upsert }
+    exporters:
+      logging: { loglevel: warn }
+      {{- if .Values.monitoring.otel.exporters.otlp.endpoint }}
+      otlp:
+        endpoint: {{ .Values.monitoring.otel.exporters.otlp.endpoint }}
+        tls: { insecure: false }
+      {{- end }}
+    service:
+      pipelines:
+        metrics:
+          receivers: [otlp]
+          processors: [memory_limiter, batch, attributes]
+          exporters: [logging{{- if .Values.monitoring.otel.exporters.otlp.endpoint }}, otlp{{- end }}]
+        traces:
+          receivers: [otlp]
+          processors: [memory_limiter, batch, attributes]
+          exporters: [logging{{- if .Values.monitoring.otel.exporters.otlp.endpoint }}, otlp{{- end }}]
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: {{ include "sentinel.fullname" . }}-otel-collector
+  labels:
+    {{- include "sentinel.labels" . | nindent 4 }}
+    app.kubernetes.io/component: otel-collector
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: otel-collector
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/component: otel-collector
+    spec:
+      containers:
+        - name: otel-collector
+          image: {{ .Values.monitoring.otel.image | default "otel/opentelemetry-collector-contrib:0.96.0" }}
+          args: ["--config=/etc/otel/config.yaml"]
+          ports:
+            - containerPort: 4317
+            - containerPort: 4318
+            - containerPort: 8888
+          resources:
+            requests: { cpu: 100m, memory: 256Mi }
+            limits: { cpu: 500m, memory: 512Mi }
+          volumeMounts:
+            - name: config
+              mountPath: /etc/otel
+      volumes:
+        - name: config
+          configMap:
+            name: {{ include "sentinel.fullname" . }}-otel-config
+{{- end }}

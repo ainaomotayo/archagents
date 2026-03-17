@@ -1,0 +1,81 @@
+{{- range $tier, $agents := .Values.agents }}
+{{- if or (eq $tier "critical") (eq $tier "batch") }}
+{{- range $name, $agent := $agents }}
+{{- if $agent.enabled }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "sentinel.fullname" $ }}-agent-{{ $name }}
+  labels:
+    {{- include "sentinel.labels" $ | nindent 4 }}
+    app.kubernetes.io/component: agent-{{ $name }}
+    sentinel.io/tier: {{ $tier }}
+spec:
+  replicas: {{ $agent.scaling.minReplicas }}
+  selector:
+    matchLabels:
+      {{- include "sentinel.selectorLabels" $ | nindent 6 }}
+      app.kubernetes.io/component: agent-{{ $name }}
+  template:
+    metadata:
+      labels:
+        {{- include "sentinel.selectorLabels" $ | nindent 8 }}
+        app.kubernetes.io/component: agent-{{ $name }}
+        sentinel.io/tier: {{ $tier }}
+    spec:
+      securityContext:
+        {{- include "sentinel.podSecurityContext" $ | nindent 8 }}
+      {{- if $agent.priorityClassName }}
+      priorityClassName: {{ $agent.priorityClassName }}
+      {{- end }}
+      {{- with $.Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: {{ $name }}
+          image: {{ include "sentinel.image" (dict "global" $.Values.global "repository" $agent.image.repository "tag" ($agent.image.tag | default $.Chart.AppVersion)) }}
+          env:
+            - name: REDIS_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "sentinel.fullname" $ }}-secrets
+                  key: redis-url
+            - name: AGENT_NAME
+              value: {{ $name }}
+            {{- with $.Values.agents.common.env }}
+            {{- range $k, $v := . }}
+            - name: {{ $k }}
+              value: {{ $v | quote }}
+            {{- end }}
+            {{- end }}
+          ports:
+            - name: health
+              containerPort: {{ $.Values.agents.common.healthCheck.port }}
+          readinessProbe:
+            httpGet:
+              path: {{ $.Values.agents.common.healthCheck.path }}
+              port: health
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: {{ $.Values.agents.common.healthCheck.path }}
+              port: health
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          resources:
+            {{- toYaml $agent.resources | nindent 12 }}
+          securityContext:
+            {{- include "sentinel.containerSecurityContext" $ | nindent 12 }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
+{{- end }}
+{{- end }}
+{{- end }}
+{{- end }}

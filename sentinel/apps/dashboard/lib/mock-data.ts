@@ -1227,3 +1227,30 @@ export const MOCK_APPROVAL_GATES: ApprovalGate[] = [
     }],
   },
 ];
+
+// ── VCS Installations ─────────────────────────────────────────────────
+
+export const MOCK_VCS_INSTALLATIONS = [
+  {
+    id: "vcs-1",
+    provider: "github",
+    installationId: "12345678",
+    owner: "acme-corp",
+    active: true,
+    webhookSecret: "••••••••",
+    createdAt: "2026-02-15T10:00:00Z",
+  },
+  {
+    id: "vcs-2",
+    provider: "azure_devops",
+    installationId: "repo-guid-1",
+    owner: "acme-project",
+    active: true,
+    webhookSecret: "••••••••",
+    createdAt: "2026-03-01T14:30:00Z",
+    azureDevOpsExt: {
+      organizationUrl: "https://dev.azure.com/acme-corp",
+      projectName: "sentinel-demo",
+    },
+  },
+];

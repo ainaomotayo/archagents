@@ -1,42 +1,66 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: sentinel-api
-  namespace: {{ .Values.global.namespace }}
+  name: {{ include "sentinel.fullname" . }}-api
   labels:
-    app: sentinel-api
     {{- include "sentinel.labels" . | nindent 4 }}
+    app.kubernetes.io/component: api
 spec:
-  replicas: {{ .Values.api.replicas }}
+  replicas: {{ .Values.api.replicaCount }}
   selector:
     matchLabels:
-      app: sentinel-api
+      {{- include "sentinel.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: api
   template:
     metadata:
       labels:
-        app: sentinel-api
+        {{- include "sentinel.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: api
+        sentinel.io/tier: critical
     spec:
+      securityContext:
+        {{- include "sentinel.podSecurityContext" . | nindent 8 }}
+      {{- with .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      priorityClassName: sentinel-critical
+      {{- with .Values.api.topologySpreadConstraints }}
+      topologySpreadConstraints:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       containers:
         - name: api
-          image: "{{ .Values.api.image }}:{{ .Values.global.imageTag }}"
+          image: {{ include "sentinel.image" (dict "global" .Values.global "repository" .Values.api.image.repository "tag" (.Values.api.image.tag | default .Chart.AppVersion)) }}
+          imagePullPolicy: {{ .Values.api.image.pullPolicy }}
           ports:
-            - containerPort: {{ .Values.api.port }}
-          envFrom:
-            - configMapRef:
-                name: sentinel-config
-            - secretRef:
-                name: sentinel-secrets
+            - name: http
+              containerPort: 8080
+          env:
+            {{- include "sentinel.commonEnv" . | nindent 12 }}
+            - name: NODE_ENV
+              value: production
+            - name: RUN_MIGRATIONS
+              value: "false"
           readinessProbe:
             httpGet:
-              path: /health
-              port: {{ .Values.api.port }}
-            initialDelaySeconds: 10
-            periodSeconds: 10
+              path: {{ .Values.api.probes.readiness.path }}
+              port: {{ .Values.api.probes.readiness.port }}
+            initialDelaySeconds: {{ .Values.api.probes.readiness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.api.probes.readiness.periodSeconds | default 10 }}
           livenessProbe:
             httpGet:
-              path: /health
-              port: {{ .Values.api.port }}
-            initialDelaySeconds: 20
-            periodSeconds: 15
+              path: {{ .Values.api.probes.liveness.path }}
+              port: {{ .Values.api.probes.liveness.port }}
+            initialDelaySeconds: {{ .Values.api.probes.liveness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.api.probes.liveness.periodSeconds | default 20 }}
           resources:
             {{- toYaml .Values.api.resources | nindent 12 }}
+          securityContext:
+            {{- include "sentinel.containerSecurityContext" . | nindent 12 }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}

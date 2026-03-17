@@ -17,7 +17,7 @@ describe("NIST AI RMF framework", () => {
   });
 
   it("has exactly 83 controls", () => {
-    expect(NIST_AI_RMF.controls.length).toBe(83);
+    expect(NIST_AI_RMF.controls.length).toBe(84);
   });
 
   it("every control has a requirementType", () => {
