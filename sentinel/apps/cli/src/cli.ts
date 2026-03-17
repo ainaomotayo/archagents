@@ -60,6 +60,7 @@ program
       sarif: opts.sarif ?? false,
       gitlabSast: false,
       stream: false,
+      failOn: "",
       stdinContent: diff,
     });
     process.exit(code);
@@ -76,6 +77,7 @@ program
   .option("--stream", "Use SSE streaming instead of polling (requires server support)")
   .option("--fail-on <severities>", "Comma-separated severity threshold", "critical,high")
   .option("--format <format>", "Output format: text, json, sarif, gitlab-sast", "text")
+  .option("--output <path>", "Write output to file instead of stdout")
   .action(async (opts) => {
     const { runCi } = await import("./commands/ci.js");
     const code = await runCi({
@@ -87,6 +89,8 @@ program
       sarif: opts.sarif ?? opts.format === "sarif",
       gitlabSast: opts.gitlabSast ?? opts.format === "gitlab-sast",
       stream: opts.stream ?? false,
+      failOn: opts.failOn ?? "critical,high",
+      output: opts.output,
     });
     process.exit(code);
   });

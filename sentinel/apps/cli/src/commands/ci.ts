@@ -23,6 +23,8 @@ export interface CiOptions {
   sarif: boolean;
   gitlabSast: boolean;
   stream: boolean;
+  failOn: string;
+  output?: string;
   /** Allow injecting a custom fetch for testing. */
   fetchFn?: typeof globalThis.fetch;
   /** Allow injecting stdin content for testing. */
@@ -320,18 +322,34 @@ export async function runCi(options: CiOptions): Promise<number> {
     }
 
     // 5. Output
+    let outputContent: string;
     if (options.sarif) {
-      console.log(JSON.stringify(formatSarif(result.assessment.findings), null, 2));
+      outputContent = JSON.stringify(formatSarif(result.assessment.findings), null, 2);
     } else if (options.json) {
-      console.log(JSON.stringify(result.assessment, null, 2));
+      outputContent = JSON.stringify(result.assessment, null, 2);
     } else {
-      console.log(formatSummary(result.assessment));
+      outputContent = formatSummary(result.assessment);
+    }
+
+    if (options.output) {
+      writeFileSync(options.output, outputContent);
+    } else {
+      console.log(outputContent);
     }
 
     // 6. Write GitLab SAST report when requested or auto-detected
     if (options.gitlabSast || env.provider === "gitlab") {
       const sastReport = formatGitLabSast(result.assessment.findings);
       writeFileSync("gl-sast-report.json", JSON.stringify(sastReport, null, 2));
+    }
+
+    // 7. Check fail-on severity threshold
+    if (options.failOn) {
+      const thresholds = options.failOn.split(",").map((s) => s.trim().toLowerCase());
+      const hasBlockingFinding = result.assessment.findings.some((f) =>
+        thresholds.includes(f.severity),
+      );
+      if (hasBlockingFinding) return EXIT_FAIL;
     }
 
     return exitCodeFromStatus(result.assessment.status);

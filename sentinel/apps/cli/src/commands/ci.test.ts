@@ -335,6 +335,7 @@ describe("runCi", () => {
       sarif: false,
       gitlabSast: false,
       stream: false,
+      failOn: "",
       fetchFn: fetch,
       stdinContent: "diff --git a/file.ts\n+new line",
     });
@@ -358,6 +359,7 @@ describe("runCi", () => {
       sarif: false,
       gitlabSast: false,
       stream: false,
+      failOn: "",
       fetchFn: fetch,
       stdinContent: "diff --git a/file.ts\n+new line",
     });
@@ -375,6 +377,7 @@ describe("runCi", () => {
       sarif: false,
       gitlabSast: false,
       stream: false,
+      failOn: "",
       stdinContent: "",
     });
 
@@ -395,6 +398,7 @@ describe("runCi", () => {
       sarif: false,
       gitlabSast: false,
       stream: false,
+      failOn: "",
       fetchFn: fetch,
       stdinContent: "diff --git a/file.ts\n+new line",
     });
@@ -420,6 +424,7 @@ describe("runCi", () => {
       sarif: false,
       gitlabSast: false,
       stream: false,
+      failOn: "",
       fetchFn: fetch,
       stdinContent: "diff content",
     });
@@ -450,6 +455,7 @@ describe("runCi", () => {
       sarif: true,
       gitlabSast: false,
       stream: false,
+      failOn: "",
       fetchFn: fetch,
       stdinContent: "diff content",
     });
@@ -491,5 +497,91 @@ describe("runCi", () => {
       "gl-sast-report.json",
       expect.stringContaining("15.1.0"),
     );
+  });
+
+  it("returns EXIT_FAIL when findings match --fail-on severity", async () => {
+    const findings: Finding[] = [makeSecurityFinding({ severity: "high" })];
+    const assessment = makeAssessment({ status: "full_pass", findings });
+    const fetch = mockFetch([
+      { status: 200, body: { scanId: "scan-failon" } },
+      { status: 200, body: { status: "full_pass", assessment } },
+    ]);
+
+    const code = await runCi({
+      apiUrl: "http://localhost:8080",
+      apiKey: "key",
+      secret: "secret",
+      timeout: 10,
+      json: false,
+      sarif: false,
+      gitlabSast: false,
+      stream: false,
+      failOn: "critical,high",
+      fetchFn: fetch,
+      stdinContent: "diff content",
+    });
+
+    expect(code).toBe(EXIT_FAIL);
+  });
+
+  it("returns EXIT_PASS when findings below --fail-on threshold", async () => {
+    const findings: Finding[] = [makeSecurityFinding({ severity: "low" })];
+    const assessment = makeAssessment({ status: "full_pass", findings });
+    const fetch = mockFetch([
+      { status: 200, body: { scanId: "scan-failon-pass" } },
+      { status: 200, body: { status: "full_pass", assessment } },
+    ]);
+
+    const code = await runCi({
+      apiUrl: "http://localhost:8080",
+      apiKey: "key",
+      secret: "secret",
+      timeout: 10,
+      json: false,
+      sarif: false,
+      gitlabSast: false,
+      stream: false,
+      failOn: "critical,high",
+      fetchFn: fetch,
+      stdinContent: "diff content",
+    });
+
+    expect(code).toBe(EXIT_PASS);
+  });
+
+  it("writes output to file when --output is specified", async () => {
+    const mockWrite = vi.mocked(writeFileSync);
+    mockWrite.mockClear();
+    const assessment = makeAssessment({ status: "full_pass" });
+    const fetch = mockFetch([
+      { status: 200, body: { scanId: "scan-output" } },
+      { status: 200, body: { status: "full_pass", assessment } },
+    ]);
+
+    const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+
+    await runCi({
+      apiUrl: "http://localhost:8080",
+      apiKey: "key",
+      secret: "secret",
+      timeout: 10,
+      json: true,
+      sarif: false,
+      gitlabSast: false,
+      stream: false,
+      failOn: "",
+      output: "report.json",
+      fetchFn: fetch,
+      stdinContent: "diff content",
+    });
+
+    // Should write to file, not console
+    expect(consoleSpy).not.toHaveBeenCalled();
+    expect(mockWrite).toHaveBeenCalledWith(
+      "report.json",
+      expect.stringContaining("full_pass"),
+    );
+
+    consoleSpy.mockRestore();
   });
 });
