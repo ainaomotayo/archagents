@@ -516,8 +516,8 @@ describe("Wizard integration – evidence", () => {
 describe("Wizard RBAC", () => {
   const wizardPaths = API_PERMISSIONS.filter((p) => p.path.includes("/wizards"));
 
-  it("has 14 wizard RBAC entries", () => {
-    expect(wizardPaths.length).toBe(14);
+  it("has 15 wizard RBAC entries", () => {
+    expect(wizardPaths.length).toBe(15);
   });
 
   it("admin can access all wizard endpoints", () => {
