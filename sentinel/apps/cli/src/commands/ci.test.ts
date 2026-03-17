@@ -1,5 +1,11 @@
 import { describe, it, expect, vi } from "vitest";
+import { writeFileSync } from "fs";
 import type { ComplianceAssessment, Finding, SecurityFinding, LicenseFinding } from "@sentinel/shared";
+
+vi.mock("fs", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("fs")>();
+  return { ...actual, writeFileSync: vi.fn() };
+});
 import {
   exitCodeFromStatus,
   formatSummary,
@@ -308,7 +314,7 @@ describe("pollForResult", () => {
         secret: "test-secret",
         fetchFn: fetch,
       }),
-    ).rejects.toThrow("Scan timed out after 0s");
+    ).rejects.toThrow("Poll timed out after 0ms");
   });
 });
 
@@ -327,6 +333,8 @@ describe("runCi", () => {
       timeout: 10,
       json: false,
       sarif: false,
+      gitlabSast: false,
+      stream: false,
       fetchFn: fetch,
       stdinContent: "diff --git a/file.ts\n+new line",
     });
@@ -348,6 +356,8 @@ describe("runCi", () => {
       timeout: 10,
       json: false,
       sarif: false,
+      gitlabSast: false,
+      stream: false,
       fetchFn: fetch,
       stdinContent: "diff --git a/file.ts\n+new line",
     });
@@ -363,6 +373,8 @@ describe("runCi", () => {
       timeout: 10,
       json: false,
       sarif: false,
+      gitlabSast: false,
+      stream: false,
       stdinContent: "",
     });
 
@@ -381,6 +393,8 @@ describe("runCi", () => {
       timeout: 10,
       json: false,
       sarif: false,
+      gitlabSast: false,
+      stream: false,
       fetchFn: fetch,
       stdinContent: "diff --git a/file.ts\n+new line",
     });
@@ -404,6 +418,8 @@ describe("runCi", () => {
       timeout: 10,
       json: true,
       sarif: false,
+      gitlabSast: false,
+      stream: false,
       fetchFn: fetch,
       stdinContent: "diff content",
     });
@@ -432,6 +448,8 @@ describe("runCi", () => {
       timeout: 10,
       json: false,
       sarif: true,
+      gitlabSast: false,
+      stream: false,
       fetchFn: fetch,
       stdinContent: "diff content",
     });
@@ -442,5 +460,36 @@ describe("runCi", () => {
     expect(output.runs[0].results).toHaveLength(1);
 
     consoleSpy.mockRestore();
+  });
+
+  it("writes gl-sast-report.json when gitlabSast option is true", async () => {
+    const mockWrite = vi.mocked(writeFileSync);
+    mockWrite.mockClear();
+    const assessment = makeAssessment({
+      status: "full_pass",
+      findings: [makeSecurityFinding()],
+    });
+    const fetch = mockFetch([
+      { status: 200, body: { scanId: "scan-gl" } },
+      { status: 200, body: { status: "full_pass", assessment } },
+    ]);
+
+    await runCi({
+      apiUrl: "http://localhost:8080",
+      apiKey: "key",
+      secret: "secret",
+      timeout: 10,
+      json: false,
+      sarif: false,
+      gitlabSast: true,
+      stream: false,
+      fetchFn: fetch,
+      stdinContent: "diff content",
+    });
+
+    expect(mockWrite).toHaveBeenCalledWith(
+      "gl-sast-report.json",
+      expect.stringContaining("15.1.0"),
+    );
   });
 });
