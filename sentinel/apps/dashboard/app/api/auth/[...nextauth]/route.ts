@@ -8,10 +8,18 @@ import {
   setCurrentRequestIp,
   logAuthEvent,
 } from "@/lib/auth";
+import type { NextRequest } from "next/server";
 
 const nextAuth = NextAuth(authOptions);
 
-export { nextAuth as GET };
+// Next.js 15 makes context.params a Promise — await it before passing to
+// NextAuth v4 so it can read the [...nextauth] path segments correctly.
+type NextAuthContext = { params: Promise<{ nextauth: string[] }> };
+
+export async function GET(req: NextRequest, context: NextAuthContext) {
+  const params = await context.params;
+  return nextAuth(req, { params });
+}
 
 /**
  * Wrapped POST handler that adds:
@@ -19,7 +27,7 @@ export { nextAuth as GET };
  * - Provider health failure tracking
  * - Auth event audit logging
  */
-export async function POST(req: Request): Promise<Response> {
+export async function POST(req: NextRequest, context: NextAuthContext): Promise<Response> {
   const ip = extractClientIp(req.headers);
   const provider = extractProvider(req.url);
 
@@ -47,7 +55,8 @@ export async function POST(req: Request): Promise<Response> {
   // Store IP for use in NextAuth events.signIn callback
   setCurrentRequestIp(ip);
 
-  const response = await nextAuth(req);
+  const params = await context.params;
+  const response = await nextAuth(req, { params });
 
   // Detect OAuth failures: NextAuth redirects to error page on failure
   const location = response.headers.get("location") ?? "";
