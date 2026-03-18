@@ -94,6 +94,17 @@ export function registerRetentionRoutes(app: FastifyInstance, authHook: any) {
 
     const preset = body.preset ?? detectPreset(tiers);
 
+    // Compute dry-run estimate — count findings per severity tier that would be deleted
+    const now = new Date();
+    const dryRunEstimate: Record<string, number> = {};
+    for (const [sev, days] of Object.entries(tiers)) {
+      const cutoff = new Date(now);
+      cutoff.setDate(cutoff.getDate() - days);
+      dryRunEstimate[sev] = await db.finding.count({
+        where: { orgId, severity: sev, createdAt: { lt: cutoff } },
+      });
+    }
+
     const change = await db.retentionPolicyChange.create({
       data: {
         orgId,
@@ -103,6 +114,7 @@ export function registerRetentionRoutes(app: FastifyInstance, authHook: any) {
         tierHigh: tiers.high,
         tierMedium: tiers.medium,
         tierLow: tiers.low,
+        dryRunEstimate,
       },
     });
 
