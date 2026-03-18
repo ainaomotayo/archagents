@@ -1,0 +1,167 @@
+name: Build & Push Docker Images
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+    paths:
+      - 'sentinel/apps/**'
+      - 'sentinel/packages/**'
+      - 'sentinel/agents/**'
+      - 'sentinel/deploy/**'
+  pull_request:
+    branches: [main]
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_PREFIX: ghcr.io/${{ github.repository_owner }}/sentinel
+
+jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      api: ${{ steps.filter.outputs.api }}
+      dashboard: ${{ steps.filter.outputs.dashboard }}
+      agent-security: ${{ steps.filter.outputs.agent-security }}
+      agent-dependency: ${{ steps.filter.outputs.agent-dependency }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            api:
+              - 'sentinel/apps/api/**'
+              - 'sentinel/packages/**'
+              - 'sentinel/apps/api/Dockerfile'
+            dashboard:
+              - 'sentinel/apps/dashboard/**'
+              - 'sentinel/packages/auth/**'
+              - 'sentinel/packages/shared/**'
+              - 'sentinel/packages/policy-engine/**'
+              - 'sentinel/packages/security/**'
+              - 'sentinel/apps/dashboard/Dockerfile'
+            agent-security:
+              - 'sentinel/agents/security/**'
+              - 'sentinel/agents/framework/**'
+              - 'sentinel/agents/security/Dockerfile'
+            agent-dependency:
+              - 'sentinel/agents/dependency/**'
+              - 'sentinel/agents/framework/**'
+              - 'sentinel/agents/dependency/Dockerfile'
+
+  build-api:
+    needs: changes
+    if: needs.changes.outputs.api == 'true' || github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE_PREFIX }}-api
+          tags: |
+            type=sha,prefix=sha-
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v') }}
+      - uses: docker/build-push-action@v5
+        with:
+          context: sentinel
+          file: sentinel/apps/api/Dockerfile
+          push: ${{ github.event_name == 'push' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  build-dashboard:
+    needs: changes
+    if: needs.changes.outputs.dashboard == 'true' || github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE_PREFIX }}-dashboard
+          tags: |
+            type=sha,prefix=sha-
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v') }}
+      - uses: docker/build-push-action@v5
+        with:
+          context: sentinel
+          file: sentinel/apps/dashboard/Dockerfile
+          push: ${{ github.event_name == 'push' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  build-agents:
+    needs: changes
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      matrix:
+        include:
+          - name: security
+            changed: ${{ needs.changes.outputs.agent-security }}
+          - name: dependency
+            changed: ${{ needs.changes.outputs.agent-dependency }}
+    steps:
+      - uses: actions/checkout@v4
+        if: matrix.changed == 'true' || github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')
+      - uses: docker/setup-buildx-action@v3
+        if: matrix.changed == 'true' || github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')
+      - uses: docker/login-action@v3
+        if: matrix.changed == 'true' || github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Docker metadata
+        id: meta
+        if: matrix.changed == 'true' || github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE_PREFIX }}-agent-${{ matrix.name }}
+          tags: |
+            type=sha,prefix=sha-
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v') }}
+      - uses: docker/build-push-action@v5
+        if: matrix.changed == 'true' || github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')
+        with:
+          context: sentinel
+          file: sentinel/agents/${{ matrix.name }}/Dockerfile
+          push: ${{ github.event_name == 'push' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
