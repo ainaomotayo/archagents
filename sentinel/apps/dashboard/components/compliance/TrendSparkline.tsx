@@ -39,8 +39,8 @@ export function TrendSparkline({ data }: TrendSparklineProps) {
               borderRadius: "6px",
               fontSize: "11px",
             }}
-            formatter={(value: number) => [`${value}%`, "Score"]}
-            labelFormatter={(label: string) => new Date(label).toLocaleDateString()}
+            formatter={(value) => [`${value ?? 0}%`, "Score"]}
+            labelFormatter={(label) => new Date(String(label)).toLocaleDateString()}
           />
           <Area
             type="monotone"
