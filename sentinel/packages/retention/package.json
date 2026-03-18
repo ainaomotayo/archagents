@@ -11,6 +11,7 @@
     "lint": "echo 'lint placeholder'"
   },
   "dependencies": {
+    "@azure/storage-blob": "^12.31.0",
     "@sentinel/shared": "workspace:*",
     "ssh2-sftp-client": "^12.1.0"
   },

@@ -393,6 +393,9 @@ importers:
 
   packages/retention:
     dependencies:
+      '@azure/storage-blob':
+        specifier: ^12.31.0
+        version: 12.31.0
       '@sentinel/shared':
         specifier: workspace:*
         version: link:../shared
