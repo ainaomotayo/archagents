@@ -5,3 +5,4 @@ export { encryptCredential, decryptCredential } from "./credential.js";
 export type { EncryptedData } from "./credential.js";
 export { registerAdapter, getArchiveAdapter, listAdapterTypes } from "./ports/registry.js";
 export type { ArchivePort, ArchiveConfig, ArchivePayload, ArchiveResult } from "./ports/archive-port.js";
+export { registerAllAdapters } from "./register-adapters.js";

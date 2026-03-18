@@ -1,6 +1,8 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
+import { registerAllAdapters } from "@sentinel/retention";
 
 export function registerRetentionRoutes(app: FastifyInstance, authHook: any) {
+  registerAllAdapters();
   // ---------------------------------------------------------------------------
   // Policy & Presets
   // ---------------------------------------------------------------------------
