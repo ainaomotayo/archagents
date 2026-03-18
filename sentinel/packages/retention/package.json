@@ -11,6 +11,7 @@
     "lint": "echo 'lint placeholder'"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1004.0",
     "@azure/storage-blob": "^12.31.0",
     "@sentinel/shared": "workspace:*",
     "ssh2-sftp-client": "^12.1.0"

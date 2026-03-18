@@ -7,12 +7,31 @@ const nextConfig: NextConfig = {
   serverExternalPackages: ["@sentinel/security", "@sentinel/auth", "@sentinel/policy-engine"],
   webpack(config, { isServer }) {
     if (!isServer) {
+      // Webpack 5 does not resolve the 'node:' URL scheme for browser targets.
+      // Alias each node: import to false so they resolve to empty modules.
+      config.resolve.alias = {
+        ...config.resolve.alias,
+        "node:crypto": false,
+        "node:fs": false,
+        "node:path": false,
+        "node:os": false,
+        "node:stream": false,
+        "node:buffer": false,
+        "node:util": false,
+        "node:events": false,
+        "node:net": false,
+        "node:tls": false,
+      };
+      // Belt-and-suspenders: also apply fallbacks for bare module names
       config.resolve.fallback = {
         ...config.resolve.fallback,
         crypto: false,
         fs: false,
         net: false,
         tls: false,
+        stream: false,
+        path: false,
+        os: false,
       };
     }
     return config;
