@@ -64,6 +64,8 @@ tags:
     description: Administrative operations including DLQ monitoring, key rotation, and crypto-shred
   - name: System
     description: Health checks and Prometheus metrics
+  - name: Retention
+    description: Data retention policy management, archive destinations, and execution history
 
 paths:
   /v1/scans:
@@ -2937,6 +2939,527 @@ paths:
               schema:
                 type: string
 
+  # ─────────────────────────── Data Retention ───────────────────────────
+
+  /v1/retention/presets:
+    get:
+      operationId: listRetentionPresets
+      summary: List retention presets
+      description: |
+        Returns the built-in retention preset profiles: Minimal, Standard,
+        Compliance, and Custom. Each preset defines per-severity retention
+        days for critical, high, medium, and low findings.
+      tags: [Retention]
+      security:
+        - hmacAuth: []
+      responses:
+        "200":
+          description: List of retention presets
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  presets:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/RetentionPreset"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /v1/retention/policy:
+    get:
+      operationId: getRetentionPolicy
+      summary: Get current retention policy
+      description: |
+        Returns the active retention policy for the caller's organization.
+        If no explicit policy has been approved, falls back to the legacy
+        flat retentionDays value from organization settings.
+      tags: [Retention]
+      security:
+        - hmacAuth: []
+      responses:
+        "200":
+          description: Active retention policy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RetentionPolicy"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /v1/retention/policy/changes:
+    get:
+      operationId: listRetentionChanges
+      summary: List policy change requests
+      description: |
+        Returns all pending, approved, and rejected retention policy change
+        requests for the caller's organization.
+      tags: [Retention]
+      security:
+        - hmacAuth: []
+      responses:
+        "200":
+          description: List of policy change requests
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  changes:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/RetentionPolicyChange"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    post:
+      operationId: proposeRetentionChange
+      summary: Propose a retention policy change
+      description: |
+        Proposes a new retention policy for the organization. Only one
+        pending change is allowed at a time. The proposer cannot self-approve.
+        Returns a dry-run estimate of records that would be deleted.
+      tags: [Retention]
+      security:
+        - hmacAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RetentionChangeRequest"
+      responses:
+        "201":
+          description: Change proposed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RetentionPolicyChange"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "409":
+          description: A pending change already exists
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /v1/retention/policy/changes/{changeId}:
+    get:
+      operationId: getRetentionChange
+      summary: Get a policy change request
+      tags: [Retention]
+      security:
+        - hmacAuth: []
+      parameters:
+        - name: changeId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Policy change request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RetentionPolicyChange"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /v1/retention/policy/changes/{changeId}/approve:
+    post:
+      operationId: approveRetentionChange
+      summary: Approve a policy change
+      description: |
+        Approves a pending retention policy change. The approver must be a
+        different admin from the proposer (no self-approval). Upon approval,
+        the change becomes the active policy.
+      tags: [Retention]
+      security:
+        - hmacAuth: []
+      parameters:
+        - name: changeId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Change approved and active policy updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RetentionPolicy"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: Forbidden — proposer cannot approve their own change
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: Change is not in pending status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /v1/retention/policy/changes/{changeId}/reject:
+    post:
+      operationId: rejectRetentionChange
+      summary: Reject a policy change
+      tags: [Retention]
+      security:
+        - hmacAuth: []
+      parameters:
+        - name: changeId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason:
+                  type: string
+      responses:
+        "200":
+          description: Change rejected
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RetentionPolicyChange"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /v1/retention/archives:
+    get:
+      operationId: listArchiveDestinations
+      summary: List archive destinations
+      description: |
+        Returns all configured archive destinations. Credentials are
+        redacted in the response.
+      tags: [Retention]
+      security:
+        - hmacAuth: []
+      responses:
+        "200":
+          description: List of archive destinations
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  destinations:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/ArchiveDestination"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    post:
+      operationId: createArchiveDestination
+      summary: Create an archive destination
+      description: |
+        Configures a new archive destination. Credentials are encrypted at
+        rest with AES-256-GCM. Supported types: s3, gcs, azure-blob,
+        webhook, sftp.
+      tags: [Retention]
+      security:
+        - hmacAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ArchiveDestinationRequest"
+      responses:
+        "201":
+          description: Archive destination created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ArchiveDestination"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /v1/retention/archives/{archiveId}:
+    put:
+      operationId: updateArchiveDestination
+      summary: Update an archive destination
+      tags: [Retention]
+      security:
+        - hmacAuth: []
+      parameters:
+        - name: archiveId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ArchiveDestinationRequest"
+      responses:
+        "200":
+          description: Updated archive destination
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ArchiveDestination"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      operationId: deleteArchiveDestination
+      summary: Delete an archive destination
+      tags: [Retention]
+      security:
+        - hmacAuth: []
+      parameters:
+        - name: archiveId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: Deleted
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /v1/retention/archives/{archiveId}/test:
+    post:
+      operationId: testArchiveDestination
+      summary: Test an archive destination
+      description: |
+        Tests connectivity by writing and verifying a small test object.
+        Returns success or failure with error details.
+      tags: [Retention]
+      security:
+        - hmacAuth: []
+      parameters:
+        - name: archiveId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Test result
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [success]
+                properties:
+                  success:
+                    type: boolean
+                  error:
+                    type: string
+                    nullable: true
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /v1/retention/stats:
+    get:
+      operationId: getRetentionStats
+      summary: Get retention statistics
+      description: |
+        Returns finding counts grouped by severity and age bucket
+        (0-30d, 30-90d, 90-180d, 180-365d, 365d+). Refreshed after
+        each nightly retention cleanup run.
+      tags: [Retention]
+      security:
+        - hmacAuth: []
+      responses:
+        "200":
+          description: Retention statistics by severity and age bucket
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  stats:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/RetentionStat"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /v1/retention/stats/trend:
+    get:
+      operationId: getRetentionTrend
+      summary: Get 30-day retention trend
+      description: |
+        Returns daily cleanup volumes for the past 30 days for trend charts.
+      tags: [Retention]
+      security:
+        - hmacAuth: []
+      responses:
+        "200":
+          description: Daily retention trend
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  trend:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        date:
+                          type: string
+                          format: date
+                        deletedFindings:
+                          type: integer
+                        deletedScans:
+                          type: integer
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /v1/retention/preview:
+    get:
+      operationId: getRetentionPreview
+      summary: Preview deletion impact
+      description: |
+        Estimates how many records would be deleted under given tier values
+        without performing any deletions.
+      tags: [Retention]
+      security:
+        - hmacAuth: []
+      parameters:
+        - name: tierCritical
+          in: query
+          required: true
+          schema:
+            type: integer
+            minimum: 7
+        - name: tierHigh
+          in: query
+          required: true
+          schema:
+            type: integer
+            minimum: 7
+        - name: tierMedium
+          in: query
+          required: true
+          schema:
+            type: integer
+            minimum: 7
+        - name: tierLow
+          in: query
+          required: true
+          schema:
+            type: integer
+            minimum: 7
+      responses:
+        "200":
+          description: Estimated deletion counts
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  estimatedDeletions:
+                    type: object
+                    properties:
+                      findings:
+                        type: integer
+                      agentResults:
+                        type: integer
+                      scans:
+                        type: integer
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /v1/retention/executions:
+    get:
+      operationId: listRetentionExecutions
+      summary: List retention executions
+      description: |
+        Returns the history of nightly retention cleanup job runs.
+      tags: [Retention]
+      security:
+        - hmacAuth: []
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+      responses:
+        "200":
+          description: List of retention executions
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  executions:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/RetentionExecution"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /v1/retention/executions/{executionId}:
+    get:
+      operationId: getRetentionExecution
+      summary: Get a retention execution
+      tags: [Retention]
+      security:
+        - hmacAuth: []
+      parameters:
+        - name: executionId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Retention execution details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RetentionExecution"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
   /health:
     get:
       operationId: healthCheck
@@ -2976,6 +3499,26 @@ paths:
                 type: string
 
 components:
+  responses:
+    Unauthorized:
+      description: Missing or invalid HMAC signature
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    BadRequest:
+      description: Invalid request body or parameters
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+
   schemas:
     ScanSubmission:
       type: object
@@ -4107,6 +4650,232 @@ components:
         type: integer
         minimum: 0
         default: 0
+
+    RetentionPreset:
+      type: object
+      properties:
+        name:
+          type: string
+          enum: [minimal, standard, compliance, custom]
+        tierCritical:
+          type: integer
+          description: Retention days for critical findings
+        tierHigh:
+          type: integer
+        tierMedium:
+          type: integer
+        tierLow:
+          type: integer
+
+    RetentionPolicy:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        orgId:
+          type: string
+          format: uuid
+        preset:
+          type: string
+          enum: [minimal, standard, compliance, custom, legacy]
+        tierCritical:
+          type: integer
+          nullable: true
+        tierHigh:
+          type: integer
+          nullable: true
+        tierMedium:
+          type: integer
+          nullable: true
+        tierLow:
+          type: integer
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    RetentionChangeRequest:
+      type: object
+      required: [preset, tierCritical, tierHigh, tierMedium, tierLow]
+      properties:
+        preset:
+          type: string
+          enum: [minimal, standard, compliance, custom]
+        tierCritical:
+          type: integer
+          minimum: 7
+          maximum: 2555
+        tierHigh:
+          type: integer
+          minimum: 7
+          maximum: 2555
+        tierMedium:
+          type: integer
+          minimum: 7
+          maximum: 2555
+        tierLow:
+          type: integer
+          minimum: 7
+          maximum: 2555
+        reason:
+          type: string
+          description: Business justification for the change
+
+    RetentionPolicyChange:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        orgId:
+          type: string
+          format: uuid
+        proposedBy:
+          type: string
+          format: uuid
+        approvedBy:
+          type: string
+          format: uuid
+          nullable: true
+        status:
+          type: string
+          enum: [pending, approved, rejected]
+        preset:
+          type: string
+        tierCritical:
+          type: integer
+        tierHigh:
+          type: integer
+        tierMedium:
+          type: integer
+        tierLow:
+          type: integer
+        reason:
+          type: string
+          nullable: true
+        rejectionReason:
+          type: string
+          nullable: true
+        dryRunEstimate:
+          type: object
+          nullable: true
+          properties:
+            findings:
+              type: integer
+            agentResults:
+              type: integer
+            scans:
+              type: integer
+        createdAt:
+          type: string
+          format: date-time
+        resolvedAt:
+          type: string
+          format: date-time
+          nullable: true
+
+    ArchiveDestinationRequest:
+      type: object
+      required: [name, type, config]
+      properties:
+        name:
+          type: string
+          description: Human-readable label
+        type:
+          type: string
+          enum: [s3, gcs, azure-blob, webhook, sftp]
+        config:
+          type: object
+          description: Destination-specific configuration (bucket, region, URL, etc.)
+          additionalProperties: true
+        credentials:
+          type: object
+          description: Credentials to encrypt at rest (accessKeyId, secretAccessKey, etc.)
+          additionalProperties: true
+
+    ArchiveDestination:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        orgId:
+          type: string
+          format: uuid
+        name:
+          type: string
+        type:
+          type: string
+          enum: [s3, gcs, azure-blob, webhook, sftp]
+        config:
+          type: object
+          additionalProperties: true
+        lastTestedAt:
+          type: string
+          format: date-time
+          nullable: true
+        lastTestSuccess:
+          type: boolean
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+
+    RetentionStat:
+      type: object
+      properties:
+        severity:
+          type: string
+          enum: [critical, high, medium, low]
+        ageBucket:
+          type: string
+          enum: ["0-30d", "30-90d", "90-180d", "180-365d", "365d+"]
+        recordCount:
+          type: integer
+        snapshotAt:
+          type: string
+          format: date-time
+
+    RetentionExecution:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        orgId:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [pending, deleting, completed, failed]
+        policySnapshot:
+          type: object
+          description: Copy of the retention policy at time of execution
+          additionalProperties: true
+        deletedCount:
+          type: object
+          nullable: true
+          properties:
+            findings:
+              type: integer
+            agentResults:
+              type: integer
+            scans:
+              type: integer
+        error:
+          type: string
+          nullable: true
+        startedAt:
+          type: string
+          format: date-time
+        completedAt:
+          type: string
+          format: date-time
+          nullable: true
 
   securitySchemes:
     hmacAuth:
