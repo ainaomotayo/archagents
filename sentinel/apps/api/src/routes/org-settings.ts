@@ -35,7 +35,7 @@ export function registerOrgSettingsRoutes(app: FastifyInstance, authHook: any) {
 
     await db.organization.update({
       where: { id: orgId },
-      data: { settings: merged },
+      data: { settings: merged as unknown as object },
     });
 
     return reply.send(merged);

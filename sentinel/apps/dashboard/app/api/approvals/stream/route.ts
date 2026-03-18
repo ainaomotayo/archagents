@@ -11,7 +11,9 @@
 
 import { NextRequest } from "next/server";
 
-export const runtime = "edge";
+// Must use nodejs runtime — @sentinel/auth uses node:crypto which is not
+// available in the Edge runtime.
+export const runtime = "nodejs";
 
 const API_URL = process.env.SENTINEL_API_URL ?? "http://localhost:8080";
 const API_SECRET = process.env.SENTINEL_SECRET ?? "";
