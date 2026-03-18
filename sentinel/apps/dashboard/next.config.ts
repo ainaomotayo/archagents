@@ -4,7 +4,14 @@ const nextConfig: NextConfig = {
   output: "standalone",
   // Keep Node.js-only packages out of the client bundle.
   // These use node:crypto / node:fs which webpack cannot resolve client-side.
-  serverExternalPackages: ["@sentinel/security", "@sentinel/auth", "@sentinel/policy-engine"],
+  serverExternalPackages: [
+    "@sentinel/security",
+    "@sentinel/auth",
+    "@sentinel/policy-engine",
+    "@google-cloud/kms",
+    "google-gax",
+    "@grpc/grpc-js",
+  ],
   webpack(config, { isServer }) {
     if (!isServer) {
       // Webpack 5 does not resolve the 'node:' URL scheme for browser targets.
@@ -21,6 +28,8 @@ const nextConfig: NextConfig = {
         "node:events": false,
         "node:net": false,
         "node:tls": false,
+        "node:http2": false,
+        "node:dns": false,
       };
       // Belt-and-suspenders: also apply fallbacks for bare module names
       config.resolve.fallback = {
@@ -32,6 +41,8 @@ const nextConfig: NextConfig = {
         stream: false,
         path: false,
         os: false,
+        http2: false,
+        dns: false,
       };
     }
     return config;
