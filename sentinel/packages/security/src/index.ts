@@ -66,7 +66,8 @@ export { GcpKmsKeyStore } from "./kms-gcp.js";
 export { AzureArchiveProvider } from "./archive-azure.js";
 export { AzureKmsKeyStore } from "./kms-azure.js";
 
-export { buildRetentionQuery, runRetentionCleanup, DEFAULT_RETENTION_DAYS } from "./data-retention.js";
+export { buildRetentionQuery, runRetentionCleanup, runTieredRetentionCleanup, DEFAULT_RETENTION_DAYS } from "./data-retention.js";
+export type { TieredRetentionConfig } from "./data-retention.js";
 
 export { ProviderHealthMonitor, type ProviderStatus } from "./provider-health.js";
 

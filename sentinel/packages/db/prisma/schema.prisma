@@ -42,6 +42,12 @@ model Organization {
   reportSchedules             ReportSchedule[]
   digestSnapshots             DigestSnapshot[]
   complianceWizards           ComplianceWizard[]
+  retentionPolicies           RetentionPolicy[]
+  retentionPolicyChanges      RetentionPolicyChange[]
+  archiveDestinations         ArchiveDestination[]
+  retentionExecutions         RetentionExecution[]
+  retentionStats              RetentionStats[]
+  encryptedCredentials        EncryptedCredential[]
 
   @@map("organizations")
 }
@@ -1233,4 +1239,99 @@ model WizardDocument {
 
   @@unique([wizardId, documentType])
   @@map("wizard_documents")
+}
+
+// ── Data Retention ──────────────────────────────────────────────────
+
+model RetentionPolicy {
+  id           String       @id @default(uuid()) @db.Uuid
+  orgId        String       @db.Uuid @map("org_id")
+  org          Organization @relation(fields: [orgId], references: [id])
+  preset       String
+  tierCritical Int          @map("tier_critical")
+  tierHigh     Int          @map("tier_high")
+  tierMedium   Int          @map("tier_medium")
+  tierLow      Int          @map("tier_low")
+  createdAt    DateTime     @default(now()) @map("created_at")
+  updatedAt    DateTime     @updatedAt @map("updated_at")
+
+  @@unique([orgId])
+  @@map("retention_policies")
+}
+
+model RetentionPolicyChange {
+  id             String    @id @default(uuid()) @db.Uuid
+  orgId          String    @db.Uuid @map("org_id")
+  org            Organization @relation(fields: [orgId], references: [id])
+  requestedBy    String    @db.Uuid @map("requested_by")
+  reviewedBy     String?   @db.Uuid @map("reviewed_by")
+  status         String    @default("pending")
+  preset         String
+  tierCritical   Int       @map("tier_critical")
+  tierHigh       Int       @map("tier_high")
+  tierMedium     Int       @map("tier_medium")
+  tierLow        Int       @map("tier_low")
+  dryRunEstimate Json?     @map("dry_run_estimate")
+  reviewNote     String?   @map("review_note")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  reviewedAt     DateTime? @map("reviewed_at")
+  appliedAt      DateTime? @map("applied_at")
+
+  @@map("retention_policy_changes")
+}
+
+model ArchiveDestination {
+  id            String   @id @default(uuid()) @db.Uuid
+  orgId         String   @db.Uuid @map("org_id")
+  org           Organization @relation(fields: [orgId], references: [id])
+  type          String
+  name          String
+  config        Json
+  credentialRef String?  @db.Uuid @map("credential_ref")
+  enabled       Boolean  @default(true)
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  @@map("archive_destinations")
+}
+
+model RetentionExecution {
+  id              String    @id @default(uuid()) @db.Uuid
+  orgId           String    @db.Uuid @map("org_id")
+  org             Organization @relation(fields: [orgId], references: [id])
+  status          String    @default("pending")
+  policySnapshot  Json      @map("policy_snapshot")
+  archivedCount   Json?     @map("archived_count")
+  deletedCount    Json?     @map("deleted_count")
+  error           String?
+  startedAt       DateTime  @default(now()) @map("started_at")
+  completedAt     DateTime? @map("completed_at")
+
+  @@map("retention_executions")
+}
+
+model RetentionStats {
+  id          String   @id @default(uuid()) @db.Uuid
+  orgId       String   @db.Uuid @map("org_id")
+  org         Organization @relation(fields: [orgId], references: [id])
+  severity    String
+  ageBucket   String   @map("age_bucket")
+  recordCount Int      @map("record_count")
+  snapshotAt  DateTime @default(now()) @map("snapshot_at")
+
+  @@unique([orgId, severity, ageBucket, snapshotAt])
+  @@map("retention_stats")
+}
+
+model EncryptedCredential {
+  id         String   @id @default(uuid()) @db.Uuid
+  orgId      String   @db.Uuid @map("org_id")
+  org        Organization @relation(fields: [orgId], references: [id])
+  ciphertext Bytes
+  iv         Bytes
+  tag        Bytes
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  @@map("encrypted_credentials")
 }

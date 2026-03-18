@@ -1,4 +1,4 @@
-import { runRetentionCleanup, DEFAULT_RETENTION_DAYS } from "@sentinel/security";
+import { runRetentionCleanup, runTieredRetentionCleanup, DEFAULT_RETENTION_DAYS } from "@sentinel/security";
 import type { SchedulerJob, JobContext } from "../types.js";
 
 export class RetentionJob implements SchedulerJob {
@@ -12,10 +12,30 @@ export class RetentionJob implements SchedulerJob {
       select: { id: true, settings: true },
     });
     for (const org of orgs) {
-      const retentionDays = (org.settings as any)?.retentionDays ?? DEFAULT_RETENTION_DAYS;
-      const result = await runRetentionCleanup(ctx.db, retentionDays, org.id);
-      if (result.deletedFindings + result.deletedAgentResults + result.deletedScans > 0) {
-        ctx.logger.info({ orgId: org.id, retentionDays, ...result }, "Org retention cleanup completed");
+      // Check for per-org tiered retention policy first
+      const policy = await ctx.db.retentionPolicy.findUnique({ where: { orgId: org.id } });
+
+      let result: { deletedFindings: number; deletedAgentResults: number; deletedScans: number };
+      if (policy) {
+        result = await runTieredRetentionCleanup(
+          ctx.db,
+          {
+            critical: policy.tierCritical,
+            high: policy.tierHigh,
+            medium: policy.tierMedium,
+            low: policy.tierLow,
+          },
+          org.id,
+        );
+        if (result.deletedFindings + result.deletedAgentResults + result.deletedScans > 0) {
+          ctx.logger.info({ orgId: org.id, tiers: { critical: policy.tierCritical, high: policy.tierHigh, medium: policy.tierMedium, low: policy.tierLow }, ...result }, "Tiered retention cleanup completed");
+        }
+      } else {
+        const retentionDays = (org.settings as any)?.retentionDays ?? DEFAULT_RETENTION_DAYS;
+        result = await runRetentionCleanup(ctx.db, retentionDays, org.id);
+        if (result.deletedFindings + result.deletedAgentResults + result.deletedScans > 0) {
+          ctx.logger.info({ orgId: org.id, retentionDays, ...result }, "Org retention cleanup completed");
+        }
       }
     }
     ctx.logger.info("Data retention cleanup completed for all orgs");

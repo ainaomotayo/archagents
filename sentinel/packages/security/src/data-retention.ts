@@ -92,3 +92,57 @@ export async function runRetentionCleanup(
 
   return { deletedFindings, deletedAgentResults, deletedScans };
 }
+
+export interface TieredRetentionConfig {
+  critical: number;
+  high: number;
+  medium: number;
+  low: number;
+}
+
+/**
+ * Delete old scan data using per-severity retention tiers.
+ * Findings are deleted based on their severity tier cutoff.
+ * Agent results and scans use the minimum (most aggressive) tier.
+ * Certificates and audit events are NEVER deleted (compliance requirement).
+ */
+export async function runTieredRetentionCleanup(
+  db: {
+    finding: ChunkableModel;
+    agentResult: ChunkableModel;
+    scan: ChunkableModel;
+  },
+  tiers: TieredRetentionConfig,
+  orgId?: string,
+): Promise<{ deletedFindings: number; deletedAgentResults: number; deletedScans: number }> {
+  const now = new Date();
+  let totalFindings = 0;
+
+  // Delete findings per severity tier
+  for (const [severity, days] of Object.entries(tiers)) {
+    const cutoff = new Date(now);
+    cutoff.setDate(cutoff.getDate() - days);
+    const orgFilter = orgId ? { scan: { project: { orgId } } } : {};
+    totalFindings += await chunkedDelete(
+      db.finding,
+      { severity, createdAt: { lt: cutoff }, ...orgFilter },
+    );
+  }
+
+  // For agent results and scans, use the minimum tier (most aggressive)
+  const minDays = Math.min(tiers.critical, tiers.high, tiers.medium, tiers.low);
+  const minCutoff = new Date(now);
+  minCutoff.setDate(minCutoff.getDate() - minDays);
+
+  const scanOrgFilter = orgId ? { project: { orgId } } : {};
+  const deletedAgentResults = await chunkedDelete(
+    db.agentResult,
+    { scan: { startedAt: { lt: minCutoff }, ...scanOrgFilter } },
+  );
+  const deletedScans = await chunkedDelete(
+    db.scan,
+    { startedAt: { lt: minCutoff }, certificate: null, ...scanOrgFilter },
+  );
+
+  return { deletedFindings: totalFindings, deletedAgentResults, deletedScans };
+}
