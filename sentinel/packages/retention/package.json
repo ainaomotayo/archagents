@@ -11,10 +11,12 @@
     "lint": "echo 'lint placeholder'"
   },
   "dependencies": {
-    "@sentinel/shared": "workspace:*"
+    "@sentinel/shared": "workspace:*",
+    "ssh2-sftp-client": "^12.1.0"
   },
   "devDependencies": {
     "@types/node": "^25.3.5",
+    "@types/ssh2-sftp-client": "^9.0.6",
     "typescript": "^5.7",
     "vitest": "^3.0"
   }
