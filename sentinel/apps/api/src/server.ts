@@ -213,11 +213,6 @@ app.get("/health", { config: { rateLimit: false } }, async () => ({
   uptime: process.uptime(),
 }));
 
-// --- Metrics (no auth, no rate limit) ---
-app.get("/metrics", { config: { rateLimit: false } }, async (_request, reply) => {
-  const metrics = await registry.metrics();
-  reply.type("text/plain").send(metrics);
-});
 
 // --- Scans ---
 app.get("/v1/scans", { preHandler: authHook }, async (request) => {
