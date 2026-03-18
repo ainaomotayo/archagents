@@ -18,6 +18,20 @@ const nextConfig: NextConfig = {
       // Alias each node: import to false so they resolve to empty modules.
       config.resolve.alias = {
         ...config.resolve.alias,
+        // Server-only packages: substitute empty modules in the client bundle.
+        // @sentinel/security imports Google/AWS/Azure SDKs that require Node.js
+        // built-ins (child_process, http2, dns, etc.) unavailable in browsers.
+        "@sentinel/security": false,
+        "@google-cloud/kms": false,
+        "@google-cloud/storage": false,
+        "google-auth-library": false,
+        "google-gax": false,
+        "@grpc/grpc-js": false,
+        "@aws-sdk/client-kms": false,
+        "@aws-sdk/client-s3": false,
+        "@azure/identity": false,
+        "@azure/keyvault-keys": false,
+        "@azure/storage-blob": false,
         "node:crypto": false,
         "node:fs": false,
         "node:path": false,
