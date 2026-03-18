@@ -19,9 +19,12 @@ COPY packages/db/package.json packages/db/
 COPY packages/events/package.json packages/events/
 COPY packages/github/package.json packages/github/
 COPY packages/notifications/package.json packages/notifications/
+COPY packages/policy-engine/package.json packages/policy-engine/
+COPY packages/retention/package.json packages/retention/
 COPY packages/security/package.json packages/security/
 COPY packages/shared/package.json packages/shared/
 COPY packages/telemetry/package.json packages/telemetry/
+COPY packages/vcs/package.json packages/vcs/
 
 RUN pnpm install --frozen-lockfile
 

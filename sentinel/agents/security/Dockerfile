@@ -5,7 +5,11 @@ WORKDIR /app
 # Install semgrep
 RUN pip install --no-cache-dir semgrep
 
-# Install framework first
+# Install core first (framework depends on sentinel-agent-core)
+COPY agents/core/ /tmp/core/
+RUN pip install --no-cache-dir /tmp/core/ && rm -rf /tmp/core/
+
+# Install framework
 COPY agents/framework/ /tmp/framework/
 RUN pip install --no-cache-dir /tmp/framework/ && rm -rf /tmp/framework/
 
