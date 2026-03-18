@@ -50,6 +50,7 @@ import { registerJitRoutes } from "./routes/jit-provision.js";
 import { registerSessionRoutes } from "./routes/sessions.js";
 import { registerAuditEventRoutes } from "./routes/audit-events.js";
 import { registerOrgSettingsRoutes } from "./routes/org-settings.js";
+import { registerRetentionRoutes } from "./routes/retention.js";
 import { registerVcsWebhookRoutes } from "./routes/vcs-webhooks.js";
 import { registerVcsInstallationRoutes } from "./routes/vcs-installations.js";
 import { VcsProviderRegistry, GitHubProvider, GitLabProvider, BitbucketProvider, AzureDevOpsProvider } from "@sentinel/vcs";
@@ -2241,6 +2242,7 @@ registerJitRoutes(app);  // Public, called by NextAuth signIn callback
 registerSessionRoutes(app);  // Public, called by NextAuth jwt callback + signIn event
 registerAuditEventRoutes(app, auditLog);  // Public, called by NextAuth audit emitter
 registerOrgSettingsRoutes(app, authHook);  // Org settings (session policy, etc.)
+registerRetentionRoutes(app, authHook);  // Data retention policy, archives, stats
 // --- Encryption wiring ---
 dekCache = new DekCache();
 const kms = new LocalKmsProvider();

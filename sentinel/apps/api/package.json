@@ -24,6 +24,7 @@
     "@sentinel/github": "workspace:*",
     "@sentinel/notifications": "workspace:*",
     "@sentinel/policy-engine": "workspace:*",
+    "@sentinel/retention": "workspace:*",
     "@sentinel/security": "workspace:*",
     "@sentinel/shared": "workspace:*",
     "@sentinel/telemetry": "workspace:*",

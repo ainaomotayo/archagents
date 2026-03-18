@@ -62,6 +62,9 @@ importers:
       '@sentinel/policy-engine':
         specifier: workspace:*
         version: link:../../packages/policy-engine
+      '@sentinel/retention':
+        specifier: workspace:*
+        version: link:../../packages/retention
       '@sentinel/security':
         specifier: workspace:*
         version: link:../../packages/security
