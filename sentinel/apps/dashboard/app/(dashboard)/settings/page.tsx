@@ -421,6 +421,14 @@ export default function SettingsPage() {
         />
 
         <LinkSectionCard
+          title="Data Retention"
+          description="Configure retention policies, archive destinations, and review cleanup history."
+          href="/settings/retention"
+          Icon={IconActivity}
+          animationDelay="0.32s"
+        />
+
+        <LinkSectionCard
           title="Audit & Compliance"
           description="Data retention, export settings, and compliance configuration."
           href="/audit"
