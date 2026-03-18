@@ -16,9 +16,7 @@ x-common-env: &common-env
   REDIS_URL: redis://redis:6379
 
 x-api-image: &api-image
-  build:
-    context: .
-    dockerfile: docker/api.Dockerfile
+  image: ghcr.io/ainaomotayo/sentinel-api:latest
 
 x-agent-base: &agent-base
   restart: unless-stopped
@@ -95,15 +93,13 @@ services:
       AZURE_KEY_VAULT_URL: ${AZURE_KEY_VAULT_URL:-}
       AZURE_KEY_NAME: ${AZURE_KEY_NAME:-sentinel-master}
     healthcheck:
-      test: ["CMD", "node", "docker/healthcheck.js", "8080"]
+      test: ["CMD-SHELL", "HEALTH_PORT=8080 node healthcheck.js"]
       interval: 15s
       timeout: 5s
       retries: 3
 
   dashboard:
-    build:
-      context: .
-      dockerfile: docker/dashboard.Dockerfile
+    image: ghcr.io/ainaomotayo/sentinel-dashboard:latest
     restart: unless-stopped
     ports:
       - "3000:3000"
@@ -167,7 +163,7 @@ services:
       WORKER_HEALTH_PORT: "9092"
     command: ["node", "apps/api/dist/worker.js"]
     healthcheck:
-      test: ["CMD", "node", "docker/healthcheck.js", "9092"]
+      test: ["CMD-SHELL", "HEALTH_PORT=9092 node healthcheck.js"]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -188,7 +184,7 @@ services:
       SCHEDULER_PORT: "9091"
     command: ["node", "apps/api/dist/scheduler.js"]
     healthcheck:
-      test: ["CMD", "node", "docker/healthcheck.js", "9091"]
+      test: ["CMD-SHELL", "HEALTH_PORT=9091 node healthcheck.js"]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -210,7 +206,7 @@ services:
       REPORT_WORKER_PORT: "9094"
     command: ["node", "apps/api/dist/report-worker.js"]
     healthcheck:
-      test: ["CMD", "node", "docker/healthcheck.js", "9094"]
+      test: ["CMD-SHELL", "HEALTH_PORT=9094 node healthcheck.js"]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -228,7 +224,7 @@ services:
       NOTIFICATION_WORKER_PORT: "9095"
     command: ["node", "apps/api/dist/notification-worker.js"]
     healthcheck:
-      test: ["CMD", "node", "docker/healthcheck.js", "9095"]
+      test: ["CMD-SHELL", "HEALTH_PORT=9095 node healthcheck.js"]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -248,7 +244,7 @@ services:
       GITHUB_BRIDGE_PORT: "9092"
     command: ["node", "apps/api/dist/github-bridge.js"]
     healthcheck:
-      test: ["CMD", "node", "docker/healthcheck.js", "9092"]
+      test: ["CMD-SHELL", "HEALTH_PORT=9092 node healthcheck.js"]
       interval: 15s
       timeout: 5s
       retries: 3
@@ -257,9 +253,7 @@ services:
 
   agent-security:
     <<: *agent-base
-    build:
-      context: .
-      dockerfile: agents/security/Dockerfile
+    image: ghcr.io/ainaomotayo/sentinel-agent-security:latest
     environment:
       REDIS_URL: redis://redis:6379
     healthcheck:
@@ -270,9 +264,7 @@ services:
 
   agent-dependency:
     <<: *agent-base
-    build:
-      context: .
-      dockerfile: agents/dependency/Dockerfile
+    image: ghcr.io/ainaomotayo/sentinel-agent-dependency:latest
     environment:
       REDIS_URL: redis://redis:6379
     healthcheck:
@@ -293,7 +285,7 @@ services:
     environment:
       REDIS_URL: redis://redis:6379
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/')"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8081/')"]
       interval: 15s
       timeout: 5s
       retries: 3
@@ -304,13 +296,11 @@ services:
       - all-agents
     build:
       context: .
-      dockerfile: docker/agent.Dockerfile
-      args:
-        AGENT_NAME: quality
+      dockerfile: agents/quality/Dockerfile
     environment:
       REDIS_URL: redis://redis:6379
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/')"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8085/')"]
       interval: 15s
       timeout: 5s
       retries: 3
@@ -321,13 +311,11 @@ services:
       - all-agents
     build:
       context: .
-      dockerfile: docker/agent.Dockerfile
-      args:
-        AGENT_NAME: ai-detector
+      dockerfile: agents/ai-detector/Dockerfile
     environment:
       REDIS_URL: redis://redis:6379
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/')"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8086/')"]
       interval: 15s
       timeout: 5s
       retries: 3
@@ -338,13 +326,42 @@ services:
       - all-agents
     build:
       context: .
-      dockerfile: docker/agent.Dockerfile
-      args:
-        AGENT_NAME: policy
+      dockerfile: agents/policy/Dockerfile
     environment:
       REDIS_URL: redis://redis:6379
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/')"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8088/')"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
+  agent-llm-review:
+    <<: *agent-base
+    profiles:
+      - all-agents
+    build:
+      context: .
+      dockerfile: agents/llm-review/Dockerfile
+    environment:
+      REDIS_URL: redis://redis:6379
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8087/')"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
+  agent-formal-verification:
+    <<: *agent-base
+    profiles:
+      - all-agents
+    build:
+      context: .
+      dockerfile: agents/formal-verification/Dockerfile
+    environment:
+      REDIS_URL: redis://redis:6379
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8084/')"]
       interval: 15s
       timeout: 5s
       retries: 3
