@@ -5,6 +5,7 @@ import { StatusBadge } from "@/components/status-badge";
 import { IconFolder, IconExternalLink } from "@/components/icons";
 import { RiskSparkline } from "@/components/risk-sparkline";
 import { RiskTrendBadge } from "@/components/risk-trend-badge";
+import { EmptyState } from "@/components/empty-state";
 
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString("en-US", {
@@ -27,20 +28,23 @@ export default async function ProjectsPage() {
       <PageHeader
         title="Projects"
         description={`${projects.length} monitored repositories \u00B7 ${activeCount} with recent scans`}
+        action={
+          <Link
+            href="/settings/vcs"
+            className="inline-flex items-center gap-1.5 rounded-lg bg-accent px-3.5 py-2 text-[12px] font-semibold text-white transition-all hover:brightness-110 focus-ring"
+          >
+            Connect repository <span aria-hidden>+</span>
+          </Link>
+        }
       />
 
       {projects.length === 0 ? (
-        <div className="flex h-48 items-center justify-center rounded-xl border border-dashed border-border bg-surface-1">
-          <div className="text-center">
-            <IconFolder className="mx-auto h-8 w-8 text-text-tertiary" />
-            <p className="mt-3 text-[14px] font-semibold text-text-primary">
-              No projects yet
-            </p>
-            <p className="mt-1 text-[12px] text-text-tertiary">
-              Submit your first scan to create a project.
-            </p>
-          </div>
-        </div>
+        <EmptyState
+          icon={IconFolder}
+          headline="No repositories monitored yet"
+          body="Connect a repository via your VCS integration to start scanning."
+          cta={{ label: "Go to Integrations", href: "/settings/vcs" }}
+        />
       ) : (
         <div className="grid gap-3">
           {projects.map((project, i) => {
@@ -94,6 +98,26 @@ export default async function ProjectsPage() {
                     )}
                     {project.lastScanStatus && (
                       <StatusBadge status={project.lastScanStatus} />
+                    )}
+                    {(() => {
+                      const { status, findings } = { status: project.lastScanStatus, findings: project.findingCount };
+                      if (!status) return null;
+                      const chip =
+                        status === "fail" || findings >= 10
+                          ? { label: "Critical", cls: "text-status-fail bg-status-fail/10" }
+                          : status === "provisional" || findings >= 3
+                            ? { label: "At Risk", cls: "text-status-warn bg-status-warn/10" }
+                            : { label: "Healthy", cls: "text-status-pass bg-status-pass/10" };
+                      return (
+                        <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${chip.cls}`}>
+                          {chip.label}
+                        </span>
+                      );
+                    })()}
+                    {project.lastScanDate && Date.now() - new Date(project.lastScanDate).getTime() > 7 * 24 * 60 * 60 * 1000 && (
+                      <span className="rounded-full px-2 py-0.5 text-[10px] font-semibold text-status-warn bg-status-warn/10">
+                        Scan overdue
+                      </span>
                     )}
                     <div className="flex items-center gap-4">
                       <div className="text-right">
