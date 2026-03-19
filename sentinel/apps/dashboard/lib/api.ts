@@ -271,6 +271,29 @@ export async function getProjectCertificate(
   return certs.find((c) => c.projectId === projectId && c.status === "active") ?? null;
 }
 
+// ── VCS Installations ─────────────────────────────────────────────────
+
+export interface VCSInstallation {
+  id: string;
+  provider: "github" | "gitlab" | "bitbucket" | "azure_devops";
+  installationId: string;
+  owner: string;
+  active: boolean;
+  webhookSecret: string;
+  createdAt: string;
+  azureDevOpsExt?: {
+    organizationUrl: string;
+    projectName: string;
+  };
+}
+
+export async function getVCSInstallations(): Promise<VCSInstallation[]> {
+  return tryApi(async (headers) => {
+    const { apiGet } = await import("./api-client");
+    return apiGet<VCSInstallation[]>("/v1/vcs/installations", undefined, headers);
+  }, []);
+}
+
 // ── Policies ──────────────────────────────────────────────────────────
 
 export async function getPolicies() {

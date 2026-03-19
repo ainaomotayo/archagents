@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { MOCK_VCS_INSTALLATIONS } from "@/lib/demo-data";
 import { PageHeader } from "@/components/page-header";
 import { IconPlus, IconGithub, IconGlobe, IconGrid, IconCpu } from "@/components/icons";
 
@@ -37,14 +36,14 @@ const PROVIDER_META: Record<VcsProvider, { label: string; color: string }> = {
 /* ─── Persistence ─── */
 
 function loadInstallations(): VcsInstallation[] {
-  if (typeof window === "undefined") return MOCK_VCS_INSTALLATIONS as VcsInstallation[];
+  if (typeof window === "undefined") return [];
   try {
     const stored = localStorage.getItem(STORAGE_KEY);
     if (stored) return JSON.parse(stored);
   } catch {
     // ignore parse errors
   }
-  return MOCK_VCS_INSTALLATIONS as VcsInstallation[];
+  return [];
 }
 
 function saveInstallations(installations: VcsInstallation[]) {
@@ -77,9 +76,7 @@ function ProviderIcon({ provider, className }: { provider: VcsProvider; classNam
 /* ─── Page ─── */
 
 export default function VcsProvidersPage() {
-  const [installations, setInstallations] = useState<VcsInstallation[]>(
-    MOCK_VCS_INSTALLATIONS as VcsInstallation[],
-  );
+  const [installations, setInstallations] = useState<VcsInstallation[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [feedback, setFeedback] = useState<{ type: "success" | "error"; message: string } | null>(null);
 

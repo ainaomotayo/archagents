@@ -3,6 +3,7 @@ import {
   getRecentScans,
   getComplianceScores,
   getAIMetricsStats,
+  getFindings,
 } from "@/lib/api";
 import { PageHeader } from "@/components/page-header";
 import { StatusBadge } from "@/components/status-badge";
@@ -30,11 +31,12 @@ function formatRelative(iso: string): string {
 }
 
 export default async function OverviewPage() {
-  const [stats, recentScans, complianceScores, aiStats] = await Promise.all([
+  const [stats, recentScans, complianceScores, aiStats, findings] = await Promise.all([
     getOverviewStats(),
     getRecentScans(10),
     getComplianceScores().catch(() => []),
     getAIMetricsStats().catch(() => null),
+    getFindings().catch(() => []),
   ]);
 
   const isNewOrg = stats.totalScans === 0;
@@ -49,9 +51,21 @@ export default async function OverviewPage() {
         )
       : 0;
 
+  // Per-severity finding breakdown
+  const openFindings = findings.filter((f) => f.status === "open");
+  const severityCounts = {
+    critical: openFindings.filter((f) => f.severity === "critical").length,
+    high: openFindings.filter((f) => f.severity === "high").length,
+    medium: openFindings.filter((f) => f.severity === "medium").length,
+    low: openFindings.filter((f) => f.severity === "low").length,
+  };
+  const totalOpenFindings = openFindings.length;
+  const criticalRatio = totalOpenFindings > 0 ? severityCounts.critical / totalOpenFindings : 0;
+
   function calcGrade(
     passRate: number,
     compAvg: number,
+    criticalRatio: number,
   ): { grade: string; color: string; ringColor: string } {
     if (passRate === 0 && compAvg === 0)
       return {
@@ -59,7 +73,7 @@ export default async function OverviewPage() {
         color: "text-text-tertiary",
         ringColor: "stroke-border",
       };
-    const score = passRate * 0.6 + compAvg * 0.4;
+    const score = passRate * 0.5 + compAvg * 0.3 + (1 - criticalRatio) * 20;
     if (score >= 90)
       return {
         grade: "A",
@@ -94,6 +108,7 @@ export default async function OverviewPage() {
   const { grade, color: gradeColor, ringColor } = calcGrade(
     stats.passRate,
     complianceAvg,
+    criticalRatio,
   );
 
   // Risk trend delta (real, not hardcoded)
@@ -287,7 +302,7 @@ export default async function OverviewPage() {
               <h3 className="text-[11px] font-semibold uppercase tracking-wider text-text-tertiary">
                 Security
               </h3>
-              {stats.openFindings === 0 ? (
+              {totalOpenFindings === 0 ? (
                 <>
                   <div className="mt-3 flex items-center gap-2">
                     <IconShieldCheck className="h-5 w-5 text-status-pass" />
@@ -300,11 +315,62 @@ export default async function OverviewPage() {
               ) : (
                 <div className="mt-3">
                   <p className="text-2xl font-bold text-status-fail">
-                    {stats.openFindings}
+                    {totalOpenFindings}
                   </p>
                   <p className="mt-0.5 text-[12px] text-text-tertiary">
                     open findings require attention
                   </p>
+                  {/* Severity bar */}
+                  <div className="mt-3 space-y-1.5">
+                    <div className="flex h-2 w-full overflow-hidden rounded-full bg-surface-2">
+                      {severityCounts.critical > 0 && (
+                        <div
+                          style={{ width: `${(severityCounts.critical / totalOpenFindings) * 100}%` }}
+                          className="bg-severity-critical"
+                        />
+                      )}
+                      {severityCounts.high > 0 && (
+                        <div
+                          style={{ width: `${(severityCounts.high / totalOpenFindings) * 100}%` }}
+                          className="bg-severity-high"
+                        />
+                      )}
+                      {severityCounts.medium > 0 && (
+                        <div
+                          style={{ width: `${(severityCounts.medium / totalOpenFindings) * 100}%` }}
+                          className="bg-severity-medium"
+                        />
+                      )}
+                      {severityCounts.low > 0 && (
+                        <div
+                          style={{ width: `${(severityCounts.low / totalOpenFindings) * 100}%` }}
+                          className="bg-severity-low"
+                        />
+                      )}
+                    </div>
+                    <div className="flex gap-3 text-[10px] text-text-tertiary">
+                      {severityCounts.critical > 0 && (
+                        <span>
+                          <span className="text-severity-critical font-semibold">{severityCounts.critical}</span> Critical
+                        </span>
+                      )}
+                      {severityCounts.high > 0 && (
+                        <span>
+                          <span className="text-severity-high font-semibold">{severityCounts.high}</span> High
+                        </span>
+                      )}
+                      {severityCounts.medium > 0 && (
+                        <span>
+                          <span className="text-severity-medium font-semibold">{severityCounts.medium}</span> Medium
+                        </span>
+                      )}
+                      {severityCounts.low > 0 && (
+                        <span>
+                          <span className="text-severity-low font-semibold">{severityCounts.low}</span> Low
+                        </span>
+                      )}
+                    </div>
+                  </div>
                   <a
                     href="/findings"
                     className="mt-3 block text-[11px] font-medium text-accent transition-colors hover:brightness-110"
