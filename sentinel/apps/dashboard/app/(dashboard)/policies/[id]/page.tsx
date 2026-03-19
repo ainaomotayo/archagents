@@ -11,7 +11,7 @@ import {
 } from "@/components/policy-validator";
 import { PolicyBuilder } from "@/components/policy-builder";
 import type { GroupNode } from "@/components/policy-builder";
-import { MOCK_POLICIES } from "@/lib/mock-data";
+import { MOCK_POLICIES } from "@/lib/demo-data";
 import { IconChevronLeft } from "@/components/icons";
 import { updatePolicy, createPolicy } from "./actions";
 

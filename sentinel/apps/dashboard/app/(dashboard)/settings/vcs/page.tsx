@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { MOCK_VCS_INSTALLATIONS } from "@/lib/mock-data";
+import { MOCK_VCS_INSTALLATIONS } from "@/lib/demo-data";
 import { PageHeader } from "@/components/page-header";
 import { IconPlus, IconGithub, IconGlobe, IconGrid, IconCpu } from "@/components/icons";
 

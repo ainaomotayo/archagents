@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { MOCK_WEBHOOKS } from "@/lib/mock-data";
+import { MOCK_WEBHOOKS } from "@/lib/demo-data";
 import { PageHeader } from "@/components/page-header";
 import { IconPlus, IconGlobe } from "@/components/icons";
 
