@@ -37,8 +37,6 @@ import type {
   VelocityDataPoint,
 } from "./types";
 
-// TODO(Task 2): Remove USE_MOCK once all AI metrics functions are migrated off inline mock branches
-const USE_MOCK = !process.env.SENTINEL_API_URL;
 
 async function getSessionHeaders(): Promise<Record<string, string>> {
   try {
@@ -674,114 +672,99 @@ export async function getIPAttributionToolBreakdown(): Promise<Array<{ tool: str
 // ── AI Metrics ──────────────────────────────────────────
 
 export async function getAIMetricsStats(): Promise<AIMetricsStats> {
-  if (USE_MOCK) {
-    return {
-      hasData: true,
-      stats: { aiRatio: 0.23, aiFiles: 45, totalFiles: 196, aiLoc: 3200, totalLoc: 14000, aiInfluenceScore: 0.31, avgProbability: 0.42, medianProbability: 0.38, p95Probability: 0.89 },
-      toolBreakdown: [
-        { tool: "copilot", confirmedFiles: 25, estimatedFiles: 5, totalLoc: 1800, percentage: 56 },
-        { tool: "claude", confirmedFiles: 10, estimatedFiles: 3, totalLoc: 900, percentage: 28 },
-        { tool: "chatgpt", confirmedFiles: 2, estimatedFiles: 0, totalLoc: 500, percentage: 16 },
-      ],
-    };
-  }
-  const headers = await getSessionHeaders();
-  const res = await fetch(`${process.env.SENTINEL_API_URL}/v1/ai-metrics/stats`, { headers, next: { revalidate: 60 } });
-  if (!res.ok) throw new Error(`AI metrics stats: ${res.status}`);
-  return res.json();
+  return tryApi(async (headers) => {
+    const res = await fetch(`${process.env.SENTINEL_API_URL}/v1/ai-metrics/stats`, {
+      headers,
+      next: { revalidate: 60 },
+    });
+    if (!res.ok) throw new Error(`AI metrics stats: ${res.status}`);
+    return res.json();
+  }, {
+    hasData: false,
+    stats: { aiRatio: 0, aiFiles: 0, totalFiles: 0, aiLoc: 0, totalLoc: 0, aiInfluenceScore: 0, avgProbability: 0, medianProbability: 0, p95Probability: 0 },
+    toolBreakdown: [],
+  });
 }
 
 export async function getAIMetricsTrend(days = 30, projectId?: string): Promise<AITrendResult> {
-  if (USE_MOCK) {
-    const points = Array.from({ length: days }, (_, i) => {
-      const d = new Date(); d.setDate(d.getDate() - (days - i - 1));
-      return { date: d.toISOString().slice(0, 10), aiRatio: 0.2 + Math.random() * 0.1, aiInfluenceScore: 0.25 + Math.random() * 0.1, scanCount: 1 };
+  return tryApi(async (headers) => {
+    const params = new URLSearchParams({ days: String(days) });
+    if (projectId) params.set("projectId", projectId);
+    const res = await fetch(`${process.env.SENTINEL_API_URL}/v1/ai-metrics/trend?${params}`, {
+      headers,
+      next: { revalidate: 60 },
     });
-    return { points, momChange: 0.05, movingAvg7d: 0.24, movingAvg30d: 0.23 };
-  }
-  const headers = await getSessionHeaders();
-  const params = new URLSearchParams({ days: String(days) });
-  if (projectId) params.set("projectId", projectId);
-  const res = await fetch(`${process.env.SENTINEL_API_URL}/v1/ai-metrics/trend?${params}`, { headers, next: { revalidate: 60 } });
-  if (!res.ok) throw new Error(`AI metrics trend: ${res.status}`);
-  return res.json();
+    if (!res.ok) throw new Error(`AI metrics trend: ${res.status}`);
+    return res.json();
+  }, { points: [], momChange: 0, movingAvg7d: 0, movingAvg30d: 0 });
 }
 
 export async function getAIMetricsTools(projectId?: string): Promise<AIToolBreakdownEntry[]> {
-  if (USE_MOCK) {
-    return [
-      { tool: "copilot", confirmedFiles: 25, estimatedFiles: 5, totalLoc: 1800, percentage: 56 },
-      { tool: "claude", confirmedFiles: 10, estimatedFiles: 3, totalLoc: 900, percentage: 28 },
-      { tool: "chatgpt", confirmedFiles: 2, estimatedFiles: 0, totalLoc: 500, percentage: 16 },
-    ];
-  }
-  const headers = await getSessionHeaders();
-  const params = projectId ? `?projectId=${projectId}` : "";
-  const res = await fetch(`${process.env.SENTINEL_API_URL}/v1/ai-metrics/tools${params}`, { headers, next: { revalidate: 60 } });
-  if (!res.ok) throw new Error(`AI metrics tools: ${res.status}`);
-  return res.json();
+  return tryApi(async (headers) => {
+    const params = projectId ? `?projectId=${projectId}` : "";
+    const res = await fetch(`${process.env.SENTINEL_API_URL}/v1/ai-metrics/tools${params}`, {
+      headers,
+      next: { revalidate: 60 },
+    });
+    if (!res.ok) throw new Error(`AI metrics tools: ${res.status}`);
+    return res.json();
+  }, []);
 }
 
 export async function getAIMetricsProjects(limit?: number, sortBy?: string): Promise<AIProjectMetric[]> {
-  if (USE_MOCK) {
-    return [
-      { projectId: "p1", projectName: "Frontend App", aiRatio: 0.35, aiInfluenceScore: 0.4, aiFiles: 20, totalFiles: 57 },
-      { projectId: "p2", projectName: "API Service", aiRatio: 0.18, aiInfluenceScore: 0.22, aiFiles: 10, totalFiles: 56 },
-      { projectId: "p3", projectName: "Mobile SDK", aiRatio: 0.12, aiInfluenceScore: 0.15, aiFiles: 8, totalFiles: 65 },
-    ];
-  }
-  const headers = await getSessionHeaders();
-  const params = new URLSearchParams();
-  if (limit) params.set("limit", String(limit));
-  if (sortBy) params.set("sortBy", sortBy);
-  const res = await fetch(`${process.env.SENTINEL_API_URL}/v1/ai-metrics/projects?${params}`, { headers, next: { revalidate: 60 } });
-  if (!res.ok) throw new Error(`AI metrics projects: ${res.status}`);
-  return res.json();
+  return tryApi(async (headers) => {
+    const params = new URLSearchParams();
+    if (limit) params.set("limit", String(limit));
+    if (sortBy) params.set("sortBy", sortBy);
+    const res = await fetch(`${process.env.SENTINEL_API_URL}/v1/ai-metrics/projects?${params}`, {
+      headers,
+      next: { revalidate: 60 },
+    });
+    if (!res.ok) throw new Error(`AI metrics projects: ${res.status}`);
+    return res.json();
+  }, []);
 }
 
 export async function getAIMetricsCompare(projectIds: string[], days = 30): Promise<AIProjectComparison> {
-  if (USE_MOCK) {
-    const series: Record<string, any[]> = {};
-    for (const id of projectIds) {
-      series[id] = Array.from({ length: days }, (_, i) => {
-        const d = new Date(); d.setDate(d.getDate() - (days - i - 1));
-        return { date: d.toISOString().slice(0, 10), aiRatio: 0.15 + Math.random() * 0.2, aiInfluenceScore: 0.2 + Math.random() * 0.15 };
-      });
-    }
-    return { projectIds, days, series };
-  }
-  const headers = await getSessionHeaders();
-  const params = new URLSearchParams({ projectIds: projectIds.join(","), days: String(days) });
-  const res = await fetch(`${process.env.SENTINEL_API_URL}/v1/ai-metrics/projects/compare?${params}`, { headers, next: { revalidate: 60 } });
-  if (!res.ok) throw new Error(`AI metrics compare: ${res.status}`);
-  return res.json();
+  return tryApi(async (headers) => {
+    const params = new URLSearchParams({ projectIds: projectIds.join(","), days: String(days) });
+    const res = await fetch(`${process.env.SENTINEL_API_URL}/v1/ai-metrics/projects/compare?${params}`, {
+      headers,
+      next: { revalidate: 60 },
+    });
+    if (!res.ok) throw new Error(`AI metrics compare: ${res.status}`);
+    return res.json();
+  }, { projectIds, days, series: {} });
 }
 
 export async function getAIMetricsAlerts(): Promise<AIAnomalyAlert[]> {
-  if (USE_MOCK) {
-    return [{ type: "threshold_exceeded", detail: "Org AI ratio 35% exceeds limit of 30%", severity: "critical", detectedAt: new Date().toISOString() }];
-  }
-  const headers = await getSessionHeaders();
-  const res = await fetch(`${process.env.SENTINEL_API_URL}/v1/ai-metrics/alerts`, { headers, next: { revalidate: 30 } });
-  if (!res.ok) throw new Error(`AI metrics alerts: ${res.status}`);
-  return res.json();
+  return tryApi(async (headers) => {
+    const res = await fetch(`${process.env.SENTINEL_API_URL}/v1/ai-metrics/alerts`, {
+      headers,
+      next: { revalidate: 30 },
+    });
+    if (!res.ok) throw new Error(`AI metrics alerts: ${res.status}`);
+    return res.json();
+  }, []);
 }
 
 export async function getAIMetricsConfig(): Promise<AIMetricsConfig> {
-  if (USE_MOCK) {
-    return { threshold: 0.5, strictMode: false, alertEnabled: false, alertMaxRatio: null, alertSpikeStdDev: 2.0, alertNewTool: true };
-  }
-  const headers = await getSessionHeaders();
-  const res = await fetch(`${process.env.SENTINEL_API_URL}/v1/ai-metrics/config`, { headers, next: { revalidate: 60 } });
-  if (!res.ok) throw new Error(`AI metrics config: ${res.status}`);
-  return res.json();
+  return tryApi(async (headers) => {
+    const res = await fetch(`${process.env.SENTINEL_API_URL}/v1/ai-metrics/config`, {
+      headers,
+      next: { revalidate: 60 },
+    });
+    if (!res.ok) throw new Error(`AI metrics config: ${res.status}`);
+    return res.json();
+  }, { threshold: 0.5, strictMode: false, alertEnabled: false, alertMaxRatio: null, alertSpikeStdDev: 2.0, alertNewTool: true });
 }
 
 export async function updateAIMetricsConfig(data: Partial<AIMetricsConfig>): Promise<AIMetricsConfig> {
-  if (USE_MOCK) return { threshold: 0.5, strictMode: false, alertEnabled: false, alertMaxRatio: null, alertSpikeStdDev: 2.0, alertNewTool: true, ...data };
   const headers = await getSessionHeaders();
   const res = await fetch(`${process.env.SENTINEL_API_URL}/v1/ai-metrics/config`, {
-    method: "PUT", headers: { ...headers, "Content-Type": "application/json" }, body: JSON.stringify(data),
+    method: "PUT",
+    headers: { ...headers, "Content-Type": "application/json" },
+    body: JSON.stringify(data),
   });
   if (!res.ok) throw new Error(`AI metrics config update: ${res.status}`);
   return res.json();
