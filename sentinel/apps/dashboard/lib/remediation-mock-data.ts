@@ -1,3 +1,10 @@
+/**
+ * USAGE RESTRICTION: Only import this file from:
+ *   - __tests__/ directories (unit/integration tests)
+ *   - lib/demo-data.ts (demo environment only, behind DEMO_MODE=true)
+ * Never import directly in page components or lib/api.ts.
+ */
+
 import type { RemediationItem, RemediationStats } from "./types";
 
 export const MOCK_STATS: RemediationStats = {

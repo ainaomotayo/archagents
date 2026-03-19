@@ -231,7 +231,7 @@ export const authOptions: AuthOptions = {
       if (!rateLimiter.check(ip).allowed) {
         logAuthEvent("auth.login.rate_limited", { ip, provider: account?.provider });
         try {
-          const { emitSsoAuditEvent } = await import("./auth-audit.js");
+          const { emitSsoAuditEvent } = await import("./auth-audit");
           await emitSsoAuditEvent("sso.login.rate_limited", {
             provider: account?.provider ?? "unknown",
             email: (profile?.email as string) ?? "unknown",
@@ -262,7 +262,7 @@ export const authOptions: AuthOptions = {
                 });
                 rateLimiter.record(ip);
                 try {
-                  const { emitSsoAuditEvent } = await import("./auth-audit.js");
+                  const { emitSsoAuditEvent } = await import("./auth-audit");
                   await emitSsoAuditEvent("sso.login.blocked", {
                     provider: account.provider,
                     email: profile.email as string,
@@ -277,7 +277,7 @@ export const authOptions: AuthOptions = {
 
             // JIT provision if org detected
             if (data.orgId) {
-              const { tryJitProvision } = await import("./auth-jit.js");
+              const { tryJitProvision } = await import("./auth-jit");
               await tryJitProvision(
                 { email: profile.email as string, name: (profile as any).name, sub: (profile as any).sub ?? "" },
                 account.provider,
@@ -302,7 +302,7 @@ export const authOptions: AuthOptions = {
 
         // Create server-side session for lifecycle enforcement
         try {
-          const { createServerSession } = await import("./auth-session.js");
+          const { createServerSession } = await import("./auth-session");
           const sessionId = await createServerSession({
             userId: identifier ?? "unknown",
             orgId: (account as any)?.orgId ?? "default",
@@ -316,7 +316,7 @@ export const authOptions: AuthOptions = {
       } else if (token.sessionId) {
         // Token rotation: validate server session (idle timeout, revocation, expiry)
         try {
-          const { validateServerSession } = await import("./auth-session.js");
+          const { validateServerSession } = await import("./auth-session");
           const validation = await validateServerSession(token.sessionId);
           if (!validation.valid) {
             logAuthEvent("auth.session.invalidated", {
@@ -352,7 +352,7 @@ export const authOptions: AuthOptions = {
       });
       // Emit structured SSO audit event
       try {
-        const { emitSsoAuditEvent } = await import("./auth-audit.js");
+        const { emitSsoAuditEvent } = await import("./auth-audit");
         await emitSsoAuditEvent("sso.login.success", {
           provider: account?.provider ?? "unknown",
           email,
@@ -365,7 +365,7 @@ export const authOptions: AuthOptions = {
       const ip = getCurrentRequestIp();
       logAuthEvent("auth.logout", { ip });
       try {
-        const { emitSsoAuditEvent } = await import("./auth-audit.js");
+        const { emitSsoAuditEvent } = await import("./auth-audit");
         await emitSsoAuditEvent("sso.logout", {
           provider: "session",
           email: (token as any)?.email ?? "unknown",

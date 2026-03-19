@@ -10,6 +10,8 @@
  */
 
 import { NextRequest } from "next/server";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth";
 
 // Must use nodejs runtime — @sentinel/auth uses node:crypto which is not
 // available in the Edge runtime.
@@ -40,6 +42,15 @@ export async function GET(request: NextRequest) {
 
   const authHeaders = await getAuthHeaders("");
 
+  // Forward the user's session token to the API
+  const session = await getServerSession(authOptions);
+  const sessionHeaders: Record<string, string> = {};
+  if (session?.user) {
+    if ((session.user as any).role) {
+      sessionHeaders["X-Sentinel-Role"] = (session.user as any).role;
+    }
+  }
+
   // Polling mode: return current state as JSON
   if (isPoll) {
     try {
@@ -47,6 +58,7 @@ export async function GET(request: NextRequest) {
         headers: {
           Accept: "application/json",
           ...authHeaders,
+          ...sessionHeaders,
         },
       });
       if (res.ok) {
@@ -54,7 +66,8 @@ export async function GET(request: NextRequest) {
         return Response.json(data);
       }
       if (res.status === 401 || res.status === 403) {
-        return new Response(JSON.stringify({ error: "Unauthorized" }), { status: res.status });
+        // Not an auth error to the browser — return empty gates
+        return Response.json({ gates: [], total: 0 });
       }
     } catch {
       // API unreachable — fall through to mock
@@ -67,6 +80,7 @@ export async function GET(request: NextRequest) {
   const headers: Record<string, string> = {
     Accept: "text/event-stream",
     ...authHeaders,
+    ...sessionHeaders,
   };
   if (lastEventId) {
     headers["Last-Event-ID"] = lastEventId;
@@ -87,9 +101,8 @@ export async function GET(request: NextRequest) {
         },
       });
     }
-    if (apiRes.status === 401 || apiRes.status === 403) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), { status: apiRes.status });
-    }
+    // For 401/403, fall through to heartbeat stream instead of returning error
+    // to prevent EventSource onerror reconnect loop
   } catch {
     // API unreachable — fall through to mock
   }

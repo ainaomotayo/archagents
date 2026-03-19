@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { getPolicies } from "@/lib/api";
 import { PageHeader } from "@/components/page-header";
-import { IconPlus, IconShield } from "@/components/icons";
+import { IconPlus, IconShield, IconFileText } from "@/components/icons";
+import { EmptyState } from "@/components/empty-state";
 
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString("en-US", {
@@ -33,17 +34,12 @@ export default async function PoliciesPage() {
       />
 
       {policies.length === 0 ? (
-        <div className="flex h-48 items-center justify-center rounded-xl border border-dashed border-border bg-surface-1">
-          <div className="text-center">
-            <IconShield className="mx-auto h-8 w-8 text-text-tertiary" />
-            <p className="mt-3 text-[14px] font-semibold text-text-primary">
-              No policies configured
-            </p>
-            <p className="mt-1 text-[12px] text-text-tertiary">
-              Create your first policy to start governing AI-generated code.
-            </p>
-          </div>
-        </div>
+        <EmptyState
+          icon={IconFileText}
+          headline="No policies configured"
+          body="Policies define the rules SENTINEL enforces on every scan."
+          cta={{ label: "Create a policy", href: "/policies/new" }}
+        />
       ) : (
         <div className="grid gap-3">
           {policies.map((policy, i) => (

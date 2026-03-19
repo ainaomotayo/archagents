@@ -3,6 +3,8 @@
 import { useState, useCallback, useRef, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import type { RemediationItem, RemediationStats } from "@/lib/types";
+import { EmptyState } from "@/components/empty-state";
+import { IconCheckCircle } from "@/components/icons";
 import { RemediationStatsBar } from "./remediation-stats-bar";
 import {
   RemediationFilters,
@@ -285,21 +287,28 @@ export function RemediationQueue({ initialItems, initialStats }: RemediationQueu
 
       {/* Main content */}
       {filteredItems.length === 0 ? (
-        <div
-          className="animate-fade-up flex h-48 items-center justify-center rounded-xl border border-dashed border-border bg-surface-1"
-          style={{ animationDelay: "0.09s" }}
-        >
-          <div className="text-center">
-            <p className="text-[14px] font-semibold text-text-primary">
-              No remediation items
-            </p>
-            <p className="mt-1 text-[12px] text-text-tertiary">
-              {typeFilter === "all" && statusFilter === "all"
-                ? "Create a new remediation item to get started."
-                : "Try adjusting your filters."}
-            </p>
+        typeFilter === "all" && statusFilter === "all" && priorityFilter === "all" && !frameworkFilter && !assigneeFilter && !search.trim() ? (
+          <EmptyState
+            icon={IconCheckCircle}
+            headline="No open remediations"
+            body="All remediation items have been resolved."
+            variant="success"
+          />
+        ) : (
+          <div
+            className="animate-fade-up flex h-48 items-center justify-center rounded-xl border border-dashed border-border bg-surface-1"
+            style={{ animationDelay: "0.09s" }}
+          >
+            <div className="text-center">
+              <p className="text-[14px] font-semibold text-text-primary">
+                No remediation items
+              </p>
+              <p className="mt-1 text-[12px] text-text-tertiary">
+                Try adjusting your filters.
+              </p>
+            </div>
           </div>
-        </div>
+        )
       ) : viewMode === "kanban" ? (
         <div className="animate-fade-up" style={{ animationDelay: "0.09s" }}>
           <RemediationKanban

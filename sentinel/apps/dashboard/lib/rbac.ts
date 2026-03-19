@@ -20,6 +20,7 @@ export interface RoutePermission {
  * come before the catch-all `/`.
  */
 export const ROUTE_PERMISSIONS: RoutePermission[] = [
+  { path: "/settings/vcs", roles: ["admin"] },
   { path: "/settings", roles: ["admin"] },
   { path: "/policies", roles: ["admin", "manager"] },
   { path: "/audit", roles: ["admin", "manager"] },
@@ -48,22 +49,24 @@ export interface NavItem {
 }
 
 export const NAV_ITEMS: NavItem[] = [
-  { label: "Overview", href: "/", icon: "home" },
-  { label: "Projects", href: "/projects", icon: "folder" },
-  { label: "Findings", href: "/findings", icon: "search" },
-  { label: "Approvals", href: "/approvals", icon: "check-circle" },
-  { label: "Remediations", href: "/remediations", icon: "wrench" },
-  { label: "Charts", href: "/remediations/charts", icon: "chart" },
-  { label: "AI Metrics", href: "/ai-metrics", icon: "cpu" },
-  { label: "Certificates", href: "/certificates", icon: "shield" },
-  { label: "Gap Analysis", href: "/compliance/gap-analysis", icon: "grid" },
-  { label: "Attestations", href: "/compliance/attestations", icon: "clipboard-check" },
-  { label: "Compliance Wizard", href: "/compliance/wizards", icon: "list-checks" },
-  { label: "Policies", href: "/policies", icon: "file-text" },
-  { label: "Reports", href: "/reports", icon: "bar-chart" },
-  { label: "Drift", href: "/drift", icon: "trending-up" },
-  { label: "Audit Log", href: "/audit", icon: "clock" },
-  { label: "Settings", href: "/settings", icon: "settings" },
+  // Core
+  { label: "Overview",           href: "/",                        icon: "home" },
+  { label: "Projects",           href: "/projects",                icon: "folder" },
+  { label: "Findings",           href: "/findings",                icon: "search" },
+  // Compliance
+  { label: "Compliance",         href: "/compliance",              icon: "clipboard-check" },
+  { label: "Gap Analysis",       href: "/compliance/gap-analysis", icon: "grid" },
+  { label: "Attestations",       href: "/compliance/attestations", icon: "shield-check" },
+  { label: "Approvals",          href: "/approvals",               icon: "check-circle" },
+  { label: "Remediations",       href: "/remediations",            icon: "wrench" },
+  { label: "Policies",           href: "/policies",                icon: "file-text" },
+  // Tools
+  { label: "AI Metrics",         href: "/ai-metrics",              icon: "cpu" },
+  { label: "Certificates",       href: "/certificates",            icon: "shield" },
+  { label: "Audit Log",          href: "/audit",                   icon: "clock" },
+  // System
+  { label: "Integrations",       href: "/settings/vcs",            icon: "git-branch" },
+  { label: "Settings",           href: "/settings",                icon: "settings" },
 ];
 
 /**

@@ -12,8 +12,7 @@ import {
   IconX,
 } from "@/components/icons";
 
-const API_BASE =
-  process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
+const API_BASE = "/api";
 
 /* ─── Types ─── */
 interface ReportSchedule {
@@ -349,7 +348,7 @@ export default function ReportSchedulesPage() {
 
   const fetchSchedules = useCallback(async () => {
     try {
-      const res = await fetch(`${API_BASE}/v1/report-schedules`);
+      const res = await fetch(`${API_BASE}/report-schedules`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       setSchedules(data.data ?? data);
@@ -375,8 +374,8 @@ export default function ReportSchedulesPage() {
   }) {
     const isEdit = dialogSchedule?.id != null;
     const url = isEdit
-      ? `${API_BASE}/v1/report-schedules/${dialogSchedule!.id}`
-      : `${API_BASE}/v1/report-schedules`;
+      ? `${API_BASE}/report-schedules/${dialogSchedule!.id}`
+      : `${API_BASE}/report-schedules`;
     const method = isEdit ? "PATCH" : "POST";
 
     try {
@@ -401,7 +400,7 @@ export default function ReportSchedulesPage() {
     if (!deleteTarget) return;
     try {
       const res = await fetch(
-        `${API_BASE}/v1/report-schedules/${deleteTarget.id}`,
+        `${API_BASE}/report-schedules/${deleteTarget.id}`,
         { method: "DELETE" },
       );
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -419,7 +418,7 @@ export default function ReportSchedulesPage() {
   async function handleToggle(schedule: ReportSchedule) {
     try {
       const res = await fetch(
-        `${API_BASE}/v1/report-schedules/${schedule.id}`,
+        `${API_BASE}/report-schedules/${schedule.id}`,
         {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
@@ -439,7 +438,7 @@ export default function ReportSchedulesPage() {
   async function handleRunNow(schedule: ReportSchedule) {
     try {
       const res = await fetch(
-        `${API_BASE}/v1/report-schedules/${schedule.id}/trigger`,
+        `${API_BASE}/report-schedules/${schedule.id}/trigger`,
         { method: "POST" },
       );
       if (!res.ok) throw new Error(`HTTP ${res.status}`);

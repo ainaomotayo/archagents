@@ -16,9 +16,7 @@ x-common-env: &common-env
   REDIS_URL: redis://redis:6379
 
 x-api-image: &api-image
-  build:
-    context: .
-    dockerfile: docker/api.Dockerfile
+  image: ghcr.io/ainaomotayo/sentinel-api:latest
 
 x-agent-base: &agent-base
   restart: unless-stopped
@@ -95,15 +93,14 @@ services:
       AZURE_KEY_VAULT_URL: ${AZURE_KEY_VAULT_URL:-}
       AZURE_KEY_NAME: ${AZURE_KEY_NAME:-sentinel-master}
     healthcheck:
-      test: ["CMD", "node", "docker/healthcheck.js", "8080"]
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/health || exit 1"]
       interval: 15s
       timeout: 5s
-      retries: 3
+      retries: 5
+      start_period: 30s
 
   dashboard:
-    build:
-      context: .
-      dockerfile: docker/dashboard.Dockerfile
+    image: ghcr.io/ainaomotayo/sentinel-dashboard:latest
     restart: unless-stopped
     ports:
       - "3000:3000"
@@ -111,13 +108,14 @@ services:
       api:
         condition: service_healthy
     environment:
-      NEXTAUTH_URL: http://localhost:3000
+      NEXTAUTH_URL: ${NEXTAUTH_URL:-http://localhost:3000}
       NEXTAUTH_SECRET: dev-secret-change-in-production
       GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID:-}
       GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET:-}
       SENTINEL_API_URL: http://api:8080
       SENTINEL_SECRET: dev-secret-change-in-production
       SENTINEL_ROLE_MAP: ${SENTINEL_ROLE_MAP:-}
+      SENTINEL_ORG_ID: ${SENTINEL_ORG_ID:-00000000-0000-0000-0000-000000000001}
       GITLAB_CLIENT_ID: ${GITLAB_CLIENT_ID:-}
       GITLAB_CLIENT_SECRET: ${GITLAB_CLIENT_SECRET:-}
       GITLAB_URL: ${GITLAB_URL:-https://gitlab.com}
@@ -130,7 +128,7 @@ services:
       SAML_CLIENT_ID: ${SAML_CLIENT_ID:-dummy}
       SAML_CLIENT_SECRET: ${SAML_CLIENT_SECRET:-dummy}
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/api/health || exit 1"]
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/api/auth/health || exit 1"]
       interval: 15s
       timeout: 5s
       retries: 3
@@ -165,9 +163,9 @@ services:
       AZURE_KEY_VAULT_URL: ${AZURE_KEY_VAULT_URL:-}
       AZURE_KEY_NAME: ${AZURE_KEY_NAME:-sentinel-master}
       WORKER_HEALTH_PORT: "9092"
-    command: ["node", "apps/api/dist/worker.js"]
+    command: ["node", "dist/worker.js"]
     healthcheck:
-      test: ["CMD", "node", "docker/healthcheck.js", "9092"]
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:9092/health || exit 1"]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -186,9 +184,9 @@ services:
       SCHEDULER_LEASE_TTL: ${SCHEDULER_LEASE_TTL:-15000}
       SCAN_TIMEOUT_MS: ${SCAN_TIMEOUT_MS:-300000}
       SCHEDULER_PORT: "9091"
-    command: ["node", "apps/api/dist/scheduler.js"]
+    command: ["node", "dist/scheduler.js"]
     healthcheck:
-      test: ["CMD", "node", "docker/healthcheck.js", "9091"]
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:9091/health || exit 1"]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -208,9 +206,9 @@ services:
       ARCHIVE_BUCKET: ${ARCHIVE_BUCKET:-}
       ARCHIVE_PREFIX: ${ARCHIVE_PREFIX:-sentinel}
       REPORT_WORKER_PORT: "9094"
-    command: ["node", "apps/api/dist/report-worker.js"]
+    command: ["node", "dist/report-worker.js"]
     healthcheck:
-      test: ["CMD", "node", "docker/healthcheck.js", "9094"]
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:9094/health || exit 1"]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -226,15 +224,17 @@ services:
     environment:
       <<: *common-env
       NOTIFICATION_WORKER_PORT: "9095"
-    command: ["node", "apps/api/dist/notification-worker.js"]
+    command: ["node", "dist/notification-worker.js"]
     healthcheck:
-      test: ["CMD", "node", "docker/healthcheck.js", "9095"]
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:9095/health || exit 1"]
       interval: 30s
       timeout: 5s
       retries: 3
 
   github-bridge:
     <<: *api-image
+    profiles:
+      - github
     restart: unless-stopped
     depends_on:
       postgres:
@@ -246,9 +246,9 @@ services:
       GITHUB_APP_ID: ${GITHUB_APP_ID:-}
       GITHUB_PRIVATE_KEY: ${GITHUB_PRIVATE_KEY:-}
       GITHUB_BRIDGE_PORT: "9092"
-    command: ["node", "apps/api/dist/github-bridge.js"]
+    command: ["node", "dist/github-bridge.js"]
     healthcheck:
-      test: ["CMD", "node", "docker/healthcheck.js", "9092"]
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:9092/health || exit 1"]
       interval: 15s
       timeout: 5s
       retries: 3
@@ -257,9 +257,7 @@ services:
 
   agent-security:
     <<: *agent-base
-    build:
-      context: .
-      dockerfile: agents/security/Dockerfile
+    image: ghcr.io/ainaomotayo/sentinel-agent-security:latest
     environment:
       REDIS_URL: redis://redis:6379
     healthcheck:
@@ -270,9 +268,7 @@ services:
 
   agent-dependency:
     <<: *agent-base
-    build:
-      context: .
-      dockerfile: agents/dependency/Dockerfile
+    image: ghcr.io/ainaomotayo/sentinel-agent-dependency:latest
     environment:
       REDIS_URL: redis://redis:6379
     healthcheck:
@@ -293,7 +289,7 @@ services:
     environment:
       REDIS_URL: redis://redis:6379
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/')"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8081/')"]
       interval: 15s
       timeout: 5s
       retries: 3
@@ -304,13 +300,11 @@ services:
       - all-agents
     build:
       context: .
-      dockerfile: docker/agent.Dockerfile
-      args:
-        AGENT_NAME: quality
+      dockerfile: agents/quality/Dockerfile
     environment:
       REDIS_URL: redis://redis:6379
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/')"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8085/')"]
       interval: 15s
       timeout: 5s
       retries: 3
@@ -321,13 +315,11 @@ services:
       - all-agents
     build:
       context: .
-      dockerfile: docker/agent.Dockerfile
-      args:
-        AGENT_NAME: ai-detector
+      dockerfile: agents/ai-detector/Dockerfile
     environment:
       REDIS_URL: redis://redis:6379
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/')"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8086/')"]
       interval: 15s
       timeout: 5s
       retries: 3
@@ -338,13 +330,42 @@ services:
       - all-agents
     build:
       context: .
-      dockerfile: docker/agent.Dockerfile
-      args:
-        AGENT_NAME: policy
+      dockerfile: agents/policy/Dockerfile
     environment:
       REDIS_URL: redis://redis:6379
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/')"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8088/')"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
+  agent-llm-review:
+    <<: *agent-base
+    profiles:
+      - all-agents
+    build:
+      context: .
+      dockerfile: agents/llm-review/Dockerfile
+    environment:
+      REDIS_URL: redis://redis:6379
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8087/')"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
+  agent-formal-verification:
+    <<: *agent-base
+    profiles:
+      - all-agents
+    build:
+      context: .
+      dockerfile: agents/formal-verification/Dockerfile
+    environment:
+      REDIS_URL: redis://redis:6379
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8084/')"]
       interval: 15s
       timeout: 5s
       retries: 3
@@ -364,7 +385,7 @@ services:
       DB_ENGINE: sql
       DB_TYPE: postgres
       DB_URL: postgresql://sentinel:sentinel_dev@postgres:5432/sentinel
-      NEXTAUTH_URL: http://localhost:3000
+      NEXTAUTH_URL: ${NEXTAUTH_URL:-http://localhost:3000}
     ports:
       - "5225:5225"
     healthcheck:

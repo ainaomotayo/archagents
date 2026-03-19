@@ -2,7 +2,7 @@
  * SENTINEL Dashboard — API Client
  *
  * Fetches data from the SENTINEL API when available.
- * Falls back to mock data when API is unreachable (dev/demo mode).
+ * Falls back to empty values when the API is unreachable.
  */
 
 import type {
@@ -37,28 +37,6 @@ import type {
   VelocityDataPoint,
 } from "./types";
 
-import {
-  MOCK_ATTESTATIONS,
-  MOCK_ATTESTATION_OVERRIDES,
-  MOCK_APPROVAL_GATES,
-  MOCK_APPROVAL_STATS,
-  MOCK_AUDIT_LOG,
-  MOCK_CERTIFICATES,
-  MOCK_COMPLIANCE_TRENDS,
-  MOCK_FINDING_COUNTS_BY_CATEGORY,
-  MOCK_FINDINGS,
-  MOCK_FRAMEWORK_SCORES,
-  MOCK_OVERVIEW_STATS,
-  MOCK_POLICIES,
-  MOCK_PROJECTS,
-  MOCK_SCANS,
-} from "./mock-data";
-import {
-  MOCK_ITEMS as MOCK_REMEDIATION_ITEMS,
-  MOCK_STATS as MOCK_REMEDIATION_STATS,
-} from "./remediation-mock-data";
-
-const USE_MOCK = !process.env.SENTINEL_API_URL;
 
 async function getSessionHeaders(): Promise<Record<string, string>> {
   try {
@@ -76,13 +54,12 @@ async function getSessionHeaders(): Promise<Record<string, string>> {
   return {};
 }
 
-async function tryApi<T>(fn: (headers: Record<string, string>) => Promise<T>, fallback: T): Promise<T> {
-  if (USE_MOCK) return fallback;
+async function tryApi<T>(fn: (headers: Record<string, string>) => Promise<T>, empty: T): Promise<T> {
   try {
     const headers = await getSessionHeaders();
     return await fn(headers);
   } catch {
-    return fallback;
+    return empty;
   }
 }
 
@@ -92,20 +69,26 @@ export async function getOverviewStats(): Promise<OverviewStats> {
   return tryApi(async (headers) => {
     const { apiGet } = await import("./api-client");
     const [scansData, findingsData, certsData] = await Promise.all([
-      apiGet<{ total: number }>("/v1/scans", { limit: "0" }, headers),
+      apiGet<{ scans: any[]; total: number }>("/v1/scans", { limit: "100" }, headers),
       apiGet<{ total: number }>("/v1/findings", { limit: "0" }, headers),
       apiGet<{ certificates: any[]; total: number }>("/v1/certificates", { limit: "100" }, headers),
     ]);
     const certs = certsData.certificates ?? [];
-    const revoked = certs.filter((c: any) => c.status === "revoked").length;
-    const passed = certs.filter((c: any) => c.riskScore <= 20).length;
+    const revoked = certs.filter((c: any) => c.revokedAt).length;
+    // passRate: % of completed scans that passed (riskScore <= 20)
+    const scans = scansData.scans ?? [];
+    const completedScans = scans.filter((s: any) => s.status === "completed");
+    const passedScans = completedScans.filter((s: any) => (s.riskScore ?? 100) <= 20);
+    const passRate = completedScans.length > 0
+      ? Math.round((passedScans.length / completedScans.length) * 100)
+      : 0;
     return {
-      totalScans: scansData.total ?? 0,
+      totalScans: scansData.total ?? scans.length,
       activeRevocations: revoked,
       openFindings: findingsData.total ?? 0,
-      passRate: certs.length > 0 ? Math.round((passed / certs.length) * 100) : 0,
+      passRate,
     };
-  }, MOCK_OVERVIEW_STATS);
+  }, { totalScans: 0, activeRevocations: 0, openFindings: 0, passRate: 0 });
 }
 
 export async function getRecentScans(limit = 5): Promise<Scan[]> {
@@ -124,7 +107,7 @@ export async function getRecentScans(limit = 5): Promise<Scan[]> {
       findingCount: s._count?.findings ?? 0,
       date: s.startedAt,
     }));
-  }, MOCK_SCANS.slice(0, limit));
+  }, []);
 }
 
 // ── Projects ──────────────────────────────────────────────────────────
@@ -142,7 +125,7 @@ export async function getProjects(): Promise<Project[]> {
       findingCount: (p.scans ?? []).reduce((sum: number, s: any) => sum + (s._count?.findings ?? 0), 0),
       scanCount: p._count?.scans ?? 0,
     }));
-  }, MOCK_PROJECTS);
+  }, []);
 }
 
 export async function getProjectById(id: string): Promise<Project | null> {
@@ -158,7 +141,7 @@ export async function getProjectById(id: string): Promise<Project | null> {
       findingCount: (p.scans ?? []).reduce((sum: number, s: any) => sum + (s._count?.findings ?? 0), 0),
       scanCount: p._count?.scans ?? 0,
     };
-  }, MOCK_PROJECTS.find((p) => p.id === id) ?? null);
+  }, null);
 }
 
 export async function getProjectScans(projectId: string): Promise<Scan[]> {
@@ -168,14 +151,14 @@ export async function getProjectScans(projectId: string): Promise<Scan[]> {
     return (p.scans ?? []).map((s: any) => ({
       id: s.id,
       projectId: s.projectId,
-      commit: s.commitHash,
-      branch: s.branch,
+      commit: s.commitHash ?? "",
+      branch: s.branch ?? "",
       status: s.status === "completed" ? (s.riskScore <= 20 ? "pass" : s.riskScore <= 50 ? "provisional" : "fail") : "running",
       riskScore: s.riskScore ?? 0,
       findingCount: s._count?.findings ?? 0,
       date: s.startedAt,
     }));
-  }, MOCK_SCANS.filter((s) => s.projectId === projectId));
+  }, []);
 }
 
 export async function getProjectFindingCounts(
@@ -190,7 +173,7 @@ export async function getProjectFindingCounts(
       counts.set(cat, (counts.get(cat) ?? 0) + 1);
     }
     return Array.from(counts.entries()).map(([category, count]) => ({ category, count }));
-  }, MOCK_FINDING_COUNTS_BY_CATEGORY);
+  }, []);
 }
 
 // ── Findings ──────────────────────────────────────────────────────────
@@ -198,7 +181,7 @@ export async function getProjectFindingCounts(
 export async function getFindings(): Promise<Finding[]> {
   return tryApi(async (headers) => {
     const { apiGet } = await import("./api-client");
-    const data = await apiGet<{ findings: any[] }>("/v1/findings", { limit: "100" }, headers);
+    const data = await apiGet<{ findings: any[] }>("/v1/findings", { limit: "500" }, headers);
     return (data.findings ?? []).map((f: any) => ({
       id: f.id,
       projectId: f.scan?.projectId ?? f.orgId,
@@ -217,7 +200,7 @@ export async function getFindings(): Promise<Finding[]> {
       createdAt: f.createdAt,
       agentName: f.agentName ?? f.agent_name ?? "",
     }));
-  }, MOCK_FINDINGS);
+  }, []);
 }
 
 export async function getFindingById(id: string): Promise<Finding | null> {
@@ -242,7 +225,7 @@ export async function getFindingById(id: string): Promise<Finding | null> {
       createdAt: f.createdAt,
       agentName: f.agentName ?? f.agent_name ?? "",
     };
-  }, MOCK_FINDINGS.find((f) => f.id === id) ?? null);
+  }, null);
 }
 
 // ── Certificates ──────────────────────────────────────────────────────
@@ -263,7 +246,7 @@ export async function getCertificates(): Promise<Certificate[]> {
       expiresAt: c.expiresAt,
       revokedAt: c.revokedAt ?? null,
     }));
-  }, MOCK_CERTIFICATES);
+  }, []);
 }
 
 export async function getCertificateById(
@@ -284,7 +267,7 @@ export async function getCertificateById(
       expiresAt: c.expiresAt,
       revokedAt: c.revokedAt ?? null,
     } as Certificate;
-  }, MOCK_CERTIFICATES.find((c) => c.id === id) ?? null);
+  }, null);
 }
 
 export async function getProjectCertificate(
@@ -294,20 +277,102 @@ export async function getProjectCertificate(
   return certs.find((c) => c.projectId === projectId && c.status === "active") ?? null;
 }
 
+// ── VCS Installations ─────────────────────────────────────────────────
+
+export interface VCSInstallation {
+  id: string;
+  provider: "github" | "gitlab" | "bitbucket" | "azure_devops";
+  installationId: string;
+  owner: string;
+  active: boolean;
+  webhookSecret: string;
+  createdAt: string;
+  azureDevOpsExt?: {
+    organizationUrl: string;
+    projectName: string;
+  };
+}
+
+export async function getVCSInstallations(): Promise<VCSInstallation[]> {
+  return tryApi(async (headers) => {
+    const { apiGet } = await import("./api-client");
+    const data = await apiGet<{ installations: VCSInstallation[] }>("/v1/vcs-installations", undefined, headers);
+    return data.installations ?? [];
+  }, []);
+}
+
+export async function createVCSInstallation(data: unknown): Promise<unknown> {
+  return tryApi(async (headers) => {
+    const { apiPost } = await import("./api-client");
+    return apiPost("/v1/vcs-installations", data, headers);
+  }, null);
+}
+
+export async function updateVCSInstallation(id: string, data: unknown): Promise<unknown> {
+  return tryApi(async (headers) => {
+    const { apiPut } = await import("./api-client");
+    return apiPut(`/v1/vcs-installations/${id}`, data, headers);
+  }, null);
+}
+
+export async function deleteVCSInstallation(id: string): Promise<void> {
+  return tryApi(async (headers) => {
+    const { apiDelete } = await import("./api-client");
+    return apiDelete(`/v1/vcs-installations/${id}`, headers);
+  }, undefined);
+}
+
+// ── Webhooks ──────────────────────────────────────────────────────────
+
+export async function getWebhooks(): Promise<unknown[]> {
+  return tryApi(async (headers) => {
+    const { apiGet } = await import("./api-client");
+    return apiGet<unknown[]>("/v1/webhooks", undefined, headers);
+  }, []);
+}
+
+export async function createWebhook(data: unknown): Promise<unknown> {
+  return tryApi(async (headers) => {
+    const { apiPost } = await import("./api-client");
+    return apiPost("/v1/webhooks", data, headers);
+  }, null);
+}
+
+export async function updateWebhook(id: string, data: unknown): Promise<unknown> {
+  return tryApi(async (headers) => {
+    const { apiPut } = await import("./api-client");
+    return apiPut(`/v1/webhooks/${id}`, data, headers);
+  }, null);
+}
+
+export async function deleteWebhook(id: string): Promise<void> {
+  return tryApi(async (headers) => {
+    const { apiDelete } = await import("./api-client");
+    return apiDelete(`/v1/webhooks/${id}`, headers);
+  }, undefined);
+}
+
+export async function testWebhook(id: string): Promise<unknown> {
+  return tryApi(async (headers) => {
+    const { apiPost } = await import("./api-client");
+    return apiPost(`/v1/webhooks/${id}/test`, {}, headers);
+  }, null);
+}
+
 // ── Policies ──────────────────────────────────────────────────────────
 
 export async function getPolicies() {
   return tryApi(async (headers) => {
     const { apiGet } = await import("./api-client");
     return apiGet<any[]>("/v1/policies", undefined, headers);
-  }, MOCK_POLICIES);
+  }, []);
 }
 
 export async function getPolicyById(id: string) {
   return tryApi(async (headers) => {
     const { apiGet } = await import("./api-client");
     return apiGet<any>(`/v1/policies/${id}`, undefined, headers);
-  }, MOCK_POLICIES.find((p) => p.id === id) ?? null);
+  }, null);
 }
 
 // ── Audit Log ─────────────────────────────────────────────────────────
@@ -317,7 +382,7 @@ export async function getAuditLog(limit = 50) {
     const { apiGet } = await import("./api-client");
     const data = await apiGet<{ events: any[] }>("/v1/audit", { limit: String(limit) }, headers);
     return data.events ?? [];
-  }, MOCK_AUDIT_LOG);
+  }, []);
 }
 
 // ── Compliance ────────────────────────────────────────────────────────
@@ -340,7 +405,7 @@ export async function getComplianceScores(): Promise<FrameworkScore[]> {
         total: cs.total,
       })),
     }));
-  }, MOCK_FRAMEWORK_SCORES);
+  }, []);
 }
 
 export async function getComplianceTrends(
@@ -357,7 +422,7 @@ export async function getComplianceTrends(
       date: t.date,
       score: t.score,
     }));
-  }, MOCK_COMPLIANCE_TRENDS[frameworkSlug] ?? []);
+  }, []);
 }
 
 // ── Attestations ─────────────────────────────────────────────────────
@@ -367,22 +432,22 @@ import type { Attestation, AttestationOverride } from "@/components/compliance/a
 export async function getAttestations(): Promise<Attestation[]> {
   return tryApi(async (headers) => {
     const { apiGet } = await import("./api-client");
-    return apiGet<Attestation[]>("/v1/attestations", undefined, headers);
-  }, MOCK_ATTESTATIONS);
+    return apiGet<Attestation[]>("/v1/compliance/attestations", undefined, headers);
+  }, []);
 }
 
 export async function getAttestationById(id: string): Promise<Attestation | null> {
   return tryApi(async (headers) => {
     const { apiGet } = await import("./api-client");
-    return apiGet<Attestation>(`/v1/attestations/${id}`, undefined, headers);
-  }, MOCK_ATTESTATIONS.find((a) => a.id === id) ?? null);
+    return apiGet<Attestation>(`/v1/compliance/attestations/${id}`, undefined, headers);
+  }, null);
 }
 
 export async function getActiveAttestations(): Promise<AttestationOverride[]> {
   return tryApi(async (headers) => {
     const { apiGet } = await import("./api-client");
-    return apiGet<AttestationOverride[]>("/v1/attestations/overrides", undefined, headers);
-  }, MOCK_ATTESTATION_OVERRIDES);
+    return apiGet<AttestationOverride[]>("/v1/compliance/attestations/expiring", undefined, headers);
+  }, []);
 }
 
 // ── Approvals ─────────────────────────────────────────────────────────
@@ -394,9 +459,7 @@ export async function getApprovalGates(status?: string): Promise<ApprovalGate[]>
     if (status && status !== "all") query.status = status;
     const data = await apiGet<{ gates: any[]; total: number }>("/v1/approvals", query, headers);
     return (data.gates ?? []).map(mapGate);
-  }, status && status !== "all"
-    ? MOCK_APPROVAL_GATES.filter((g) => g.status === status)
-    : MOCK_APPROVAL_GATES);
+  }, []);
 }
 
 export async function getApprovalGateById(id: string): Promise<ApprovalGate | null> {
@@ -404,14 +467,14 @@ export async function getApprovalGateById(id: string): Promise<ApprovalGate | nu
     const { apiGet } = await import("./api-client");
     const data = await apiGet<any>(`/v1/approvals/${id}`, undefined, headers);
     return mapGate(data);
-  }, MOCK_APPROVAL_GATES.find((g) => g.id === id) ?? null);
+  }, null);
 }
 
 export async function getApprovalStats(): Promise<ApprovalStats> {
   return tryApi(async (headers) => {
     const { apiGet } = await import("./api-client");
     return apiGet<ApprovalStats>("/v1/approvals/stats", undefined, headers);
-  }, MOCK_APPROVAL_STATS);
+  }, { pending: 0, escalated: 0, decidedToday: 0, avgDecisionTimeHours: 0, expiringSoon: 0 });
 }
 
 export async function reassignApprovalGate(gateId: string, assignTo: string): Promise<void> {
@@ -435,26 +498,26 @@ export async function getRemediations(filters?: {
     if (filters?.status) query.status = filters.status;
     if (filters?.itemType) query.itemType = filters.itemType;
     const data = await apiGet<{ items: RemediationItem[]; total: number }>(
-      "/v1/remediations",
+      "/v1/compliance/remediations",
       query,
       headers,
     );
     return data.items ?? [];
-  }, filterMockRemediations(filters));
+  }, []);
 }
 
 export async function getRemediationStats(): Promise<RemediationStats> {
   return tryApi(async (headers) => {
     const { apiGet } = await import("./api-client");
-    return apiGet<RemediationStats>("/v1/remediations/stats", undefined, headers);
-  }, MOCK_REMEDIATION_STATS);
+    return apiGet<RemediationStats>("/v1/compliance/remediations/stats", undefined, headers);
+  }, { open: 0, inProgress: 0, overdue: 0, completed: 0, acceptedRisk: 0, avgResolutionDays: 0, slaCompliance: 0 });
 }
 
 export async function getRemediationById(id: string): Promise<RemediationItem | null> {
   return tryApi(async (headers) => {
     const { apiGet } = await import("./api-client");
-    return apiGet<RemediationItem>(`/v1/remediations/${id}`, undefined, headers);
-  }, MOCK_REMEDIATION_ITEMS.find((r) => r.id === id) ?? null);
+    return apiGet<RemediationItem>(`/v1/compliance/remediations/${id}`, undefined, headers);
+  }, null);
 }
 
 export async function createRemediationItem(data: {
@@ -471,7 +534,7 @@ export async function createRemediationItem(data: {
 }): Promise<RemediationItem> {
   const { apiPost } = await import("./api-client");
   const headers = await getSessionHeaders();
-  return apiPost<RemediationItem>("/v1/remediations", data, headers);
+  return apiPost<RemediationItem>("/v1/compliance/remediations", data, headers);
 }
 
 export async function updateRemediation(
@@ -486,7 +549,7 @@ export async function updateRemediation(
 ): Promise<RemediationItem> {
   const { apiPatch } = await import("./api-client");
   const headers = await getSessionHeaders();
-  return apiPatch<RemediationItem>(`/v1/remediations/${id}`, data, headers);
+  return apiPatch<RemediationItem>(`/v1/compliance/remediations/${id}`, data, headers);
 }
 
 export async function linkRemediationExternal(
@@ -496,7 +559,7 @@ export async function linkRemediationExternal(
 ): Promise<RemediationItem> {
   const { apiPost } = await import("./api-client");
   const headers = await getSessionHeaders();
-  return apiPost<RemediationItem>(`/v1/remediations/${id}/link`, { provider, externalRef }, headers);
+  return apiPost<RemediationItem>(`/v1/compliance/remediations/${id}/link-external`, { provider, externalRef }, headers);
 }
 
 // ── Evidence ─────────────────────────────────────────────────────────
@@ -694,135 +757,102 @@ export async function getIPAttributionToolBreakdown(): Promise<Array<{ tool: str
   }, []);
 }
 
-function filterMockRemediations(filters?: {
-  framework?: string;
-  status?: string;
-  itemType?: string;
-}): RemediationItem[] {
-  let items = MOCK_REMEDIATION_ITEMS;
-  if (filters?.framework) {
-    items = items.filter((i) => i.frameworkSlug === filters.framework);
-  }
-  if (filters?.status) {
-    items = items.filter((i) => i.status === filters.status);
-  }
-  if (filters?.itemType) {
-    items = items.filter((i) => i.itemType === filters.itemType);
-  }
-  return items;
-}
-
 // ── AI Metrics ──────────────────────────────────────────
 
 export async function getAIMetricsStats(): Promise<AIMetricsStats> {
-  if (USE_MOCK) {
-    return {
-      hasData: true,
-      stats: { aiRatio: 0.23, aiFiles: 45, totalFiles: 196, aiLoc: 3200, totalLoc: 14000, aiInfluenceScore: 0.31, avgProbability: 0.42, medianProbability: 0.38, p95Probability: 0.89 },
-      toolBreakdown: [
-        { tool: "copilot", confirmedFiles: 25, estimatedFiles: 5, totalLoc: 1800, percentage: 56 },
-        { tool: "claude", confirmedFiles: 10, estimatedFiles: 3, totalLoc: 900, percentage: 28 },
-        { tool: "chatgpt", confirmedFiles: 2, estimatedFiles: 0, totalLoc: 500, percentage: 16 },
-      ],
-    };
-  }
-  const headers = await getSessionHeaders();
-  const res = await fetch(`${process.env.SENTINEL_API_URL}/v1/ai-metrics/stats`, { headers, next: { revalidate: 60 } });
-  if (!res.ok) throw new Error(`AI metrics stats: ${res.status}`);
-  return res.json();
+  return tryApi(async (headers) => {
+    const res = await fetch(`${process.env.SENTINEL_API_URL}/v1/ai-metrics/stats`, {
+      headers,
+      next: { revalidate: 60 },
+    });
+    if (!res.ok) throw new Error(`AI metrics stats: ${res.status}`);
+    return res.json();
+  }, {
+    hasData: false,
+    stats: { aiRatio: 0, aiFiles: 0, totalFiles: 0, aiLoc: 0, totalLoc: 0, aiInfluenceScore: 0, avgProbability: 0, medianProbability: 0, p95Probability: 0 },
+    toolBreakdown: [],
+  });
 }
 
 export async function getAIMetricsTrend(days = 30, projectId?: string): Promise<AITrendResult> {
-  if (USE_MOCK) {
-    const points = Array.from({ length: days }, (_, i) => {
-      const d = new Date(); d.setDate(d.getDate() - (days - i - 1));
-      return { date: d.toISOString().slice(0, 10), aiRatio: 0.2 + Math.random() * 0.1, aiInfluenceScore: 0.25 + Math.random() * 0.1, scanCount: 1 };
+  return tryApi(async (headers) => {
+    const params = new URLSearchParams({ days: String(days) });
+    if (projectId) params.set("projectId", projectId);
+    const res = await fetch(`${process.env.SENTINEL_API_URL}/v1/ai-metrics/trend?${params}`, {
+      headers,
+      next: { revalidate: 60 },
     });
-    return { points, momChange: 0.05, movingAvg7d: 0.24, movingAvg30d: 0.23 };
-  }
-  const headers = await getSessionHeaders();
-  const params = new URLSearchParams({ days: String(days) });
-  if (projectId) params.set("projectId", projectId);
-  const res = await fetch(`${process.env.SENTINEL_API_URL}/v1/ai-metrics/trend?${params}`, { headers, next: { revalidate: 60 } });
-  if (!res.ok) throw new Error(`AI metrics trend: ${res.status}`);
-  return res.json();
+    if (!res.ok) throw new Error(`AI metrics trend: ${res.status}`);
+    return res.json();
+  }, { points: [], momChange: 0, movingAvg7d: 0, movingAvg30d: 0 });
 }
 
 export async function getAIMetricsTools(projectId?: string): Promise<AIToolBreakdownEntry[]> {
-  if (USE_MOCK) {
-    return [
-      { tool: "copilot", confirmedFiles: 25, estimatedFiles: 5, totalLoc: 1800, percentage: 56 },
-      { tool: "claude", confirmedFiles: 10, estimatedFiles: 3, totalLoc: 900, percentage: 28 },
-      { tool: "chatgpt", confirmedFiles: 2, estimatedFiles: 0, totalLoc: 500, percentage: 16 },
-    ];
-  }
-  const headers = await getSessionHeaders();
-  const params = projectId ? `?projectId=${projectId}` : "";
-  const res = await fetch(`${process.env.SENTINEL_API_URL}/v1/ai-metrics/tools${params}`, { headers, next: { revalidate: 60 } });
-  if (!res.ok) throw new Error(`AI metrics tools: ${res.status}`);
-  return res.json();
+  return tryApi(async (headers) => {
+    const params = projectId ? `?projectId=${projectId}` : "";
+    const res = await fetch(`${process.env.SENTINEL_API_URL}/v1/ai-metrics/tools${params}`, {
+      headers,
+      next: { revalidate: 60 },
+    });
+    if (!res.ok) throw new Error(`AI metrics tools: ${res.status}`);
+    return res.json();
+  }, []);
 }
 
 export async function getAIMetricsProjects(limit?: number, sortBy?: string): Promise<AIProjectMetric[]> {
-  if (USE_MOCK) {
-    return [
-      { projectId: "p1", projectName: "Frontend App", aiRatio: 0.35, aiInfluenceScore: 0.4, aiFiles: 20, totalFiles: 57 },
-      { projectId: "p2", projectName: "API Service", aiRatio: 0.18, aiInfluenceScore: 0.22, aiFiles: 10, totalFiles: 56 },
-      { projectId: "p3", projectName: "Mobile SDK", aiRatio: 0.12, aiInfluenceScore: 0.15, aiFiles: 8, totalFiles: 65 },
-    ];
-  }
-  const headers = await getSessionHeaders();
-  const params = new URLSearchParams();
-  if (limit) params.set("limit", String(limit));
-  if (sortBy) params.set("sortBy", sortBy);
-  const res = await fetch(`${process.env.SENTINEL_API_URL}/v1/ai-metrics/projects?${params}`, { headers, next: { revalidate: 60 } });
-  if (!res.ok) throw new Error(`AI metrics projects: ${res.status}`);
-  return res.json();
+  return tryApi(async (headers) => {
+    const params = new URLSearchParams();
+    if (limit) params.set("limit", String(limit));
+    if (sortBy) params.set("sortBy", sortBy);
+    const res = await fetch(`${process.env.SENTINEL_API_URL}/v1/ai-metrics/projects?${params}`, {
+      headers,
+      next: { revalidate: 60 },
+    });
+    if (!res.ok) throw new Error(`AI metrics projects: ${res.status}`);
+    return res.json();
+  }, []);
 }
 
 export async function getAIMetricsCompare(projectIds: string[], days = 30): Promise<AIProjectComparison> {
-  if (USE_MOCK) {
-    const series: Record<string, any[]> = {};
-    for (const id of projectIds) {
-      series[id] = Array.from({ length: days }, (_, i) => {
-        const d = new Date(); d.setDate(d.getDate() - (days - i - 1));
-        return { date: d.toISOString().slice(0, 10), aiRatio: 0.15 + Math.random() * 0.2, aiInfluenceScore: 0.2 + Math.random() * 0.15 };
-      });
-    }
-    return { projectIds, days, series };
-  }
-  const headers = await getSessionHeaders();
-  const params = new URLSearchParams({ projectIds: projectIds.join(","), days: String(days) });
-  const res = await fetch(`${process.env.SENTINEL_API_URL}/v1/ai-metrics/projects/compare?${params}`, { headers, next: { revalidate: 60 } });
-  if (!res.ok) throw new Error(`AI metrics compare: ${res.status}`);
-  return res.json();
+  return tryApi(async (headers) => {
+    const params = new URLSearchParams({ projectIds: projectIds.join(","), days: String(days) });
+    const res = await fetch(`${process.env.SENTINEL_API_URL}/v1/ai-metrics/projects/compare?${params}`, {
+      headers,
+      next: { revalidate: 60 },
+    });
+    if (!res.ok) throw new Error(`AI metrics compare: ${res.status}`);
+    return res.json();
+  }, { projectIds, days, series: {} });
 }
 
 export async function getAIMetricsAlerts(): Promise<AIAnomalyAlert[]> {
-  if (USE_MOCK) {
-    return [{ type: "threshold_exceeded", detail: "Org AI ratio 35% exceeds limit of 30%", severity: "critical", detectedAt: new Date().toISOString() }];
-  }
-  const headers = await getSessionHeaders();
-  const res = await fetch(`${process.env.SENTINEL_API_URL}/v1/ai-metrics/alerts`, { headers, next: { revalidate: 30 } });
-  if (!res.ok) throw new Error(`AI metrics alerts: ${res.status}`);
-  return res.json();
+  return tryApi(async (headers) => {
+    const res = await fetch(`${process.env.SENTINEL_API_URL}/v1/ai-metrics/alerts`, {
+      headers,
+      next: { revalidate: 30 },
+    });
+    if (!res.ok) throw new Error(`AI metrics alerts: ${res.status}`);
+    return res.json();
+  }, []);
 }
 
 export async function getAIMetricsConfig(): Promise<AIMetricsConfig> {
-  if (USE_MOCK) {
-    return { threshold: 0.5, strictMode: false, alertEnabled: false, alertMaxRatio: null, alertSpikeStdDev: 2.0, alertNewTool: true };
-  }
-  const headers = await getSessionHeaders();
-  const res = await fetch(`${process.env.SENTINEL_API_URL}/v1/ai-metrics/config`, { headers, next: { revalidate: 60 } });
-  if (!res.ok) throw new Error(`AI metrics config: ${res.status}`);
-  return res.json();
+  return tryApi(async (headers) => {
+    const res = await fetch(`${process.env.SENTINEL_API_URL}/v1/ai-metrics/config`, {
+      headers,
+      next: { revalidate: 60 },
+    });
+    if (!res.ok) throw new Error(`AI metrics config: ${res.status}`);
+    return res.json();
+  }, { threshold: 0.5, strictMode: false, alertEnabled: false, alertMaxRatio: null, alertSpikeStdDev: 2.0, alertNewTool: true });
 }
 
 export async function updateAIMetricsConfig(data: Partial<AIMetricsConfig>): Promise<AIMetricsConfig> {
-  if (USE_MOCK) return { threshold: 0.5, strictMode: false, alertEnabled: false, alertMaxRatio: null, alertSpikeStdDev: 2.0, alertNewTool: true, ...data };
   const headers = await getSessionHeaders();
   const res = await fetch(`${process.env.SENTINEL_API_URL}/v1/ai-metrics/config`, {
-    method: "PUT", headers: { ...headers, "Content-Type": "application/json" }, body: JSON.stringify(data),
+    method: "PUT",
+    headers: { ...headers, "Content-Type": "application/json" },
+    body: JSON.stringify(data),
   });
   if (!res.ok) throw new Error(`AI metrics config update: ${res.status}`);
   return res.json();

@@ -1,3 +1,5 @@
+export const dynamic = "force-dynamic";
+
 import { Sidebar } from "@/components/sidebar";
 import { Header } from "@/components/header";
 import { NAV_ITEMS } from "@/lib/rbac";

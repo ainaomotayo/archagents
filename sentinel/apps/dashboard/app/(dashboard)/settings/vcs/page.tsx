@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { MOCK_VCS_INSTALLATIONS } from "@/lib/mock-data";
 import { PageHeader } from "@/components/page-header";
 import { IconPlus, IconGithub, IconGlobe, IconGrid, IconCpu } from "@/components/icons";
 
@@ -25,35 +24,12 @@ interface VcsInstallation {
 
 /* ─── Constants ─── */
 
-const STORAGE_KEY = "sentinel_vcs_installations";
-
 const PROVIDER_META: Record<VcsProvider, { label: string; color: string }> = {
   github: { label: "GitHub", color: "bg-[#24292e]" },
   gitlab: { label: "GitLab", color: "bg-[#fc6d26]" },
   bitbucket: { label: "Bitbucket", color: "bg-[#0052cc]" },
   azure_devops: { label: "Azure DevOps", color: "bg-[#0078d4]" },
 };
-
-/* ─── Persistence ─── */
-
-function loadInstallations(): VcsInstallation[] {
-  if (typeof window === "undefined") return MOCK_VCS_INSTALLATIONS as VcsInstallation[];
-  try {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored) return JSON.parse(stored);
-  } catch {
-    // ignore parse errors
-  }
-  return MOCK_VCS_INSTALLATIONS as VcsInstallation[];
-}
-
-function saveInstallations(installations: VcsInstallation[]) {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(installations));
-  } catch {
-    // ignore storage errors
-  }
-}
 
 /* ─── Provider Icon ─── */
 
@@ -77,9 +53,9 @@ function ProviderIcon({ provider, className }: { provider: VcsProvider; classNam
 /* ─── Page ─── */
 
 export default function VcsProvidersPage() {
-  const [installations, setInstallations] = useState<VcsInstallation[]>(
-    MOCK_VCS_INSTALLATIONS as VcsInstallation[],
-  );
+  const [installations, setInstallations] = useState<VcsInstallation[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [feedback, setFeedback] = useState<{ type: "success" | "error"; message: string } | null>(null);
 
@@ -108,26 +84,38 @@ export default function VcsProvidersPage() {
   const [formAzProjectName, setFormAzProjectName] = useState("");
   const [formAzPat, setFormAzPat] = useState("");
 
-  // Load from localStorage on mount
+  // Load from API on mount
   useEffect(() => {
-    setInstallations(loadInstallations());
+    setLoading(true);
+    fetch("/api/vcs-installations")
+      .then((r) => (r.ok ? r.json() : Promise.reject()))
+      .then((data) => {
+        const list = data.installations ?? (Array.isArray(data) ? data : (data.data ?? []));
+        setInstallations(list);
+      })
+      .catch(() => setFeedback({ type: "error", message: "Failed to load integrations." }))
+      .finally(() => setLoading(false));
   }, []);
 
-  const updateInstallations = (next: VcsInstallation[]) => {
-    setInstallations(next);
-    saveInstallations(next);
+  const toggleActive = async (inst: VcsInstallation) => {
+    const res = await fetch(`/api/vcs-installations/${inst.id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ active: !inst.active }),
+    });
+    if (res.ok) {
+      setInstallations((prev) =>
+        prev.map((i) => (i.id === inst.id ? { ...i, active: !inst.active } : i)),
+      );
+    } else {
+      setFeedback({ type: "error", message: "Failed to update integration." });
+    }
   };
 
-  const toggleActive = (id: string) => {
-    const next = installations.map((inst) =>
-      inst.id === id ? { ...inst, active: !inst.active } : inst,
-    );
-    updateInstallations(next);
-  };
-
-  const deleteInstallation = (id: string) => {
-    const next = installations.filter((inst) => inst.id !== id);
-    updateInstallations(next);
+  const deleteInstallation = async (id: string, owner: string) => {
+    if (!window.confirm(`Remove the "${owner}" VCS connection? This cannot be undone.`)) return;
+    await fetch(`/api/vcs-installations/${id}`, { method: "DELETE" });
+    setInstallations((prev) => prev.filter((i) => i.id !== id));
   };
 
   const resetForm = () => {
@@ -148,7 +136,7 @@ export default function VcsProvidersPage() {
     setFormAzPat("");
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!formOwner.trim()) {
       setFeedback({ type: "error", message: "Owner is required." });
       return;
@@ -158,9 +146,9 @@ export default function VcsProvidersPage() {
       return;
     }
 
-    // Provider-specific validation
+    // Provider-specific validation and payload assembly
     let installationId = "";
-    let azureDevOpsExt: VcsInstallation["azureDevOpsExt"] | undefined;
+    let providerConfig: Record<string, string> = {};
 
     switch (formProvider) {
       case "github":
@@ -169,6 +157,11 @@ export default function VcsProvidersPage() {
           return;
         }
         installationId = formGhInstallationId.trim();
+        providerConfig = {
+          appId: formGhAppId.trim(),
+          privateKey: formGhPrivateKey.trim(),
+          numericInstallId: formGhInstallationId.trim(),
+        };
         break;
       case "gitlab":
         if (!formGlUrl.trim() || !formGlAccessToken.trim()) {
@@ -176,6 +169,11 @@ export default function VcsProvidersPage() {
           return;
         }
         installationId = `gl-${Date.now()}`;
+        providerConfig = {
+          gitlabUrl: formGlUrl.trim(),
+          accessToken: formGlAccessToken.trim(),
+          tokenType: formGlTokenType,
+        };
         break;
       case "bitbucket":
         if (!formBbWorkspace.trim() || !formBbClientKey.trim() || !formBbSharedSecret.trim()) {
@@ -183,6 +181,11 @@ export default function VcsProvidersPage() {
           return;
         }
         installationId = `bb-${formBbWorkspace.trim()}`;
+        providerConfig = {
+          workspace: formBbWorkspace.trim(),
+          clientKey: formBbClientKey.trim(),
+          sharedSecret: formBbSharedSecret.trim(),
+        };
         break;
       case "azure_devops":
         if (!formAzOrgUrl.trim() || !formAzProjectName.trim() || !formAzPat.trim()) {
@@ -190,32 +193,43 @@ export default function VcsProvidersPage() {
           return;
         }
         installationId = `az-${Date.now()}`;
-        azureDevOpsExt = {
+        providerConfig = {
           organizationUrl: formAzOrgUrl.trim(),
           projectName: formAzProjectName.trim(),
+          pat: formAzPat.trim(),
         };
         break;
     }
 
-    const newInstallation: VcsInstallation = {
-      id: `vcs-${Date.now()}`,
+    const payload = {
       provider: formProvider,
       installationId,
       owner: formOwner.trim(),
-      active: true,
       webhookSecret: formWebhookSecret.trim(),
-      createdAt: new Date().toISOString(),
-      ...(azureDevOpsExt ? { azureDevOpsExt } : {}),
+      ...providerConfig,
     };
 
-    updateInstallations([newInstallation, ...installations]);
-    resetForm();
-    setShowForm(false);
-    setFeedback({
-      type: "success",
-      message: `${PROVIDER_META[formProvider].label} provider "${newInstallation.owner}" added successfully.`,
-    });
-    setTimeout(() => setFeedback(null), 4000);
+    setSaving(true);
+    try {
+      const res = await fetch("/api/vcs-installations", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+      const saved = res.ok ? await res.json() : null;
+      if (saved) {
+        setInstallations((prev) => [saved as VcsInstallation, ...prev]);
+        resetForm();
+        setShowForm(false);
+        setFeedback({
+          type: "success",
+          message: `${PROVIDER_META[formProvider].label} provider "${formOwner.trim()}" added successfully.`,
+        });
+        setTimeout(() => setFeedback(null), 4000);
+      } else {
+        setFeedback({ type: "error", message: "Failed to save integration. Please try again." });
+      }
+    } catch {
+      setFeedback({ type: "error", message: "Failed to save integration. Please try again." });
+    } finally {
+      setSaving(false);
+    }
   };
 
   /* ─── Provider-specific form fields ─── */
@@ -375,8 +389,8 @@ export default function VcsProvidersPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="VCS Providers"
-        description="Connect and manage version control system integrations."
+        title="Integrations"
+        description="Connect your version control system to enable automated scanning."
         action={
           <button
             onClick={() => setShowForm(!showForm)}
@@ -468,15 +482,24 @@ export default function VcsProvidersPage() {
           <div className="border-t border-border pt-5">
             <button
               onClick={handleSave}
-              className="rounded-lg bg-status-pass px-4 py-2.5 text-[13px] font-semibold text-text-inverse transition-all hover:brightness-110 active:scale-[0.98] focus-ring"
+              disabled={saving}
+              className="rounded-lg bg-status-pass px-4 py-2.5 text-[13px] font-semibold text-text-inverse transition-all hover:brightness-110 active:scale-[0.98] focus-ring disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              Save Provider
+              {saving ? "Saving…" : "Save Provider"}
             </button>
           </div>
         </div>
       )}
 
+      {/* Loading state */}
+      {loading && (
+        <div className="rounded-xl border border-dashed border-border bg-surface-1 px-6 py-10 text-center">
+          <p className="text-[13px] text-text-tertiary">Loading integrations…</p>
+        </div>
+      )}
+
       {/* Installation list */}
+      {!loading && (
       <div className="space-y-3">
         {installations.map((inst, i) => {
           const meta = PROVIDER_META[inst.provider as VcsProvider] ?? {
@@ -511,7 +534,7 @@ export default function VcsProvidersPage() {
                 </div>
                 <div className="flex items-center gap-3">
                   <button
-                    onClick={() => toggleActive(inst.id)}
+                    onClick={() => toggleActive(inst)}
                     className={`inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wider transition-colors ${
                       inst.active
                         ? "bg-status-pass/15 text-status-pass border-status-pass/30"
@@ -527,7 +550,7 @@ export default function VcsProvidersPage() {
                   </button>
                   <div className="rounded-md transition-colors hover:bg-status-fail/10">
                     <button
-                      onClick={() => deleteInstallation(inst.id)}
+                      onClick={() => deleteInstallation(inst.id, inst.owner)}
                       className="text-[11px] font-medium text-status-fail hover:brightness-110 focus-ring rounded px-2 py-1"
                     >
                       Delete
@@ -565,6 +588,7 @@ export default function VcsProvidersPage() {
           </div>
         )}
       </div>
+      )}
     </div>
   );
 }

@@ -51,7 +51,7 @@ describe("useApprovalStream types", () => {
     ];
     // These event types are string literals in the module
     // Verify they exist as a compile-time check via type import
-    type EventType = (typeof mod)["ApprovalStreamEvent"] extends { type: infer T } ? T : never;
+    type EventType = import("@/lib/use-approval-stream").ApprovalStreamEvent extends { type: infer T } ? T : never;
     // Runtime: just confirm the module loads without error
     expect(mod.useApprovalStream).toBeDefined();
     expect(typeof mod.useApprovalStream).toBe("function");

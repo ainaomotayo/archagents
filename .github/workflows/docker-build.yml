@@ -20,11 +20,18 @@ env:
 jobs:
   changes:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
     outputs:
       api: ${{ steps.filter.outputs.api }}
       dashboard: ${{ steps.filter.outputs.dashboard }}
       agent-security: ${{ steps.filter.outputs.agent-security }}
       agent-dependency: ${{ steps.filter.outputs.agent-dependency }}
+      agent-quality: ${{ steps.filter.outputs.agent-quality }}
+      agent-ai-detector: ${{ steps.filter.outputs.agent-ai-detector }}
+      agent-llm-review: ${{ steps.filter.outputs.agent-llm-review }}
+      agent-policy: ${{ steps.filter.outputs.agent-policy }}
     steps:
       - uses: actions/checkout@v4
       - uses: dorny/paths-filter@v3
@@ -50,6 +57,22 @@ jobs:
               - 'sentinel/agents/dependency/**'
               - 'sentinel/agents/framework/**'
               - 'sentinel/agents/dependency/Dockerfile'
+            agent-quality:
+              - 'sentinel/agents/quality/**'
+              - 'sentinel/agents/framework/**'
+              - 'sentinel/agents/quality/Dockerfile'
+            agent-ai-detector:
+              - 'sentinel/agents/ai-detector/**'
+              - 'sentinel/agents/framework/**'
+              - 'sentinel/agents/ai-detector/Dockerfile'
+            agent-llm-review:
+              - 'sentinel/agents/llm-review/**'
+              - 'sentinel/agents/framework/**'
+              - 'sentinel/agents/llm-review/Dockerfile'
+            agent-policy:
+              - 'sentinel/agents/policy/**'
+              - 'sentinel/agents/framework/**'
+              - 'sentinel/agents/policy/Dockerfile'
 
   build-api:
     needs: changes
@@ -134,6 +157,14 @@ jobs:
             changed: ${{ needs.changes.outputs.agent-security }}
           - name: dependency
             changed: ${{ needs.changes.outputs.agent-dependency }}
+          - name: quality
+            changed: ${{ needs.changes.outputs.agent-quality }}
+          - name: ai-detector
+            changed: ${{ needs.changes.outputs.agent-ai-detector }}
+          - name: llm-review
+            changed: ${{ needs.changes.outputs.agent-llm-review }}
+          - name: policy
+            changed: ${{ needs.changes.outputs.agent-policy }}
     steps:
       - uses: actions/checkout@v4
         if: matrix.changed == 'true' || github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')

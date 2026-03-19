@@ -4,9 +4,6 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { IconCalendarEvent, IconClock } from "@/components/icons";
 
-const API_BASE =
-  process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
-
 interface ScheduleSummary {
   enabled: boolean;
   nextRunAt: string | null;
@@ -20,7 +17,7 @@ export function ScheduledReportsWidget() {
   useEffect(() => {
     async function fetchSchedules() {
       try {
-        const res = await fetch(`${API_BASE}/v1/report-schedules?limit=100`);
+        const res = await fetch(`/api/report-schedules?limit=100`);
         if (!res.ok) return;
         const data = await res.json();
         const schedules: ScheduleSummary[] = data.data ?? data;
