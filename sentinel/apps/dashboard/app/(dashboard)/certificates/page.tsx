@@ -8,6 +8,7 @@ import {
   IconXCircle,
   IconClock,
 } from "@/components/icons";
+import { EmptyState } from "@/components/empty-state";
 
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString("en-US", {
@@ -63,20 +64,12 @@ export default async function CertificatesPage() {
 
       {/* Certificates table or empty state */}
       {certificates.length === 0 ? (
-        <div
-          className="animate-fade-up flex h-48 items-center justify-center rounded-xl border border-dashed border-border bg-surface-1"
-          style={{ animationDelay: "0.05s" }}
-        >
-          <div className="text-center">
-            <IconShield className="mx-auto h-8 w-8 text-text-tertiary" />
-            <p className="mt-3 text-[14px] font-semibold text-text-primary">
-              No certificates issued
-            </p>
-            <p className="mt-1 text-[12px] text-text-tertiary">
-              Certificates will appear here once scans pass compliance checks.
-            </p>
-          </div>
-        </div>
+        <EmptyState
+          icon={IconShield}
+          headline="No certificates issued yet"
+          body="Certificates are issued automatically when scans pass all compliance thresholds."
+          cta={{ label: "Run your first scan", href: "/projects" }}
+        />
       ) : (
         <div
           className="animate-fade-up overflow-hidden rounded-xl border border-border bg-surface-1"

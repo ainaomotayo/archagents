@@ -7,6 +7,8 @@ import { ApprovalStatsBar } from "./approval-stats-bar";
 import { ApprovalDetailPanel } from "./approval-detail-panel";
 import { useApprovalStream } from "@/lib/use-approval-stream";
 import { submitDecision, reassignGate } from "@/app/(dashboard)/approvals/actions";
+import { EmptyState } from "@/components/empty-state";
+import { IconCheckCircle } from "@/components/icons";
 
 interface ApprovalQueueProps {
   initialGates: ApprovalGate[];
@@ -215,18 +217,25 @@ export function ApprovalQueue({ initialGates, initialStats }: ApprovalQueueProps
 
       {/* Two-column layout */}
       {filteredGates.length === 0 ? (
-        <div className="animate-fade-up flex h-48 items-center justify-center rounded-xl border border-dashed border-border bg-surface-1" style={{ animationDelay: "0.09s" }}>
-          <div className="text-center">
-            <p className="text-[14px] font-semibold text-text-primary">
-              {filter === "all" ? "No approval gates" : `No ${filter} gates`}
-            </p>
-            <p className="mt-1 text-[12px] text-text-tertiary">
-              {filter === "all"
-                ? "All scans are passing without requiring review."
-                : "Try adjusting your filters."}
-            </p>
+        filter === "all" ? (
+          <EmptyState
+            icon={IconCheckCircle}
+            headline="No approvals pending"
+            body="Your team is all caught up. New approval requests will appear here."
+            variant="success"
+          />
+        ) : (
+          <div className="animate-fade-up flex h-48 items-center justify-center rounded-xl border border-dashed border-border bg-surface-1" style={{ animationDelay: "0.09s" }}>
+            <div className="text-center">
+              <p className="text-[14px] font-semibold text-text-primary">
+                {`No ${filter} gates`}
+              </p>
+              <p className="mt-1 text-[12px] text-text-tertiary">
+                Try adjusting your filters.
+              </p>
+            </div>
           </div>
-        </div>
+        )
       ) : (
         <div className="animate-fade-up grid gap-6 xl:grid-cols-[1fr_1fr]" style={{ animationDelay: "0.09s" }}>
           {/* List panel */}
