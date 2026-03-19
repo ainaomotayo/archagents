@@ -27,6 +27,7 @@ export function EmptyState({
     >
       <div className="flex flex-col items-center text-center px-6 py-12 max-w-sm">
         <div
+          aria-hidden="true"
           className={`mb-5 flex h-14 w-14 items-center justify-center rounded-xl ring-2 ring-offset-2 ring-offset-surface-1 ${
             isSuccess
               ? "bg-status-pass/10 ring-status-pass/20 text-status-pass"
@@ -49,12 +50,12 @@ export function EmptyState({
           </Link>
         )}
         {secondaryLink && (
-          <a
+          <Link
             href={secondaryLink.href}
             className="mt-3 text-[12px] font-medium text-text-tertiary hover:text-text-secondary transition-colors"
           >
             {secondaryLink.label}
-          </a>
+          </Link>
         )}
       </div>
     </div>
