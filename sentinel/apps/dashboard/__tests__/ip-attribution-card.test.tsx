@@ -31,8 +31,8 @@ const mockCert: IPAttributionCertificate = {
     conflictingFiles: 1,
   },
   toolBreakdown: [
-    { tool: "copilot", model: "gpt-4", files: 3, loc: 300, percentage: 0.3 },
-    { tool: "cursor", model: null, files: 1, loc: 100, percentage: 0.1 },
+    { tool: "copilot", model: "gpt-4", files: 3, loc: 300, percentage: 0.3, confirmedCount: 0, estimatedCount: 0 },
+    { tool: "cursor", model: null, files: 1, loc: 100, percentage: 0.1, confirmedCount: 0, estimatedCount: 0 },
   ],
   files: [],
   methodology: {

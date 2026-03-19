@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { MOCK_VCS_INSTALLATIONS } from "@/lib/mock-data";
+import { MOCK_VCS_INSTALLATIONS } from "@/lib/demo-data";
 import { PageHeader } from "@/components/page-header";
 import { IconPlus, IconGithub, IconGlobe, IconGrid, IconCpu } from "@/components/icons";
 
@@ -375,8 +375,8 @@ export default function VcsProvidersPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="VCS Providers"
-        description="Connect and manage version control system integrations."
+        title="Integrations"
+        description="Connect your version control system to enable automated scanning."
         action={
           <button
             onClick={() => setShowForm(!showForm)}

@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { getAuditLog } from "@/lib/api";
 import { PageHeader } from "@/components/page-header";
+import { IconActivity } from "@/components/icons";
+import { EmptyState } from "@/components/empty-state";
 
 const ACTION_STYLES: Record<string, string> = {
   scan: "bg-status-info/15 text-status-info border-status-info/30",
@@ -251,33 +253,11 @@ export default async function AuditLogPage() {
         </div>
       ) : (
         /* ── Empty state ──────────────────────────────────────── */
-        <div
-          className="animate-fade-up flex flex-col items-center justify-center rounded-xl border border-border bg-surface-1 px-6 py-20"
-          style={{ animationDelay: "0.05s" }}
-        >
-          <div className="flex h-14 w-14 items-center justify-center rounded-full bg-surface-2">
-            <svg
-              className="h-6 w-6 text-text-tertiary"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              strokeWidth={1.5}
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"
-              />
-            </svg>
-          </div>
-          <h3 className="mt-4 text-sm font-semibold text-text-primary">
-            No audit events yet
-          </h3>
-          <p className="mt-1 max-w-sm text-center text-[12px] text-text-tertiary">
-            When scans run, certificates are issued, or policies change, events
-            will appear here in chronological order.
-          </p>
-        </div>
+        <EmptyState
+          icon={IconActivity}
+          headline="No activity recorded yet"
+          body="All authentication, scan, and configuration events will appear here."
+        />
       )}
     </div>
   );

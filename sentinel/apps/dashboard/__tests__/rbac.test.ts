@@ -119,3 +119,29 @@ describe("getVisibleNavItems", () => {
     expect(labels).not.toContain("Settings");
   });
 });
+
+// ---------------------------------------------------------------------------
+// NAV_ITEMS order
+// ---------------------------------------------------------------------------
+describe("NAV_ITEMS order", () => {
+  it("Overview is the first nav item", () => {
+    expect(NAV_ITEMS[0].href).toBe("/");
+  });
+
+  it("Integrations item links to /settings/vcs", () => {
+    const item = NAV_ITEMS.find((i) => i.label === "Integrations");
+    expect(item).toBeDefined();
+    expect(item?.href).toBe("/settings/vcs");
+  });
+
+  it("Integrations appears before Settings", () => {
+    const intIdx = NAV_ITEMS.findIndex((i) => i.href === "/settings/vcs");
+    const settingsIdx = NAV_ITEMS.findIndex((i) => i.href === "/settings");
+    expect(intIdx).toBeGreaterThan(0);
+    expect(intIdx).toBe(settingsIdx - 1);
+  });
+
+  it("has 14 nav items total", () => {
+    expect(NAV_ITEMS).toHaveLength(14);
+  });
+});

@@ -54,7 +54,7 @@ export function Sidebar({ items }: SidebarProps) {
               Navigation
             </p>
           )}
-          {items.slice(0, 4).map((item) => (
+          {items.slice(0, 3).map((item) => (
             <NavItem
               key={item.href}
               label={item.label}
@@ -72,7 +72,7 @@ export function Sidebar({ items }: SidebarProps) {
               Compliance
             </p>
           )}
-          {items.slice(4, 9).map((item) => (
+          {items.slice(3, 9).map((item) => (
             <NavItem
               key={item.href}
               label={item.label}
@@ -83,7 +83,25 @@ export function Sidebar({ items }: SidebarProps) {
             />
           ))}
 
-          {items.length > 9 && (
+          <div className="my-3 border-t border-border-subtle" />
+
+          {!collapsed && (
+            <p className="mb-2 px-2 text-[9px] font-semibold uppercase tracking-widest text-text-tertiary">
+              Tools
+            </p>
+          )}
+          {items.slice(9, 12).map((item) => (
+            <NavItem
+              key={item.href}
+              label={item.label}
+              href={item.href}
+              icon={item.icon}
+              collapsed={collapsed}
+              badge={item.badge}
+            />
+          ))}
+
+          {items.length > 12 && (
             <>
               <div className="my-3 border-t border-border-subtle" />
               {!collapsed && (
@@ -91,7 +109,7 @@ export function Sidebar({ items }: SidebarProps) {
                   System
                 </p>
               )}
-              {items.slice(9).map((item) => (
+              {items.slice(12).map((item) => (
                 <NavItem
                   key={item.href}
                   label={item.label}

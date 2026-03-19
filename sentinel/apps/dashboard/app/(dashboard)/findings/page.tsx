@@ -1,7 +1,6 @@
-import Link from "next/link";
 import { getFindings } from "@/lib/api";
-import { FindingCard } from "@/components/finding-card";
 import { PageHeader } from "@/components/page-header";
+import { FindingsClient } from "./findings-client";
 
 export default async function FindingsPage() {
   const findings = await getFindings();
@@ -53,32 +52,7 @@ export default async function FindingsPage() {
       </div>
 
       {/* Findings list */}
-      {findings.length === 0 ? (
-        <div className="flex h-48 items-center justify-center rounded-xl border border-dashed border-border bg-surface-1">
-          <div className="text-center">
-            <p className="text-[14px] font-semibold text-text-primary">
-              No findings
-            </p>
-            <p className="mt-1 text-[12px] text-text-tertiary">
-              All scans are clean. Keep up the good work.
-            </p>
-          </div>
-        </div>
-      ) : (
-        <div className="grid gap-2.5">
-          {findings.map((finding, i) => (
-            <Link
-              key={finding.id}
-              href={`/findings/${finding.id}`}
-              className="animate-fade-up block focus-ring rounded-lg"
-              style={{ animationDelay: `${0.03 + 0.04 * i}s` }}
-              aria-label={`View finding: ${finding.title}`}
-            >
-              <FindingCard finding={finding} />
-            </Link>
-          ))}
-        </div>
-      )}
+      <FindingsClient findings={findings} />
     </div>
   );
 }
