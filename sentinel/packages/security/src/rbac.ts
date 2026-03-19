@@ -170,6 +170,43 @@ export const API_PERMISSIONS: EndpointPermission[] = [
   { method: "POST", path: "/v1/domains", roles: ["admin"] },
   { method: "POST", path: "/v1/domains/:domain/verify", roles: ["admin"] },
   { method: "DELETE", path: "/v1/domains/:domain", roles: ["admin"] },
+  // VCS Installations
+  { method: "GET", path: "/v1/vcs-installations", roles: ["admin", "manager", "developer"] },
+  { method: "POST", path: "/v1/vcs-installations", roles: ["admin"] },
+  { method: "PUT", path: "/v1/vcs-installations/:id", roles: ["admin"] },
+  { method: "DELETE", path: "/v1/vcs-installations/:id", roles: ["admin"] },
+  { method: "POST", path: "/v1/vcs-installations/:id/test", roles: ["admin", "manager"] },
+  { method: "POST", path: "/v1/vcs-installations/:id/provision-webhooks", roles: ["admin"] },
+  // Report Schedules
+  { method: "GET", path: "/v1/report-schedules", roles: ["admin", "manager", "developer", "viewer"] },
+  { method: "POST", path: "/v1/report-schedules", roles: ["admin", "manager"] },
+  { method: "PATCH", path: "/v1/report-schedules/:id", roles: ["admin", "manager"] },
+  { method: "PUT", path: "/v1/report-schedules/:id", roles: ["admin", "manager"] },
+  { method: "DELETE", path: "/v1/report-schedules/:id", roles: ["admin", "manager"] },
+  { method: "POST", path: "/v1/report-schedules/:id/trigger", roles: ["admin", "manager", "service"] },
+  // Data Retention
+  { method: "GET", path: "/v1/retention/presets", roles: ["admin", "manager"] },
+  { method: "GET", path: "/v1/retention/policy", roles: ["admin", "manager"] },
+  { method: "POST", path: "/v1/retention/policy/changes", roles: ["admin", "manager"] },
+  { method: "GET", path: "/v1/retention/policy/changes", roles: ["admin", "manager"] },
+  { method: "GET", path: "/v1/retention/policy/changes/:id", roles: ["admin", "manager"] },
+  { method: "POST", path: "/v1/retention/policy/changes/:id/approve", roles: ["admin"] },
+  { method: "POST", path: "/v1/retention/policy/changes/:id/reject", roles: ["admin"] },
+  { method: "GET", path: "/v1/retention/archives", roles: ["admin", "manager"] },
+  { method: "POST", path: "/v1/retention/archives", roles: ["admin"] },
+  { method: "PUT", path: "/v1/retention/archives/:id", roles: ["admin"] },
+  { method: "DELETE", path: "/v1/retention/archives/:id", roles: ["admin"] },
+  { method: "POST", path: "/v1/retention/archives/:id/test", roles: ["admin"] },
+  { method: "GET", path: "/v1/retention/stats", roles: ["admin", "manager"] },
+  { method: "GET", path: "/v1/retention/stats/trend", roles: ["admin", "manager"] },
+  { method: "GET", path: "/v1/retention/preview", roles: ["admin", "manager"] },
+  { method: "GET", path: "/v1/retention/executions", roles: ["admin", "manager"] },
+  { method: "GET", path: "/v1/retention/executions/:id", roles: ["admin", "manager"] },
+  // Org Settings
+  { method: "GET", path: "/v1/org/settings", roles: ["admin", "manager"] },
+  { method: "PUT", path: "/v1/org/settings", roles: ["admin"] },
+  // SSO test connection
+  { method: "POST", path: "/v1/sso-configs/:id/test-connection", roles: ["admin"] },
 ];
 
 /** Pre-computed HashMap for O(1) authorization lookups. */

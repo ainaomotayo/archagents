@@ -3,14 +3,17 @@ import type { PrismaClient } from "@sentinel/db";
 
 interface VcsInstallationsOpts {
   db: PrismaClient;
+  authHook: any;
 }
 
 export function registerVcsInstallationRoutes(
   app: FastifyInstance,
   opts: VcsInstallationsOpts,
 ): void {
+  const { authHook } = opts;
+
   // List installations for current org
-  app.get("/v1/vcs-installations", async (request, reply) => {
+  app.get("/v1/vcs-installations", { preHandler: authHook }, async (request, reply) => {
     const orgId = (request as any).orgId;
     if (!orgId) return reply.code(401).send({ error: "Unauthorized" });
 
@@ -29,7 +32,7 @@ export function registerVcsInstallationRoutes(
   });
 
   // Create new installation
-  app.post("/v1/vcs-installations", async (request, reply) => {
+  app.post("/v1/vcs-installations", { preHandler: authHook }, async (request, reply) => {
     const orgId = (request as any).orgId;
     if (!orgId) return reply.code(401).send({ error: "Unauthorized" });
 
@@ -106,7 +109,7 @@ export function registerVcsInstallationRoutes(
   });
 
   // Update installation
-  app.put<{ Params: { id: string } }>("/v1/vcs-installations/:id", async (request, reply) => {
+  app.put<{ Params: { id: string } }>("/v1/vcs-installations/:id", { preHandler: authHook }, async (request, reply) => {
     const orgId = (request as any).orgId;
     if (!orgId) return reply.code(401).send({ error: "Unauthorized" });
 
@@ -131,7 +134,7 @@ export function registerVcsInstallationRoutes(
   });
 
   // Delete installation
-  app.delete<{ Params: { id: string } }>("/v1/vcs-installations/:id", async (request, reply) => {
+  app.delete<{ Params: { id: string } }>("/v1/vcs-installations/:id", { preHandler: authHook }, async (request, reply) => {
     const orgId = (request as any).orgId;
     if (!orgId) return reply.code(401).send({ error: "Unauthorized" });
 
@@ -146,7 +149,7 @@ export function registerVcsInstallationRoutes(
   });
 
   // Test connection
-  app.post<{ Params: { id: string } }>("/v1/vcs-installations/:id/test", async (request, reply) => {
+  app.post<{ Params: { id: string } }>("/v1/vcs-installations/:id/test", { preHandler: authHook }, async (request, reply) => {
     const orgId = (request as any).orgId;
     if (!orgId) return reply.code(401).send({ error: "Unauthorized" });
 
@@ -163,6 +166,7 @@ export function registerVcsInstallationRoutes(
   // Provision webhooks on the VCS provider
   app.post<{ Params: { id: string } }>(
     "/v1/vcs-installations/:id/provision-webhooks",
+    { preHandler: authHook },
     async (request, reply) => {
       const orgId = (request as any).orgId;
       if (!orgId) return reply.code(401).send({ error: "Unauthorized" });

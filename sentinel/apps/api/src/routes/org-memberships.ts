@@ -35,17 +35,32 @@ export function registerOrgMembershipRoutes(app: FastifyInstance, authHook: any)
     return reply.send({ memberships });
   });
 
-  // POST /v1/memberships — add member
+  // POST /v1/memberships — add member (accepts userId or email)
   app.post("/v1/memberships", { preHandler: authHook }, async (request: FastifyRequest, reply: FastifyReply) => {
-    const { userId, role = "viewer" } = request.body as { userId: string; role?: string };
-    if (!userId) {
-      return reply.status(400).send({ error: "userId is required" });
-    }
+    const { userId: rawUserId, email, role = "viewer" } = request.body as { userId?: string; email?: string; role?: string };
     if (!VALID_ROLES.includes(role)) {
       return reply.status(400).send({ error: `role must be one of: ${VALID_ROLES.join(", ")}` });
     }
     const { getDb } = await import("@sentinel/db");
     const db = getDb();
+
+    let userId = rawUserId;
+    if (!userId && email) {
+      const user = await db.user.findFirst({ where: { email } });
+      if (!user) {
+        return reply.status(404).send({ error: `No user found with email ${email}. They must sign in to SENTINEL first.` });
+      }
+      userId = user.id;
+    }
+    if (!userId) {
+      return reply.status(400).send({ error: "userId or email is required" });
+    }
+
+    const existing = await db.orgMembership.findFirst({ where: { orgId: (request as any).orgId, userId } });
+    if (existing) {
+      return reply.status(409).send({ error: "User is already a member of this organization" });
+    }
+
     const membership = await db.orgMembership.create({
       data: { orgId: (request as any).orgId, userId, role, source: "manual" },
     });
