@@ -46,6 +46,7 @@ export function OnboardingChecklist({ completedSteps }: OnboardingChecklistProps
           onClick={() => setOpen((v) => !v)}
           aria-label={open ? "Collapse checklist" : "Expand checklist"}
           aria-expanded={open}
+          aria-controls="checklist-steps"
           className="flex h-6 w-6 items-center justify-center rounded-md text-text-tertiary hover:text-text-secondary hover:bg-surface-2 transition-colors"
         >
           <IconChevronLeft
@@ -57,7 +58,7 @@ export function OnboardingChecklist({ completedSteps }: OnboardingChecklistProps
 
       {/* Step list */}
       {open && (
-        <ul className="mt-3 space-y-2">
+        <ul id="checklist-steps" className="mt-3 space-y-2">
           {STEPS.map((step) => {
             const done = completedSteps.includes(step.id);
             return (
@@ -73,7 +74,7 @@ export function OnboardingChecklist({ completedSteps }: OnboardingChecklistProps
 
                 {/* Label */}
                 {done ? (
-                  <span className="text-[12px] text-text-tertiary line-through opacity-50">
+                  <span className="text-[12px] text-text-tertiary line-through">
                     {step.label}
                   </span>
                 ) : (

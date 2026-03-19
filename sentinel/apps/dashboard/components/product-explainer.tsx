@@ -1,7 +1,8 @@
+import type { ReactNode } from "react";
 import { IconSearch, IconShieldCheck, IconBarChart } from "@/components/icons";
 
 interface FeatureCard {
-  icon: React.ReactNode;
+  icon: ReactNode;
   title: string;
   description: string;
 }
@@ -9,19 +10,19 @@ interface FeatureCard {
 const CARDS: FeatureCard[] = [
   {
     icon: <IconSearch className="h-5 w-5" />,
-    title: "Automated Code Analysis",
+    title: "Scan",
     description:
       "Every push triggers security, dependency, AI-usage, and policy checks across your codebase.",
   },
   {
     icon: <IconShieldCheck className="h-5 w-5" />,
-    title: "Cryptographic Certificates",
+    title: "Certify",
     description:
       "Clean scans earn tamper-proof certificates with risk scores attached to each commit.",
   },
   {
     icon: <IconBarChart className="h-5 w-5" />,
-    title: "Compliance & Governance",
+    title: "Govern",
     description:
       "Track SOC2, SLSA, and custom frameworks. Enforce approval gates before merging.",
   },

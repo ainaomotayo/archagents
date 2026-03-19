@@ -62,12 +62,6 @@ export function OnboardingBanner({ orgName }: OnboardingBannerProps) {
           >
             Connect your first repository →
           </Link>
-          <Link
-            href="#"
-            className="text-[12px] text-text-tertiary hover:text-text-secondary transition-colors"
-          >
-            Learn how it works
-          </Link>
         </div>
       </div>
     </div>
