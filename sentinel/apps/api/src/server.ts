@@ -167,7 +167,7 @@ if (webhookSecret) {
 }
 
 // --- VCS installation management routes ---
-registerVcsInstallationRoutes(app, { db });
+registerVcsInstallationRoutes(app, { db, authHook });
 
 // --- Multi-VCS webhook routes ---
 const vcsRegistry = new VcsProviderRegistry();
