@@ -15,10 +15,12 @@ export async function buildProxyHeaders(bodyStr = ""): Promise<Record<string, st
   try {
     const { signRequest } = await import("@sentinel/auth");
     const session = await getServerSession(authOptions);
+    const orgId = process.env.SENTINEL_ORG_ID ?? "00000000-0000-0000-0000-000000000001";
     const headers: Record<string, string> = {
       "Content-Type": "application/json",
       "X-Sentinel-Signature": signRequest(bodyStr, API_SECRET),
       "X-Sentinel-API-Key": "dashboard",
+      "X-Sentinel-Org-Id": orgId,
     };
     if (session?.user) {
       if ((session.user as any).role) headers["X-Sentinel-Role"] = (session.user as any).role;
