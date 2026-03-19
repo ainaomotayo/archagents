@@ -155,21 +155,32 @@ function TeamMembersPanel() {
 interface ApiToken {
   id: string;
   name: string;
+  role?: string;
   keyPrefix?: string;
   maskedKey?: string;
-  createdAt: string;
+  createdAt?: string | null;
   expiresAt?: string | null;
-  // Only present immediately after creation
   plaintext?: string;
 }
+
+function formatDate(val?: string | null) {
+  if (!val) return "—";
+  const d = new Date(val);
+  return isNaN(d.getTime()) ? "—" : d.toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" });
+}
+
+const ROLE_OPTIONS = ["service", "developer", "viewer"] as const;
 
 function APITokensPanel() {
   const [tokens, setTokens] = useState<ApiToken[]>([]);
   const [showCreate, setShowCreate] = useState(false);
   const [tokenName, setTokenName] = useState("");
+  const [tokenRole, setTokenRole] = useState<string>("service");
   const [creating, setCreating] = useState(false);
   const [newToken, setNewToken] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
   const [createError, setCreateError] = useState("");
+  const [revokeConfirm, setRevokeConfirm] = useState<string | null>(null);
 
   useEffect(() => {
     fetch("/api/api-keys")
@@ -177,6 +188,17 @@ function APITokensPanel() {
       .then((d) => setTokens(d.apiKeys ?? d ?? []))
       .catch(() => {});
   }, []);
+
+  async function handleCopy() {
+    if (!newToken) return;
+    try {
+      await navigator.clipboard.writeText(newToken);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // fallback: select the text
+    }
+  }
 
   async function handleGenerate(e: React.FormEvent) {
     e.preventDefault();
@@ -187,14 +209,15 @@ function APITokensPanel() {
       const res = await fetch("/api/api-keys", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ name }),
+        body: JSON.stringify({ name, role: tokenRole }),
       });
       if (res.ok) {
         const d = await res.json();
         const key = d.apiKey ?? d;
-        setTokens((prev) => [...prev, key]);
+        setTokens((prev) => [key, ...prev]);
         if (d.plaintext || d.key) setNewToken(d.plaintext ?? d.key);
         setTokenName("");
+        setTokenRole("service");
         setShowCreate(false);
       } else {
         const d = await res.json().catch(() => ({}));
@@ -210,17 +233,39 @@ function APITokensPanel() {
   async function handleRevoke(id: string) {
     await fetch(`/api/api-keys/${id}`, { method: "DELETE" });
     setTokens((prev) => prev.filter((t) => t.id !== id));
+    setRevokeConfirm(null);
   }
 
   return (
     <div className="mt-4 space-y-3">
       {newToken && (
         <div className="rounded-lg border border-status-pass/30 bg-status-pass/10 px-4 py-3">
-          <p className="text-[12px] font-medium text-status-pass mb-1">Token created — copy it now, it won't be shown again:</p>
-          <code className="block font-mono text-[11px] text-text-primary break-all">{newToken}</code>
-          <button onClick={() => setNewToken(null)} className="mt-2 text-[11px] text-text-tertiary hover:text-text-secondary">
-            Dismiss
-          </button>
+          <div className="flex items-center justify-between mb-1.5">
+            <p className="text-[12px] font-semibold text-status-pass">
+              Token created — copy it now, it won&apos;t be shown again
+            </p>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleCopy}
+                className={`rounded-md border px-2.5 py-1 text-[11px] font-semibold transition-all ${
+                  copied
+                    ? "border-status-pass/50 bg-status-pass/20 text-status-pass"
+                    : "border-status-pass/40 bg-status-pass/10 text-status-pass hover:bg-status-pass/20"
+                }`}
+              >
+                {copied ? "Copied!" : "Copy"}
+              </button>
+              <button
+                onClick={() => { setNewToken(null); setCopied(false); }}
+                className="text-[11px] text-text-tertiary hover:text-text-secondary"
+              >
+                Dismiss
+              </button>
+            </div>
+          </div>
+          <code className="block w-full rounded-md bg-surface-0 px-3 py-2 font-mono text-[11px] text-text-primary break-all border border-border">
+            {newToken}
+          </code>
         </div>
       )}
 
@@ -231,26 +276,55 @@ function APITokensPanel() {
               key={token.id}
               className="flex items-center justify-between rounded-lg border border-border bg-surface-0/50 px-4 py-3"
             >
-              <div>
-                <p className="text-[13px] font-medium text-text-primary">{token.name}</p>
-                <p className="font-mono text-[11px] text-text-tertiary">
+              <div className="min-w-0">
+                <div className="flex items-center gap-2">
+                  <p className="text-[13px] font-medium text-text-primary">{token.name}</p>
+                  {token.role && (
+                    <span className="rounded-md bg-surface-2 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-text-secondary">
+                      {token.role}
+                    </span>
+                  )}
+                </div>
+                <p className="font-mono text-[11px] text-text-tertiary mt-0.5">
                   {token.keyPrefix ? `${token.keyPrefix}****` : token.maskedKey ?? "sntnl_****"}
                 </p>
               </div>
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-3 flex-shrink-0">
                 <span className="text-[11px] text-text-tertiary">
-                  {new Date(token.createdAt).toLocaleDateString()}
+                  {formatDate(token.createdAt)}
                 </span>
-                <button
-                  onClick={() => handleRevoke(token.id)}
-                  className="text-[11px] text-status-fail/70 transition-colors hover:text-status-fail"
-                >
-                  Revoke
-                </button>
+                {revokeConfirm === token.id ? (
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[11px] text-text-tertiary">Revoke?</span>
+                    <button
+                      onClick={() => handleRevoke(token.id)}
+                      className="rounded-md bg-status-fail/10 px-2 py-0.5 text-[11px] font-semibold text-status-fail hover:bg-status-fail/20 transition-colors"
+                    >
+                      Yes
+                    </button>
+                    <button
+                      onClick={() => setRevokeConfirm(null)}
+                      className="rounded-md bg-surface-2 px-2 py-0.5 text-[11px] text-text-secondary hover:bg-surface-3 transition-colors"
+                    >
+                      No
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => setRevokeConfirm(token.id)}
+                    className="text-[11px] text-text-tertiary transition-colors hover:text-status-fail"
+                  >
+                    Revoke
+                  </button>
+                )}
               </div>
             </div>
           ))}
         </div>
+      )}
+
+      {tokens.length === 0 && !showCreate && (
+        <p className="text-[12px] text-text-tertiary py-1">No API tokens yet. Generate one to get started.</p>
       )}
 
       {showCreate ? (
@@ -258,12 +332,21 @@ function APITokensPanel() {
           <div className="flex items-center gap-2">
             <input
               type="text"
-              placeholder="Token name (e.g. CI/CD)"
+              placeholder="Token name (e.g. CI/CD Pipeline)"
               value={tokenName}
               onChange={(e) => setTokenName(e.target.value)}
               className="flex-1 rounded-lg border border-border bg-surface-0/50 px-3 py-2 text-[12px] text-text-primary placeholder-text-tertiary outline-none transition-colors focus:border-border-accent"
               autoFocus
             />
+            <select
+              value={tokenRole}
+              onChange={(e) => setTokenRole(e.target.value)}
+              className="rounded-lg border border-border bg-surface-0/50 px-2 py-2 text-[12px] text-text-primary outline-none"
+            >
+              {ROLE_OPTIONS.map((r) => (
+                <option key={r} value={r}>{r}</option>
+              ))}
+            </select>
             <button
               type="submit"
               disabled={creating}
@@ -273,7 +356,7 @@ function APITokensPanel() {
             </button>
             <button
               type="button"
-              onClick={() => { setShowCreate(false); setCreateError(""); }}
+              onClick={() => { setShowCreate(false); setCreateError(""); setTokenRole("service"); }}
               className="rounded-lg border border-border px-3 py-2 text-[12px] text-text-secondary transition-colors hover:bg-surface-2"
             >
               Cancel
