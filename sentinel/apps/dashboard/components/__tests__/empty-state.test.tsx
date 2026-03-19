@@ -2,8 +2,8 @@
 import { describe, it, expect, afterEach } from "vitest";
 import { render, screen, cleanup } from "@testing-library/react";
 import React from "react";
-import { EmptyState } from "../components/empty-state";
-import { IconFolder } from "../components/icons";
+import { EmptyState } from "../empty-state";
+import { IconFolder } from "../icons";
 
 afterEach(cleanup);
 
