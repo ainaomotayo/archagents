@@ -1,20 +1,26 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { MOCK_WEBHOOKS } from "@/lib/demo-data";
 import { PageHeader } from "@/components/page-header";
 import { IconPlus, IconGlobe } from "@/components/icons";
+import {
+  getWebhooks,
+  createWebhook,
+  updateWebhook,
+  deleteWebhook,
+  testWebhook,
+} from "@/lib/api";
 
 interface Webhook {
   id: string;
   name: string;
   url: string;
-  events: string[];
+  /** Backend field name is `topics`; we keep local alias for display */
+  topics: string[];
   enabled: boolean;
-  lastTriggered: string | null;
+  createdAt: string;
+  updatedAt: string;
 }
-
-const STORAGE_KEY = "sentinel_webhooks";
 
 const ALL_EVENTS = [
   "scan.completed",
@@ -24,70 +30,50 @@ const ALL_EVENTS = [
   "certificate.revoked",
 ] as const;
 
-function loadWebhooks(): Webhook[] {
-  if (typeof window === "undefined") return MOCK_WEBHOOKS;
-  try {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored) return JSON.parse(stored);
-  } catch {
-    // ignore parse errors
-  }
-  return MOCK_WEBHOOKS;
-}
-
-function saveWebhooks(webhooks: Webhook[]) {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(webhooks));
-  } catch {
-    // ignore storage errors
-  }
-}
-
-function getRelativeTime(dateString: string): string {
-  const now = new Date();
-  const then = new Date(dateString);
-  const diffMs = now.getTime() - then.getTime();
-  const diffSec = Math.floor(diffMs / 1000);
-  const diffMin = Math.floor(diffSec / 60);
-  const diffHr = Math.floor(diffMin / 60);
-  const diffDays = Math.floor(diffHr / 24);
-
-  if (diffSec < 60) return "just now";
-  if (diffMin < 60) return `${diffMin}m ago`;
-  if (diffHr < 24) return `${diffHr}h ago`;
-  if (diffDays < 30) return `${diffDays}d ago`;
-  return `${Math.floor(diffDays / 30)}mo ago`;
-}
 
 export default function WebhooksPage() {
-  const [webhooks, setWebhooks] = useState<Webhook[]>(MOCK_WEBHOOKS);
+  const [webhooks, setWebhooks] = useState<Webhook[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [formName, setFormName] = useState("");
   const [formUrl, setFormUrl] = useState("");
   const [formEvents, setFormEvents] = useState<string[]>([]);
   const [feedback, setFeedback] = useState<{ type: "success" | "error"; message: string } | null>(null);
 
-  // Load from localStorage on mount
+  // Load from API on mount
   useEffect(() => {
-    setWebhooks(loadWebhooks());
+    setLoading(true);
+    getWebhooks()
+      .then((data) => setWebhooks(data as Webhook[]))
+      .catch(() => setFeedback({ type: "error", message: "Failed to load webhooks." }))
+      .finally(() => setLoading(false));
   }, []);
 
-  // Persist whenever webhooks change (skip initial render with loaded data)
-  const updateWebhooks = (next: Webhook[]) => {
-    setWebhooks(next);
-    saveWebhooks(next);
+  const toggleEnabled = async (wh: Webhook) => {
+    const updated = await updateWebhook(wh.id, { enabled: !wh.enabled });
+    if (updated) {
+      setWebhooks((prev) =>
+        prev.map((w) => (w.id === wh.id ? { ...w, enabled: !wh.enabled } : w)),
+      );
+    } else {
+      setFeedback({ type: "error", message: "Failed to update webhook." });
+    }
   };
 
-  const toggleEnabled = (id: string) => {
-    const next = webhooks.map((w) =>
-      w.id === id ? { ...w, enabled: !w.enabled } : w,
-    );
-    updateWebhooks(next);
+  const handleDelete = async (id: string) => {
+    await deleteWebhook(id);
+    setWebhooks((prev) => prev.filter((w) => w.id !== id));
   };
 
-  const deleteWebhook = (id: string) => {
-    const next = webhooks.filter((w) => w.id !== id);
-    updateWebhooks(next);
+  const handleTest = async (id: string) => {
+    const result = await testWebhook(id);
+    if (result) {
+      setFeedback({ type: "success", message: "Test event delivered successfully." });
+    } else {
+      setFeedback({ type: "error", message: "Test delivery failed." });
+    }
+    setTimeout(() => setFeedback(null), 4000);
   };
 
   const toggleFormEvent = (event: string) => {
@@ -102,7 +88,7 @@ export default function WebhooksPage() {
     setFormEvents([]);
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!formName.trim()) {
       setFeedback({ type: "error", message: "Webhook name is required." });
       return;
@@ -122,20 +108,28 @@ export default function WebhooksPage() {
       return;
     }
 
-    const newWebhook: Webhook = {
-      id: `wh-${Date.now()}`,
-      name: formName.trim(),
-      url: formUrl.trim(),
-      events: formEvents,
-      enabled: true,
-      lastTriggered: null,
-    };
-
-    updateWebhooks([newWebhook, ...webhooks]);
-    resetForm();
-    setShowForm(false);
-    setFeedback({ type: "success", message: `Webhook "${newWebhook.name}" created successfully.` });
-    setTimeout(() => setFeedback(null), 4000);
+    setSaving(true);
+    try {
+      const saved = await createWebhook({
+        name: formName.trim(),
+        url: formUrl.trim(),
+        topics: formEvents,
+        channelType: "http",
+      });
+      if (saved) {
+        setWebhooks((prev) => [saved as Webhook, ...prev]);
+        resetForm();
+        setShowForm(false);
+        setFeedback({ type: "success", message: `Webhook "${formName.trim()}" created successfully.` });
+        setTimeout(() => setFeedback(null), 4000);
+      } else {
+        setFeedback({ type: "error", message: "Failed to create webhook. Please try again." });
+      }
+    } catch {
+      setFeedback({ type: "error", message: "Failed to create webhook. Please try again." });
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -228,15 +222,24 @@ export default function WebhooksPage() {
           <div className="border-t border-border pt-5">
             <button
               onClick={handleSave}
-              className="rounded-lg bg-status-pass px-4 py-2.5 text-[13px] font-semibold text-text-inverse transition-all hover:brightness-110 active:scale-[0.98] focus-ring"
+              disabled={saving}
+              className="rounded-lg bg-status-pass px-4 py-2.5 text-[13px] font-semibold text-text-inverse transition-all hover:brightness-110 active:scale-[0.98] focus-ring disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              Save Webhook
+              {saving ? "Saving…" : "Save Webhook"}
             </button>
           </div>
         </div>
       )}
 
+      {/* Loading state */}
+      {loading && (
+        <div className="rounded-xl border border-dashed border-border bg-surface-1 px-6 py-10 text-center">
+          <p className="text-[13px] text-text-tertiary">Loading webhooks…</p>
+        </div>
+      )}
+
       {/* Webhook list */}
+      {!loading && (
       <div className="space-y-3">
         {webhooks.map((wh, i) => (
           <div
@@ -258,7 +261,13 @@ export default function WebhooksPage() {
               </div>
               <div className="flex items-center gap-3">
                 <button
-                  onClick={() => toggleEnabled(wh.id)}
+                  onClick={() => handleTest(wh.id)}
+                  className="text-[11px] font-medium text-text-secondary hover:text-text-primary focus-ring rounded px-2 py-1 border border-border hover:border-border-accent transition-colors"
+                >
+                  Test
+                </button>
+                <button
+                  onClick={() => toggleEnabled(wh)}
                   className={`inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wider transition-colors ${
                     wh.enabled
                       ? "bg-status-pass/15 text-status-pass border-status-pass/30"
@@ -270,7 +279,7 @@ export default function WebhooksPage() {
                 </button>
                 <div className="rounded-md transition-colors hover:bg-status-fail/10">
                   <button
-                    onClick={() => deleteWebhook(wh.id)}
+                    onClick={() => handleDelete(wh.id)}
                     className="text-[11px] font-medium text-status-fail hover:brightness-110 focus-ring rounded px-2 py-1"
                   >
                     Delete
@@ -279,7 +288,7 @@ export default function WebhooksPage() {
               </div>
             </div>
             <div className="mt-3 flex flex-wrap gap-1.5">
-              {wh.events.map((e) => (
+              {(wh.topics ?? []).map((e) => (
                 <span
                   key={e}
                   className="inline-flex items-center gap-1.5 rounded-md bg-surface-3 px-2 py-0.5 text-[10px] font-medium text-text-tertiary"
@@ -289,20 +298,6 @@ export default function WebhooksPage() {
                 </span>
               ))}
             </div>
-            {wh.lastTriggered && (
-              <p className="mt-3 text-[11px] text-text-tertiary">
-                Last triggered:{" "}
-                {new Date(wh.lastTriggered).toLocaleDateString("en-US", {
-                  month: "short",
-                  day: "numeric",
-                  hour: "2-digit",
-                  minute: "2-digit",
-                })}
-                <span className="ml-1.5 text-text-tertiary/70">
-                  ({getRelativeTime(wh.lastTriggered)})
-                </span>
-              </p>
-            )}
           </div>
         ))}
 
@@ -317,6 +312,7 @@ export default function WebhooksPage() {
           </div>
         )}
       </div>
+      )}
     </div>
   );
 }

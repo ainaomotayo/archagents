@@ -290,8 +290,67 @@ export interface VCSInstallation {
 export async function getVCSInstallations(): Promise<VCSInstallation[]> {
   return tryApi(async (headers) => {
     const { apiGet } = await import("./api-client");
-    return apiGet<VCSInstallation[]>("/v1/vcs-installations", undefined, headers);
+    const data = await apiGet<{ installations: VCSInstallation[] }>("/v1/vcs-installations", undefined, headers);
+    return data.installations ?? [];
   }, []);
+}
+
+export async function createVCSInstallation(data: unknown): Promise<unknown> {
+  return tryApi(async (headers) => {
+    const { apiPost } = await import("./api-client");
+    return apiPost("/v1/vcs-installations", data, headers);
+  }, null);
+}
+
+export async function updateVCSInstallation(id: string, data: unknown): Promise<unknown> {
+  return tryApi(async (headers) => {
+    const { apiPut } = await import("./api-client");
+    return apiPut(`/v1/vcs-installations/${id}`, data, headers);
+  }, null);
+}
+
+export async function deleteVCSInstallation(id: string): Promise<void> {
+  return tryApi(async (headers) => {
+    const { apiDelete } = await import("./api-client");
+    return apiDelete(`/v1/vcs-installations/${id}`, headers);
+  }, undefined);
+}
+
+// ── Webhooks ──────────────────────────────────────────────────────────
+
+export async function getWebhooks(): Promise<unknown[]> {
+  return tryApi(async (headers) => {
+    const { apiGet } = await import("./api-client");
+    return apiGet<unknown[]>("/v1/webhooks", undefined, headers);
+  }, []);
+}
+
+export async function createWebhook(data: unknown): Promise<unknown> {
+  return tryApi(async (headers) => {
+    const { apiPost } = await import("./api-client");
+    return apiPost("/v1/webhooks", data, headers);
+  }, null);
+}
+
+export async function updateWebhook(id: string, data: unknown): Promise<unknown> {
+  return tryApi(async (headers) => {
+    const { apiPut } = await import("./api-client");
+    return apiPut(`/v1/webhooks/${id}`, data, headers);
+  }, null);
+}
+
+export async function deleteWebhook(id: string): Promise<void> {
+  return tryApi(async (headers) => {
+    const { apiDelete } = await import("./api-client");
+    return apiDelete(`/v1/webhooks/${id}`, headers);
+  }, undefined);
+}
+
+export async function testWebhook(id: string): Promise<unknown> {
+  return tryApi(async (headers) => {
+    const { apiPost } = await import("./api-client");
+    return apiPost(`/v1/webhooks/${id}/test`, {}, headers);
+  }, null);
 }
 
 // ── Policies ──────────────────────────────────────────────────────────
