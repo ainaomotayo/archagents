@@ -1,0 +1,15 @@
+# =============================================================================
+# SENTINEL Demo Mode Docker Compose Override
+# =============================================================================
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.demo.yml up
+#
+# This override enables DEMO_MODE=true on the dashboard, which causes it to
+# serve pre-loaded mock data instead of requiring a live API with real data.
+# Use this for demos, screenshots, and nightly-reset demo environments only.
+# =============================================================================
+
+services:
+  dashboard:
+    environment:
+      DEMO_MODE: "true"

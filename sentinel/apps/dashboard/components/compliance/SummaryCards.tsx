@@ -23,7 +23,11 @@ export function SummaryCards({ frameworks }: SummaryCardsProps) {
   const unmetControls = totalControls - metControls;
 
   const cards = [
-    { label: "Score", value: `${Math.round(avgScore * 100)}%` },
+    {
+      label: "Score",
+      value: frameworks.length === 0 ? "--" : `${Math.round(avgScore * 100)}%`,
+      subtitle: frameworks.length === 0 ? "Requires scan data" : undefined,
+    },
     { label: "Met", value: String(metControls) },
     { label: "Unmet", value: String(unmetControls) },
     { label: "Frameworks", value: `${frameworks.length} active` },
@@ -42,6 +46,11 @@ export function SummaryCards({ frameworks }: SummaryCardsProps) {
           <p className="mt-1 text-lg font-bold text-text-primary">
             {card.value}
           </p>
+          {"subtitle" in card && card.subtitle && (
+            <p className="mt-0.5 text-[10px] text-text-tertiary">
+              {card.subtitle}
+            </p>
+          )}
         </div>
       ))}
     </div>

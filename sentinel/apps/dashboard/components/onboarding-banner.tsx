@@ -62,6 +62,12 @@ export function OnboardingBanner({ orgName }: OnboardingBannerProps) {
           >
             Connect your first repository →
           </Link>
+          <a
+            href="#product-explainer"
+            className="mt-2 text-[12px] font-medium text-text-tertiary hover:text-text-secondary transition-colors"
+          >
+            Learn how it works →
+          </a>
         </div>
       </div>
     </div>
