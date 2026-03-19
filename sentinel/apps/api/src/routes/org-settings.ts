@@ -12,6 +12,7 @@ export function registerOrgSettingsRoutes(app: FastifyInstance, authHook: any) {
 
     const settings = (org.settings as Record<string, unknown>) ?? {};
     return reply.send({
+      name: org.name,
       sessionPolicy: settings.sessionPolicy ?? {
         maxSessionDurationMinutes: 480,
         idleTimeoutMinutes: 60,

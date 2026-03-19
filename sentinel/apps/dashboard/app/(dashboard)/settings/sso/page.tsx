@@ -66,9 +66,10 @@ export default function SsoSettingsPage() {
   const [testResults, setTestResults] = useState<Record<string, TestResult>>({});
 
   const loadConfigs = () => {
-    fetch("/api/v1/sso-configs")
+    fetch("/api/sso-configs")
       .then((r) => r.json())
-      .then((d) => setConfigs(d.ssoConfigs ?? []));
+      .then((d) => setConfigs(d.ssoConfigs ?? []))
+      .catch(() => {});
   };
 
   useEffect(() => {
@@ -106,7 +107,7 @@ export default function SsoSettingsPage() {
       enforced: form.enforced,
       settings: { jitEnabled: form.jitEnabled },
     };
-    const res = await fetch("/api/v1/sso-configs", {
+    const res = await fetch("/api/sso-configs", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(body),
@@ -119,7 +120,7 @@ export default function SsoSettingsPage() {
   };
 
   const toggleEnabled = async (id: string, enabled: boolean) => {
-    await fetch(`/api/v1/sso-configs/${id}`, {
+    await fetch(`/api/sso-configs/${id}`, {
       method: "PUT",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ enabled: !enabled }),
@@ -128,14 +129,14 @@ export default function SsoSettingsPage() {
   };
 
   const deleteConfig = async (id: string) => {
-    await fetch(`/api/v1/sso-configs/${id}`, { method: "DELETE" });
+    await fetch(`/api/sso-configs/${id}`, { method: "DELETE" });
     setConfigs(configs.filter((c) => c.id !== id));
   };
 
   const testConnection = async (id: string) => {
     setTestResults((prev) => ({ ...prev, [id]: { loading: true } }));
     try {
-      const res = await fetch(`/api/v1/sso-configs/${id}/test-connection`, { method: "POST" });
+      const res = await fetch(`/api/sso-configs/${id}/test-connection`, { method: "POST", body: "{}", headers: { "content-type": "application/json" } });
       const data = await res.json();
       if (res.ok && data.success) {
         setTestResults((prev) => ({
@@ -510,7 +511,7 @@ function SessionPolicyEditor() {
   const [saved, setSaved] = useState(false);
 
   useEffect(() => {
-    fetch("/api/v1/org/settings")
+    fetch("/api/org-settings")
       .then((r) => r.ok ? r.json() : null)
       .then((d) => {
         if (d?.sessionPolicy) {
@@ -526,7 +527,7 @@ function SessionPolicyEditor() {
 
   const save = async () => {
     setSaved(false);
-    const res = await fetch("/api/v1/org/settings", {
+    const res = await fetch("/api/org-settings", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ sessionPolicy: policy }),
@@ -617,7 +618,7 @@ function RoleMappingEditor({
 
   const save = async () => {
     const roleMapping = Object.fromEntries(mappings.map((m) => [m.group, m.role]));
-    await fetch(`/api/v1/sso-configs/${configId}`, {
+    await fetch(`/api/sso-configs/${configId}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ settings: { ...settings, roleMapping, defaultRole } }),

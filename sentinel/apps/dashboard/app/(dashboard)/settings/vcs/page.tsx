@@ -110,7 +110,8 @@ export default function VcsProvidersPage() {
     }
   };
 
-  const deleteInstallation = async (id: string) => {
+  const deleteInstallation = async (id: string, owner: string) => {
+    if (!window.confirm(`Remove the "${owner}" VCS connection? This cannot be undone.`)) return;
     await deleteVCSInstallation(id);
     setInstallations((prev) => prev.filter((i) => i.id !== id));
   };
@@ -546,7 +547,7 @@ export default function VcsProvidersPage() {
                   </button>
                   <div className="rounded-md transition-colors hover:bg-status-fail/10">
                     <button
-                      onClick={() => deleteInstallation(inst.id)}
+                      onClick={() => deleteInstallation(inst.id, inst.owner)}
                       className="text-[11px] font-medium text-status-fail hover:brightness-110 focus-ring rounded px-2 py-1"
                     >
                       Delete

@@ -58,8 +58,7 @@ const CartesianGrid = dynamic(
   { ssr: false },
 );
 
-const API_BASE =
-  process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
+const API_BASE = "/api";
 
 /* ─── Severity colors ─── */
 const SEVERITY_CHART_COLORS: Record<string, string> = {
@@ -981,13 +980,13 @@ export default function RetentionSettingsPage() {
         previewRes,
         execRes,
       ] = await Promise.all([
-        fetch(`${API_BASE}/v1/retention/policy`),
-        fetch(`${API_BASE}/v1/retention/policy/changes?limit=1`),
-        fetch(`${API_BASE}/v1/retention/archives`),
-        fetch(`${API_BASE}/v1/retention/stats`),
-        fetch(`${API_BASE}/v1/retention/stats/trend`),
-        fetch(`${API_BASE}/v1/retention/preview`),
-        fetch(`${API_BASE}/v1/retention/executions?limit=10`),
+        fetch(`${API_BASE}/retention/policy`),
+        fetch(`${API_BASE}/retention/policy/changes?limit=1`),
+        fetch(`${API_BASE}/retention/archives`),
+        fetch(`${API_BASE}/retention/stats`),
+        fetch(`${API_BASE}/retention/stats/trend`),
+        fetch(`${API_BASE}/retention/preview`),
+        fetch(`${API_BASE}/retention/executions?limit=10`),
       ]);
 
       if (policyRes.ok) {
@@ -1046,7 +1045,7 @@ export default function RetentionSettingsPage() {
     tiers: Record<string, number>,
   ) {
     try {
-      const res = await fetch(`${API_BASE}/v1/retention/policy/changes`, {
+      const res = await fetch(`${API_BASE}/retention/policy/changes`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ proposedPreset: preset, proposedTiers: tiers }),
@@ -1065,7 +1064,7 @@ export default function RetentionSettingsPage() {
   async function handleApprove(id: string) {
     try {
       const res = await fetch(
-        `${API_BASE}/v1/retention/policy/changes/${id}/approve`,
+        `${API_BASE}/retention/policy/changes/${id}/approve`,
         { method: "POST" },
       );
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -1082,7 +1081,7 @@ export default function RetentionSettingsPage() {
   async function handleReject(id: string) {
     try {
       const res = await fetch(
-        `${API_BASE}/v1/retention/policy/changes/${id}/reject`,
+        `${API_BASE}/retention/policy/changes/${id}/reject`,
         { method: "POST" },
       );
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -1103,7 +1102,7 @@ export default function RetentionSettingsPage() {
     config: Record<string, unknown>;
   }) {
     try {
-      const res = await fetch(`${API_BASE}/v1/retention/archives`, {
+      const res = await fetch(`${API_BASE}/retention/archives`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),
@@ -1121,7 +1120,7 @@ export default function RetentionSettingsPage() {
 
   async function handleToggleDestination(id: string, enabled: boolean) {
     try {
-      const res = await fetch(`${API_BASE}/v1/retention/archives/${id}`, {
+      const res = await fetch(`${API_BASE}/retention/archives/${id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ enabled }),
@@ -1138,7 +1137,7 @@ export default function RetentionSettingsPage() {
 
   async function handleDeleteDestination(id: string) {
     try {
-      const res = await fetch(`${API_BASE}/v1/retention/archives/${id}`, {
+      const res = await fetch(`${API_BASE}/retention/archives/${id}`, {
         method: "DELETE",
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -1157,7 +1156,7 @@ export default function RetentionSettingsPage() {
   ): Promise<{ ok: boolean; error?: string }> {
     try {
       const res = await fetch(
-        `${API_BASE}/v1/retention/archives/${id}/test`,
+        `${API_BASE}/retention/archives/${id}/test`,
         { method: "POST" },
       );
       if (!res.ok) throw new Error(`HTTP ${res.status}`);

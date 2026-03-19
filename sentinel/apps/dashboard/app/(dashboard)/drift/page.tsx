@@ -18,29 +18,28 @@ export default async function DriftPage() {
     (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime(),
   );
 
-  const trendData = sorted.map((scan, i) => ({
+  const trendData = sorted.map((scan) => ({
     date: new Date(scan.date).toLocaleDateString("en-US", {
       month: "short",
       day: "numeric",
     }),
     commit: scan.commit,
     branch: scan.branch,
-    aiPercent: Math.min(100, Math.max(0, scan.riskScore)),
     riskScore: scan.riskScore,
   }));
 
-  const latestAi = trendData.at(-1)?.aiPercent ?? 0;
-  const firstAi = trendData.at(0)?.aiPercent ?? 0;
-  const drift = latestAi - firstAi;
-  const maxPercent = Math.max(...trendData.map((d) => d.aiPercent), 1);
+  const latestRisk = trendData.at(-1)?.riskScore ?? 0;
+  const firstRisk = trendData.at(0)?.riskScore ?? 0;
+  const drift = latestRisk - firstRisk;
+  const maxPercent = Math.max(...trendData.map((d) => d.riskScore), 1);
 
   const statCards = [
     {
-      label: "Estimated AI Composition",
-      value: `${latestAi.toFixed(1)}%`,
-      sub: "Based on risk score",
-      trend: latestAi > 50 ? "Above threshold" : "Within threshold",
-      trendUp: latestAi <= 50,
+      label: "Latest Risk Score",
+      value: latestRisk.toFixed(0),
+      sub: "Across last scan",
+      trend: latestRisk > 50 ? "Above threshold" : "Within threshold",
+      trendUp: latestRisk <= 50,
     },
     {
       label: "Drift (Period)",
@@ -162,11 +161,11 @@ export default async function DriftPage() {
 
             <div className="flex items-end gap-1.5" style={{ height: "200px" }}>
               {trendData.map((d, i) => {
-                const height = Math.max((d.aiPercent / maxPercent) * 90, 6);
+                const height = Math.max((d.riskScore / maxPercent) * 90, 6);
                 const barColor =
-                  d.aiPercent >= 75
+                  d.riskScore >= 75
                     ? "bg-status-fail"
-                    : d.aiPercent >= 50
+                    : d.riskScore >= 50
                       ? "bg-status-warn"
                       : "bg-accent";
 
@@ -177,8 +176,7 @@ export default async function DriftPage() {
                   >
                     {/* Tooltip */}
                     <div className="invisible mb-1 whitespace-nowrap rounded-md bg-surface-4 px-2.5 py-1.5 text-[10px] text-text-primary shadow-lg group-hover/bar:visible">
-                      <span className="font-semibold">{d.aiPercent.toFixed(1)}%</span>
-                      <span className="ml-1 text-text-tertiary">AI</span>
+                      <span className="font-semibold">Risk: {d.riskScore}</span>
                     </div>
                     <div
                       className={`chart-bar w-full rounded-t ${barColor} opacity-80 transition-opacity hover:opacity-100`}
@@ -206,7 +204,6 @@ export default async function DriftPage() {
                 <th scope="col" className="px-5 py-2.5 text-[10px] font-semibold uppercase tracking-widest text-text-tertiary">Date</th>
                 <th scope="col" className="px-5 py-2.5 text-[10px] font-semibold uppercase tracking-widest text-text-tertiary">Commit</th>
                 <th scope="col" className="px-5 py-2.5 text-[10px] font-semibold uppercase tracking-widest text-text-tertiary">Branch</th>
-                <th scope="col" className="px-5 py-2.5 text-[10px] font-semibold uppercase tracking-widest text-text-tertiary">AI %</th>
                 <th scope="col" className="px-5 py-2.5 text-[10px] font-semibold uppercase tracking-widest text-text-tertiary">Risk Score</th>
               </tr>
             </thead>
@@ -216,7 +213,6 @@ export default async function DriftPage() {
                   <td className="px-5 py-3.5 text-xs text-text-tertiary">{d.date}</td>
                   <td className="px-5 py-3.5 font-mono text-xs text-accent">{d.commit}</td>
                   <td className="px-5 py-3.5 text-text-secondary">{d.branch}</td>
-                  <td className="px-5 py-3.5 font-mono text-text-secondary">{d.aiPercent.toFixed(1)}%</td>
                   <td className="px-5 py-3.5">
                     <div className="flex items-center gap-2">
                       <div className="h-1.5 w-16 overflow-hidden rounded-full bg-surface-3">

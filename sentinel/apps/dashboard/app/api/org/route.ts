@@ -47,8 +47,8 @@ export async function GET() {
     });
 
     if (res.ok) {
-      // /v1/org/settings returns { sessionPolicy: {...} } — org name not available here
-      return Response.json({ name: "My Organization" });
+      const data = await res.json();
+      return Response.json({ name: data.name ?? "My Organization" });
     }
   } catch {
     // API unreachable — fall through to default
