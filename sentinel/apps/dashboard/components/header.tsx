@@ -90,9 +90,6 @@ export function Header() {
           <span className="text-[13px] font-semibold text-text-primary">
             {orgName}
           </span>
-          <span className="rounded-md bg-accent/10 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-accent">
-            Pro
-          </span>
         </div>
 
         {/* Center: Search trigger */}

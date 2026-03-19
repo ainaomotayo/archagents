@@ -69,18 +69,24 @@ export async function getOverviewStats(): Promise<OverviewStats> {
   return tryApi(async (headers) => {
     const { apiGet } = await import("./api-client");
     const [scansData, findingsData, certsData] = await Promise.all([
-      apiGet<{ total: number }>("/v1/scans", { limit: "0" }, headers),
+      apiGet<{ scans: any[]; total: number }>("/v1/scans", { limit: "100" }, headers),
       apiGet<{ total: number }>("/v1/findings", { limit: "0" }, headers),
       apiGet<{ certificates: any[]; total: number }>("/v1/certificates", { limit: "100" }, headers),
     ]);
     const certs = certsData.certificates ?? [];
-    const revoked = certs.filter((c: any) => c.status === "revoked").length;
-    const passed = certs.filter((c: any) => c.riskScore <= 20).length;
+    const revoked = certs.filter((c: any) => c.revokedAt).length;
+    // passRate: % of completed scans that passed (riskScore <= 20)
+    const scans = scansData.scans ?? [];
+    const completedScans = scans.filter((s: any) => s.status === "completed");
+    const passedScans = completedScans.filter((s: any) => (s.riskScore ?? 100) <= 20);
+    const passRate = completedScans.length > 0
+      ? Math.round((passedScans.length / completedScans.length) * 100)
+      : 0;
     return {
-      totalScans: scansData.total ?? 0,
+      totalScans: scansData.total ?? scans.length,
       activeRevocations: revoked,
       openFindings: findingsData.total ?? 0,
-      passRate: certs.length > 0 ? Math.round((passed / certs.length) * 100) : 0,
+      passRate,
     };
   }, { totalScans: 0, activeRevocations: 0, openFindings: 0, passRate: 0 });
 }
@@ -175,7 +181,7 @@ export async function getProjectFindingCounts(
 export async function getFindings(): Promise<Finding[]> {
   return tryApi(async (headers) => {
     const { apiGet } = await import("./api-client");
-    const data = await apiGet<{ findings: any[] }>("/v1/findings", { limit: "100" }, headers);
+    const data = await apiGet<{ findings: any[] }>("/v1/findings", { limit: "500" }, headers);
     return (data.findings ?? []).map((f: any) => ({
       id: f.id,
       projectId: f.scan?.projectId ?? f.orgId,

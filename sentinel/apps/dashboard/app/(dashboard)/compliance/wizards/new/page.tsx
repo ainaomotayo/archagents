@@ -4,9 +4,16 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createWizard } from "@/lib/wizard-api";
 
+const FRAMEWORKS = [
+  { code: "eu_ai_act", label: "EU AI Act", description: "12 controls across 4 phases" },
+  { code: "nist_ai_rmf", label: "NIST AI RMF", description: "AI Risk Management Framework" },
+  { code: "iso_42001", label: "ISO 42001", description: "AI Management System Standard" },
+] as const;
+
 export default function CreateWizardPage() {
   const router = useRouter();
   const [name, setName] = useState("");
+  const [frameworkCode, setFrameworkCode] = useState<string>("eu_ai_act");
   const [systemName, setSystemName] = useState("");
   const [provider, setProvider] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -18,7 +25,7 @@ export default function CreateWizardPage() {
     setSubmitting(true);
     setError("");
     try {
-      const wizard = await createWizard(name.trim());
+      const wizard = await createWizard(name.trim(), frameworkCode);
       if (systemName.trim() || provider.trim()) {
         const { updateWizardMetadata } = await import("@/lib/wizard-api");
         await updateWizardMetadata(wizard.id, {
@@ -32,6 +39,8 @@ export default function CreateWizardPage() {
       setSubmitting(false);
     }
   }
+
+  const selectedFramework = FRAMEWORKS.find((f) => f.code === frameworkCode);
 
   return (
     <div className="mx-auto max-w-lg py-8">
@@ -53,11 +62,19 @@ export default function CreateWizardPage() {
           />
         </div>
         <div>
-          <label className="block text-sm font-medium text-text-primary mb-1.5">Framework</label>
-          <div className="flex items-center gap-2 rounded-lg border border-border bg-surface-2/50 px-3 py-2">
-            <span className="inline-flex items-center rounded-md bg-blue-500/10 px-2 py-0.5 text-xs font-medium text-blue-400">EU AI Act</span>
-            <span className="text-xs text-text-tertiary">12 controls across 4 phases</span>
-          </div>
+          <label className="block text-sm font-medium text-text-primary mb-1.5">Framework *</label>
+          <select
+            value={frameworkCode}
+            onChange={(e) => setFrameworkCode(e.target.value)}
+            className="w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm text-text-primary focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
+          >
+            {FRAMEWORKS.map((f) => (
+              <option key={f.code} value={f.code}>{f.label}</option>
+            ))}
+          </select>
+          {selectedFramework && (
+            <p className="mt-1 text-xs text-text-tertiary">{selectedFramework.description}</p>
+          )}
         </div>
         <div>
           <label className="block text-sm font-medium text-text-primary mb-1.5">AI System Name</label>
