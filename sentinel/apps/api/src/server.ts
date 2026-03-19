@@ -239,6 +239,18 @@ app.get("/v1/scans", { preHandler: authHook }, async (request) => {
 app.post("/v1/scans", { preHandler: authHook }, async (request, reply) => {
   const body = request.body as any;
   const orgId = (request as any).orgId ?? "default";
+
+  // Resolve projectId — if missing or not a valid UUID, find or create a default project
+  const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  if (!body.projectId || !UUID_RE.test(body.projectId)) {
+    const name = body.projectId && body.projectId !== "default" ? body.projectId : "Default Project";
+    let project = await db.project.findFirst({ where: { orgId, name } });
+    if (!project) {
+      project = await db.project.create({ data: { orgId, name, repoUrl: "" } });
+    }
+    body.projectId = project.id;
+  }
+
   const result = await scanRoutes.submitScan({ orgId, body });
   await eventBus.publish("sentinel.notifications", {
     id: `evt-${result.scanId}-submitted`,
