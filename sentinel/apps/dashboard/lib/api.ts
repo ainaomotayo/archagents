@@ -290,8 +290,67 @@ export interface VCSInstallation {
 export async function getVCSInstallations(): Promise<VCSInstallation[]> {
   return tryApi(async (headers) => {
     const { apiGet } = await import("./api-client");
-    return apiGet<VCSInstallation[]>("/v1/vcs/installations", undefined, headers);
+    const data = await apiGet<{ installations: VCSInstallation[] }>("/v1/vcs-installations", undefined, headers);
+    return data.installations ?? [];
   }, []);
+}
+
+export async function createVCSInstallation(data: unknown): Promise<unknown> {
+  return tryApi(async (headers) => {
+    const { apiPost } = await import("./api-client");
+    return apiPost("/v1/vcs-installations", data, headers);
+  }, null);
+}
+
+export async function updateVCSInstallation(id: string, data: unknown): Promise<unknown> {
+  return tryApi(async (headers) => {
+    const { apiPut } = await import("./api-client");
+    return apiPut(`/v1/vcs-installations/${id}`, data, headers);
+  }, null);
+}
+
+export async function deleteVCSInstallation(id: string): Promise<void> {
+  return tryApi(async (headers) => {
+    const { apiDelete } = await import("./api-client");
+    return apiDelete(`/v1/vcs-installations/${id}`, headers);
+  }, undefined);
+}
+
+// ── Webhooks ──────────────────────────────────────────────────────────
+
+export async function getWebhooks(): Promise<unknown[]> {
+  return tryApi(async (headers) => {
+    const { apiGet } = await import("./api-client");
+    return apiGet<unknown[]>("/v1/webhooks", undefined, headers);
+  }, []);
+}
+
+export async function createWebhook(data: unknown): Promise<unknown> {
+  return tryApi(async (headers) => {
+    const { apiPost } = await import("./api-client");
+    return apiPost("/v1/webhooks", data, headers);
+  }, null);
+}
+
+export async function updateWebhook(id: string, data: unknown): Promise<unknown> {
+  return tryApi(async (headers) => {
+    const { apiPut } = await import("./api-client");
+    return apiPut(`/v1/webhooks/${id}`, data, headers);
+  }, null);
+}
+
+export async function deleteWebhook(id: string): Promise<void> {
+  return tryApi(async (headers) => {
+    const { apiDelete } = await import("./api-client");
+    return apiDelete(`/v1/webhooks/${id}`, headers);
+  }, undefined);
+}
+
+export async function testWebhook(id: string): Promise<unknown> {
+  return tryApi(async (headers) => {
+    const { apiPost } = await import("./api-client");
+    return apiPost(`/v1/webhooks/${id}/test`, {}, headers);
+  }, null);
 }
 
 // ── Policies ──────────────────────────────────────────────────────────
@@ -367,21 +426,21 @@ import type { Attestation, AttestationOverride } from "@/components/compliance/a
 export async function getAttestations(): Promise<Attestation[]> {
   return tryApi(async (headers) => {
     const { apiGet } = await import("./api-client");
-    return apiGet<Attestation[]>("/v1/attestations", undefined, headers);
+    return apiGet<Attestation[]>("/v1/compliance/attestations", undefined, headers);
   }, []);
 }
 
 export async function getAttestationById(id: string): Promise<Attestation | null> {
   return tryApi(async (headers) => {
     const { apiGet } = await import("./api-client");
-    return apiGet<Attestation>(`/v1/attestations/${id}`, undefined, headers);
+    return apiGet<Attestation>(`/v1/compliance/attestations/${id}`, undefined, headers);
   }, null);
 }
 
 export async function getActiveAttestations(): Promise<AttestationOverride[]> {
   return tryApi(async (headers) => {
     const { apiGet } = await import("./api-client");
-    return apiGet<AttestationOverride[]>("/v1/attestations/overrides", undefined, headers);
+    return apiGet<AttestationOverride[]>("/v1/compliance/attestations/expiring", undefined, headers);
   }, []);
 }
 
@@ -433,7 +492,7 @@ export async function getRemediations(filters?: {
     if (filters?.status) query.status = filters.status;
     if (filters?.itemType) query.itemType = filters.itemType;
     const data = await apiGet<{ items: RemediationItem[]; total: number }>(
-      "/v1/remediations",
+      "/v1/compliance/remediations",
       query,
       headers,
     );
@@ -444,14 +503,14 @@ export async function getRemediations(filters?: {
 export async function getRemediationStats(): Promise<RemediationStats> {
   return tryApi(async (headers) => {
     const { apiGet } = await import("./api-client");
-    return apiGet<RemediationStats>("/v1/remediations/stats", undefined, headers);
+    return apiGet<RemediationStats>("/v1/compliance/remediations/stats", undefined, headers);
   }, { open: 0, inProgress: 0, overdue: 0, completed: 0, acceptedRisk: 0, avgResolutionDays: 0, slaCompliance: 0 });
 }
 
 export async function getRemediationById(id: string): Promise<RemediationItem | null> {
   return tryApi(async (headers) => {
     const { apiGet } = await import("./api-client");
-    return apiGet<RemediationItem>(`/v1/remediations/${id}`, undefined, headers);
+    return apiGet<RemediationItem>(`/v1/compliance/remediations/${id}`, undefined, headers);
   }, null);
 }
 
@@ -469,7 +528,7 @@ export async function createRemediationItem(data: {
 }): Promise<RemediationItem> {
   const { apiPost } = await import("./api-client");
   const headers = await getSessionHeaders();
-  return apiPost<RemediationItem>("/v1/remediations", data, headers);
+  return apiPost<RemediationItem>("/v1/compliance/remediations", data, headers);
 }
 
 export async function updateRemediation(
@@ -484,7 +543,7 @@ export async function updateRemediation(
 ): Promise<RemediationItem> {
   const { apiPatch } = await import("./api-client");
   const headers = await getSessionHeaders();
-  return apiPatch<RemediationItem>(`/v1/remediations/${id}`, data, headers);
+  return apiPatch<RemediationItem>(`/v1/compliance/remediations/${id}`, data, headers);
 }
 
 export async function linkRemediationExternal(
@@ -494,7 +553,7 @@ export async function linkRemediationExternal(
 ): Promise<RemediationItem> {
   const { apiPost } = await import("./api-client");
   const headers = await getSessionHeaders();
-  return apiPost<RemediationItem>(`/v1/remediations/${id}/link`, { provider, externalRef }, headers);
+  return apiPost<RemediationItem>(`/v1/compliance/remediations/${id}/link-external`, { provider, externalRef }, headers);
 }
 
 // ── Evidence ─────────────────────────────────────────────────────────

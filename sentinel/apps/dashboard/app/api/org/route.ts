@@ -38,7 +38,7 @@ export async function GET() {
       sessionHeaders["X-Sentinel-Role"] = (session.user as any).role;
     }
 
-    const res = await fetch(`${API_URL}/v1/org`, {
+    const res = await fetch(`${API_URL}/v1/org/settings`, {
       headers: {
         Accept: "application/json",
         ...authHeaders,
@@ -47,8 +47,8 @@ export async function GET() {
     });
 
     if (res.ok) {
-      const data = await res.json();
-      return Response.json({ name: data.name ?? "My Organization" });
+      // /v1/org/settings returns { sessionPolicy: {...} } — org name not available here
+      return Response.json({ name: "My Organization" });
     }
   } catch {
     // API unreachable — fall through to default
