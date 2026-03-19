@@ -603,10 +603,12 @@ app.get("/v1/projects/:id/findings", { preHandler: authHook }, async (request) =
 // --- Policies ---
 const policyBodySchema = {
   type: "object",
-  required: ["name", "rules"],
+  required: ["name"],
   properties: {
     name: { type: "string", minLength: 1, maxLength: 255 },
-    rules: { type: "array", items: { type: "object" } },
+    rules: {},           // accept any value — string (YAML) or array
+    treeRules: {},       // accept any value — tree node object
+    format: { type: "string", enum: ["yaml", "tree"] },
     projectId: { type: "string", format: "uuid" },
   },
   additionalProperties: false,
@@ -635,8 +637,13 @@ app.get("/v1/policies/:id", { preHandler: authHook }, async (request, reply) => 
 app.post("/v1/policies", { preHandler: authHook, schema: { body: policyBodySchema } }, async (request, reply) => {
   const orgId = (request as any).orgId ?? "default";
   const body = request.body as any;
+  // Normalise: rules must be present (Json non-nullable); for tree format use treeRules as rules
+  const createData = {
+    ...body,
+    rules: body.rules !== undefined ? body.rules : body.treeRules ?? null,
+  };
   const policy = await withTenant(db, orgId, async (tx) => {
-    return tx.policy.create({ data: body });
+    return tx.policy.create({ data: createData });
   });
   const role = (request as any).role ?? "unknown";
   try {
@@ -690,7 +697,11 @@ app.put("/v1/policies/:id", { preHandler: authHook, schema: { body: policyBodySc
     }
     const updated = await tx.policy.update({
       where: { id },
-      data: { name: body.name, rules: body.rules, version: { increment: 1 } },
+      data: {
+        name: body.name,
+        rules: body.rules !== undefined ? body.rules : body.treeRules !== undefined ? body.treeRules : existing.rules,
+        version: { increment: 1 },
+      },
     });
     const role = (request as any).role ?? "unknown";
     try {
