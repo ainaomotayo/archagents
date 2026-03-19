@@ -108,7 +108,7 @@ services:
       api:
         condition: service_healthy
     environment:
-      NEXTAUTH_URL: http://localhost:3000
+      NEXTAUTH_URL: ${NEXTAUTH_URL:-http://localhost:3000}
       NEXTAUTH_SECRET: dev-secret-change-in-production
       GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID:-}
       GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET:-}
@@ -385,7 +385,7 @@ services:
       DB_ENGINE: sql
       DB_TYPE: postgres
       DB_URL: postgresql://sentinel:sentinel_dev@postgres:5432/sentinel
-      NEXTAUTH_URL: http://localhost:3000
+      NEXTAUTH_URL: ${NEXTAUTH_URL:-http://localhost:3000}
     ports:
       - "5225:5225"
     healthcheck:
