@@ -1,15 +1,8 @@
 import { getRemediations, getRemediationStats } from "@/lib/api";
-import { MOCK_ITEMS, MOCK_STATS } from "@/lib/remediation-mock-data";
 import { RemediationQueue } from "@/components/remediations/remediation-queue";
 
 export default async function RemediationsPage() {
-  let items, stats;
-  try {
-    [items, stats] = await Promise.all([getRemediations(), getRemediationStats()]);
-  } catch {
-    items = MOCK_ITEMS;
-    stats = MOCK_STATS;
-  }
+  const [items, stats] = await Promise.all([getRemediations(), getRemediationStats()]);
 
   return (
     <div className="space-y-2">
