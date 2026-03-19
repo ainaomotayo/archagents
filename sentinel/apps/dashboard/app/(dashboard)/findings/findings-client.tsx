@@ -9,6 +9,21 @@ import type { Finding } from "@/lib/types";
 
 type Severity = "all" | "critical" | "high" | "medium" | "low";
 
+const SEVERITY_COLORS: Record<Severity, string> = {
+  all: "bg-surface-2 text-text-secondary",
+  critical: "bg-severity-critical/15 text-severity-critical",
+  high: "bg-severity-high/15 text-severity-high",
+  medium: "bg-severity-medium/15 text-severity-medium",
+  low: "bg-severity-low/15 text-severity-low",
+};
+
+const BORDER_COLORS: Record<string, string> = {
+  critical: "border-l-severity-critical",
+  high: "border-l-severity-high",
+  medium: "border-l-severity-medium",
+  low: "border-l-severity-low",
+};
+
 interface FindingsClientProps {
   findings: Finding[];
 }
@@ -27,21 +42,6 @@ export function FindingsClient({ findings }: FindingsClientProps) {
     high: findings.filter((f) => f.severity === "high").length,
     medium: findings.filter((f) => f.severity === "medium").length,
     low: findings.filter((f) => f.severity === "low").length,
-  };
-
-  const SEVERITY_COLORS: Record<Severity, string> = {
-    all: "bg-surface-2 text-text-secondary",
-    critical: "bg-severity-critical/15 text-severity-critical",
-    high: "bg-severity-high/15 text-severity-high",
-    medium: "bg-severity-medium/15 text-severity-medium",
-    low: "bg-severity-low/15 text-severity-low",
-  };
-
-  const BORDER_COLORS: Record<string, string> = {
-    critical: "border-l-severity-critical",
-    high: "border-l-severity-high",
-    medium: "border-l-severity-medium",
-    low: "border-l-severity-low",
   };
 
   if (findings.length === 0) {
@@ -66,6 +66,7 @@ export function FindingsClient({ findings }: FindingsClientProps) {
           <button
             key={sev}
             onClick={() => setActiveSeverity(sev)}
+            aria-pressed={activeSeverity === sev}
             className={`rounded-full px-3 py-1 text-[11px] font-semibold capitalize transition-all focus-ring ${
               activeSeverity === sev
                 ? SEVERITY_COLORS[sev] + " ring-1 ring-inset ring-current/30"

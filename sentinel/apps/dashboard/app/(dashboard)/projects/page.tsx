@@ -103,7 +103,7 @@ export default async function ProjectsPage() {
                       const { status, findings } = { status: project.lastScanStatus, findings: project.findingCount };
                       if (!status) return null;
                       const chip =
-                        status === "fail" || findings >= 10
+                        status === "fail"
                           ? { label: "Critical", cls: "text-status-fail bg-status-fail/10" }
                           : status === "provisional" || findings >= 3
                             ? { label: "At Risk", cls: "text-status-warn bg-status-warn/10" }
