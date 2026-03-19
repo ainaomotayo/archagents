@@ -10,6 +10,7 @@ export function Header() {
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const [orgName, setOrgName] = useState<string>("My Organization");
   const { data: session } = useSession();
 
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -17,9 +18,17 @@ export function Header() {
   const userMenuRef = useRef<HTMLDivElement>(null);
 
   const userName = session?.user?.name ?? "Admin";
-  const userEmail = session?.user?.email ?? "admin@acme.corp";
+  const userEmail = session?.user?.email ?? "admin@sentinel.local";
   const userRole = session?.user?.role ?? "admin";
   const userInitial = userName.charAt(0).toUpperCase();
+
+  // Fetch org name from the API
+  useEffect(() => {
+    fetch("/api/org")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => { if (data?.name) setOrgName(data.name); })
+      .catch(() => {});
+  }, []);
 
   // Keyboard shortcut: "/" to open search
   useEffect(() => {
@@ -79,7 +88,7 @@ export function Header() {
           </span>
           <span className="hidden text-text-tertiary sm:block">/</span>
           <span className="text-[13px] font-semibold text-text-primary">
-            Acme Corp
+            {orgName}
           </span>
           <span className="rounded-md bg-accent/10 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-accent">
             Pro
