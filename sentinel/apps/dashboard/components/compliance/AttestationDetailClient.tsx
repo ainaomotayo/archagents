@@ -1,6 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
 import type { Attestation } from "./attestation-types";
 import { statusLabel } from "./attestation-types";
 import { AttestationStatusBadge } from "./AttestationStatusBadge";
@@ -32,11 +33,12 @@ export function AttestationDetailClient({
   auditEvents,
 }: AttestationDetailClientProps) {
   const router = useRouter();
+  const { data: session } = useSession();
   const a = attestation;
 
-  // In a real app, these come from the session
-  const currentUser = "admin@acme.com";
-  const currentRole = "admin";
+  // Derive current user and role from the session
+  const currentUser = session?.user?.email ?? "admin@sentinel.local";
+  const currentRole = (session?.user as any)?.role ?? "admin";
 
   const handleSubmitForReview = async () => {
     await submitForReview(a.id);
