@@ -288,12 +288,15 @@ export default async function OverviewPage() {
                 Security
               </h3>
               {stats.openFindings === 0 ? (
-                <div className="mt-3 flex items-center gap-2">
-                  <IconShieldCheck className="h-5 w-5 text-status-pass" />
-                  <p className="text-[13px] font-medium text-status-pass">
-                    No open findings
-                  </p>
-                </div>
+                <>
+                  <div className="mt-3 flex items-center gap-2">
+                    <IconShieldCheck className="h-5 w-5 text-status-pass" />
+                    <p className="text-[13px] font-medium text-status-pass">
+                      No open findings
+                    </p>
+                  </div>
+                  <p className="mt-3 text-[12px] text-text-tertiary">Run a scan to see your security posture</p>
+                </>
               ) : (
                 <div className="mt-3">
                   <p className="text-2xl font-bold text-status-fail">
@@ -433,10 +436,13 @@ export default async function OverviewPage() {
 
               <div className="flex items-end gap-1.5" style={{ height: "160px" }}>
                 {chartScans.length === 0 ? (
-                  <div className="flex w-full items-center justify-center">
-                    <p className="text-[12px] text-text-tertiary">
-                      No scan data yet
-                    </p>
+                  <div className="flex w-full flex-col items-center justify-center gap-2 py-8">
+                    <svg className="h-8 w-8 text-text-tertiary/40" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                      <rect x="3" y="12" width="4" height="9" rx="1" />
+                      <rect x="10" y="7" width="4" height="14" rx="1" />
+                      <rect x="17" y="4" width="4" height="17" rx="1" />
+                    </svg>
+                    <p className="text-[12px] text-text-tertiary">No scan history yet</p>
                   </div>
                 ) : (
                   chartScans.map((scan, i) => {
@@ -554,7 +560,7 @@ export default async function OverviewPage() {
                 ))}
                 {recentScans.length === 0 && (
                   <p className="py-4 text-center text-[12px] text-text-tertiary">
-                    No scans yet
+                    Activity will appear here after your first scan
                   </p>
                 )}
               </div>
@@ -566,6 +572,7 @@ export default async function OverviewPage() {
       {/* ZONE 4: Product explainer — only when isNewOrg */}
       {isNewOrg && (
         <section
+          id="product-explainer"
           aria-label="How SENTINEL works"
           className="animate-fade-up"
           style={{ animationDelay: "0.2s" }}

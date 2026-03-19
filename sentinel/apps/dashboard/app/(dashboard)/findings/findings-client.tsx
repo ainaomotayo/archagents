@@ -30,21 +30,28 @@ interface FindingsClientProps {
 
 export function FindingsClient({ findings }: FindingsClientProps) {
   const [activeSeverity, setActiveSeverity] = useState<Severity>("all");
+  const [showSuppressed, setShowSuppressed] = useState(false);
+
+  const activeFindings = findings.filter((f) => f.status !== "suppressed");
+  const suppressedFindings = findings.filter((f) => f.status === "suppressed");
+  const suppressedCount = suppressedFindings.length;
+
+  const baseFindings = showSuppressed ? findings : activeFindings;
 
   const filtered =
     activeSeverity === "all"
-      ? findings
-      : findings.filter((f) => f.severity === activeSeverity);
+      ? baseFindings
+      : baseFindings.filter((f) => f.severity === activeSeverity);
 
   const counts: Record<Severity, number> = {
-    all: findings.length,
-    critical: findings.filter((f) => f.severity === "critical").length,
-    high: findings.filter((f) => f.severity === "high").length,
-    medium: findings.filter((f) => f.severity === "medium").length,
-    low: findings.filter((f) => f.severity === "low").length,
+    all: baseFindings.length,
+    critical: baseFindings.filter((f) => f.severity === "critical").length,
+    high: baseFindings.filter((f) => f.severity === "high").length,
+    medium: baseFindings.filter((f) => f.severity === "medium").length,
+    low: baseFindings.filter((f) => f.severity === "low").length,
   };
 
-  if (findings.length === 0) {
+  if (activeFindings.length === 0 && suppressedCount === 0) {
     return (
       <EmptyState
         icon={IconCheckCircle}
@@ -78,6 +85,16 @@ export function FindingsClient({ findings }: FindingsClientProps) {
         ))}
       </div>
 
+      {/* Show suppressed toggle */}
+      {suppressedCount > 0 && (
+        <button
+          onClick={() => setShowSuppressed((v) => !v)}
+          className="text-[11px] font-medium text-text-tertiary hover:text-text-secondary transition-colors"
+        >
+          {showSuppressed ? "Hide" : "Show"} suppressed ({suppressedCount})
+        </button>
+      )}
+
       {filtered.length === 0 ? (
         <EmptyState
           icon={IconSearch}
@@ -86,17 +103,27 @@ export function FindingsClient({ findings }: FindingsClientProps) {
         />
       ) : (
         <div className="grid gap-2.5">
-          {filtered.map((finding, i) => (
-            <Link
-              key={finding.id}
-              href={`/findings/${finding.id}`}
-              className={`animate-fade-up block focus-ring rounded-lg border-l-2 ${BORDER_COLORS[finding.severity] ?? "border-l-border"}`}
-              style={{ animationDelay: `${0.03 + 0.04 * i}s` }}
-              aria-label={`View finding: ${finding.title}`}
-            >
-              <FindingCard finding={finding} />
-            </Link>
-          ))}
+          {filtered.map((finding, i) => {
+            const isSuppressed = finding.status === "suppressed";
+            return (
+              <Link
+                key={finding.id}
+                href={`/findings/${finding.id}`}
+                className={`animate-fade-up block focus-ring rounded-lg border-l-2 ${BORDER_COLORS[finding.severity] ?? "border-l-border"} ${isSuppressed ? "opacity-60" : ""}`}
+                style={{ animationDelay: `${0.03 + 0.04 * i}s` }}
+                aria-label={`View finding: ${finding.title}`}
+              >
+                {isSuppressed && (
+                  <div className="px-4 pt-2">
+                    <span className="inline-block rounded-full bg-surface-3 px-2 py-0.5 text-[10px] font-semibold text-text-tertiary">
+                      Suppressed
+                    </span>
+                  </div>
+                )}
+                <FindingCard finding={finding} />
+              </Link>
+            );
+          })}
         </div>
       )}
     </div>
