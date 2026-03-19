@@ -37,27 +37,7 @@ import type {
   VelocityDataPoint,
 } from "./types";
 
-import {
-  MOCK_ATTESTATIONS,
-  MOCK_ATTESTATION_OVERRIDES,
-  MOCK_APPROVAL_GATES,
-  MOCK_APPROVAL_STATS,
-  MOCK_AUDIT_LOG,
-  MOCK_CERTIFICATES,
-  MOCK_COMPLIANCE_TRENDS,
-  MOCK_FINDING_COUNTS_BY_CATEGORY,
-  MOCK_FINDINGS,
-  MOCK_FRAMEWORK_SCORES,
-  MOCK_OVERVIEW_STATS,
-  MOCK_POLICIES,
-  MOCK_PROJECTS,
-  MOCK_SCANS,
-} from "./mock-data";
-import {
-  MOCK_ITEMS as MOCK_REMEDIATION_ITEMS,
-  MOCK_STATS as MOCK_REMEDIATION_STATS,
-} from "./remediation-mock-data";
-
+// TODO(Task 2): Remove USE_MOCK once all AI metrics functions are migrated off inline mock branches
 const USE_MOCK = !process.env.SENTINEL_API_URL;
 
 async function getSessionHeaders(): Promise<Record<string, string>> {
@@ -76,13 +56,12 @@ async function getSessionHeaders(): Promise<Record<string, string>> {
   return {};
 }
 
-async function tryApi<T>(fn: (headers: Record<string, string>) => Promise<T>, fallback: T): Promise<T> {
-  if (USE_MOCK) return fallback;
+async function tryApi<T>(fn: (headers: Record<string, string>) => Promise<T>, empty: T): Promise<T> {
   try {
     const headers = await getSessionHeaders();
     return await fn(headers);
   } catch {
-    return fallback;
+    return empty;
   }
 }
 
@@ -105,7 +84,7 @@ export async function getOverviewStats(): Promise<OverviewStats> {
       openFindings: findingsData.total ?? 0,
       passRate: certs.length > 0 ? Math.round((passed / certs.length) * 100) : 0,
     };
-  }, MOCK_OVERVIEW_STATS);
+  }, { totalScans: 0, activeRevocations: 0, openFindings: 0, passRate: 0 });
 }
 
 export async function getRecentScans(limit = 5): Promise<Scan[]> {
@@ -124,7 +103,7 @@ export async function getRecentScans(limit = 5): Promise<Scan[]> {
       findingCount: s._count?.findings ?? 0,
       date: s.startedAt,
     }));
-  }, MOCK_SCANS.slice(0, limit));
+  }, []);
 }
 
 // ── Projects ──────────────────────────────────────────────────────────
@@ -142,7 +121,7 @@ export async function getProjects(): Promise<Project[]> {
       findingCount: (p.scans ?? []).reduce((sum: number, s: any) => sum + (s._count?.findings ?? 0), 0),
       scanCount: p._count?.scans ?? 0,
     }));
-  }, MOCK_PROJECTS);
+  }, []);
 }
 
 export async function getProjectById(id: string): Promise<Project | null> {
@@ -158,7 +137,7 @@ export async function getProjectById(id: string): Promise<Project | null> {
       findingCount: (p.scans ?? []).reduce((sum: number, s: any) => sum + (s._count?.findings ?? 0), 0),
       scanCount: p._count?.scans ?? 0,
     };
-  }, MOCK_PROJECTS.find((p) => p.id === id) ?? null);
+  }, null);
 }
 
 export async function getProjectScans(projectId: string): Promise<Scan[]> {
@@ -175,7 +154,7 @@ export async function getProjectScans(projectId: string): Promise<Scan[]> {
       findingCount: s._count?.findings ?? 0,
       date: s.startedAt,
     }));
-  }, MOCK_SCANS.filter((s) => s.projectId === projectId));
+  }, []);
 }
 
 export async function getProjectFindingCounts(
@@ -190,7 +169,7 @@ export async function getProjectFindingCounts(
       counts.set(cat, (counts.get(cat) ?? 0) + 1);
     }
     return Array.from(counts.entries()).map(([category, count]) => ({ category, count }));
-  }, MOCK_FINDING_COUNTS_BY_CATEGORY);
+  }, []);
 }
 
 // ── Findings ──────────────────────────────────────────────────────────
@@ -217,7 +196,7 @@ export async function getFindings(): Promise<Finding[]> {
       createdAt: f.createdAt,
       agentName: f.agentName ?? f.agent_name ?? "",
     }));
-  }, MOCK_FINDINGS);
+  }, []);
 }
 
 export async function getFindingById(id: string): Promise<Finding | null> {
@@ -242,7 +221,7 @@ export async function getFindingById(id: string): Promise<Finding | null> {
       createdAt: f.createdAt,
       agentName: f.agentName ?? f.agent_name ?? "",
     };
-  }, MOCK_FINDINGS.find((f) => f.id === id) ?? null);
+  }, null);
 }
 
 // ── Certificates ──────────────────────────────────────────────────────
@@ -263,7 +242,7 @@ export async function getCertificates(): Promise<Certificate[]> {
       expiresAt: c.expiresAt,
       revokedAt: c.revokedAt ?? null,
     }));
-  }, MOCK_CERTIFICATES);
+  }, []);
 }
 
 export async function getCertificateById(
@@ -284,7 +263,7 @@ export async function getCertificateById(
       expiresAt: c.expiresAt,
       revokedAt: c.revokedAt ?? null,
     } as Certificate;
-  }, MOCK_CERTIFICATES.find((c) => c.id === id) ?? null);
+  }, null);
 }
 
 export async function getProjectCertificate(
@@ -300,14 +279,14 @@ export async function getPolicies() {
   return tryApi(async (headers) => {
     const { apiGet } = await import("./api-client");
     return apiGet<any[]>("/v1/policies", undefined, headers);
-  }, MOCK_POLICIES);
+  }, []);
 }
 
 export async function getPolicyById(id: string) {
   return tryApi(async (headers) => {
     const { apiGet } = await import("./api-client");
     return apiGet<any>(`/v1/policies/${id}`, undefined, headers);
-  }, MOCK_POLICIES.find((p) => p.id === id) ?? null);
+  }, null);
 }
 
 // ── Audit Log ─────────────────────────────────────────────────────────
@@ -317,7 +296,7 @@ export async function getAuditLog(limit = 50) {
     const { apiGet } = await import("./api-client");
     const data = await apiGet<{ events: any[] }>("/v1/audit", { limit: String(limit) }, headers);
     return data.events ?? [];
-  }, MOCK_AUDIT_LOG);
+  }, []);
 }
 
 // ── Compliance ────────────────────────────────────────────────────────
@@ -340,7 +319,7 @@ export async function getComplianceScores(): Promise<FrameworkScore[]> {
         total: cs.total,
       })),
     }));
-  }, MOCK_FRAMEWORK_SCORES);
+  }, []);
 }
 
 export async function getComplianceTrends(
@@ -357,7 +336,7 @@ export async function getComplianceTrends(
       date: t.date,
       score: t.score,
     }));
-  }, MOCK_COMPLIANCE_TRENDS[frameworkSlug] ?? []);
+  }, []);
 }
 
 // ── Attestations ─────────────────────────────────────────────────────
@@ -368,21 +347,21 @@ export async function getAttestations(): Promise<Attestation[]> {
   return tryApi(async (headers) => {
     const { apiGet } = await import("./api-client");
     return apiGet<Attestation[]>("/v1/attestations", undefined, headers);
-  }, MOCK_ATTESTATIONS);
+  }, []);
 }
 
 export async function getAttestationById(id: string): Promise<Attestation | null> {
   return tryApi(async (headers) => {
     const { apiGet } = await import("./api-client");
     return apiGet<Attestation>(`/v1/attestations/${id}`, undefined, headers);
-  }, MOCK_ATTESTATIONS.find((a) => a.id === id) ?? null);
+  }, null);
 }
 
 export async function getActiveAttestations(): Promise<AttestationOverride[]> {
   return tryApi(async (headers) => {
     const { apiGet } = await import("./api-client");
     return apiGet<AttestationOverride[]>("/v1/attestations/overrides", undefined, headers);
-  }, MOCK_ATTESTATION_OVERRIDES);
+  }, []);
 }
 
 // ── Approvals ─────────────────────────────────────────────────────────
@@ -394,9 +373,7 @@ export async function getApprovalGates(status?: string): Promise<ApprovalGate[]>
     if (status && status !== "all") query.status = status;
     const data = await apiGet<{ gates: any[]; total: number }>("/v1/approvals", query, headers);
     return (data.gates ?? []).map(mapGate);
-  }, status && status !== "all"
-    ? MOCK_APPROVAL_GATES.filter((g) => g.status === status)
-    : MOCK_APPROVAL_GATES);
+  }, []);
 }
 
 export async function getApprovalGateById(id: string): Promise<ApprovalGate | null> {
@@ -404,14 +381,14 @@ export async function getApprovalGateById(id: string): Promise<ApprovalGate | nu
     const { apiGet } = await import("./api-client");
     const data = await apiGet<any>(`/v1/approvals/${id}`, undefined, headers);
     return mapGate(data);
-  }, MOCK_APPROVAL_GATES.find((g) => g.id === id) ?? null);
+  }, null);
 }
 
 export async function getApprovalStats(): Promise<ApprovalStats> {
   return tryApi(async (headers) => {
     const { apiGet } = await import("./api-client");
     return apiGet<ApprovalStats>("/v1/approvals/stats", undefined, headers);
-  }, MOCK_APPROVAL_STATS);
+  }, { pending: 0, escalated: 0, approved: 0, rejected: 0 });
 }
 
 export async function reassignApprovalGate(gateId: string, assignTo: string): Promise<void> {
@@ -440,21 +417,21 @@ export async function getRemediations(filters?: {
       headers,
     );
     return data.items ?? [];
-  }, filterMockRemediations(filters));
+  }, []);
 }
 
 export async function getRemediationStats(): Promise<RemediationStats> {
   return tryApi(async (headers) => {
     const { apiGet } = await import("./api-client");
     return apiGet<RemediationStats>("/v1/remediations/stats", undefined, headers);
-  }, MOCK_REMEDIATION_STATS);
+  }, { open: 0, inProgress: 0, overdue: 0, completed: 0, acceptedRisk: 0, avgResolutionDays: 0, slaCompliance: 0 });
 }
 
 export async function getRemediationById(id: string): Promise<RemediationItem | null> {
   return tryApi(async (headers) => {
     const { apiGet } = await import("./api-client");
     return apiGet<RemediationItem>(`/v1/remediations/${id}`, undefined, headers);
-  }, MOCK_REMEDIATION_ITEMS.find((r) => r.id === id) ?? null);
+  }, null);
 }
 
 export async function createRemediationItem(data: {
@@ -692,24 +669,6 @@ export async function getIPAttributionToolBreakdown(): Promise<Array<{ tool: str
     const { apiGet } = await import("./api-client");
     return apiGet<Array<{ tool: string; files: number; loc: number }>>("/v1/ip-attribution/tools", {}, headers);
   }, []);
-}
-
-function filterMockRemediations(filters?: {
-  framework?: string;
-  status?: string;
-  itemType?: string;
-}): RemediationItem[] {
-  let items = MOCK_REMEDIATION_ITEMS;
-  if (filters?.framework) {
-    items = items.filter((i) => i.frameworkSlug === filters.framework);
-  }
-  if (filters?.status) {
-    items = items.filter((i) => i.status === filters.status);
-  }
-  if (filters?.itemType) {
-    items = items.filter((i) => i.itemType === filters.itemType);
-  }
-  return items;
 }
 
 // ── AI Metrics ──────────────────────────────────────────
