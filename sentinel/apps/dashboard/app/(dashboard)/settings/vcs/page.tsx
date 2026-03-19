@@ -3,12 +3,6 @@
 import { useState, useEffect } from "react";
 import { PageHeader } from "@/components/page-header";
 import { IconPlus, IconGithub, IconGlobe, IconGrid, IconCpu } from "@/components/icons";
-import {
-  getVCSInstallations,
-  createVCSInstallation,
-  updateVCSInstallation,
-  deleteVCSInstallation,
-} from "@/lib/api";
 
 /* ─── Types ─── */
 
@@ -93,15 +87,23 @@ export default function VcsProvidersPage() {
   // Load from API on mount
   useEffect(() => {
     setLoading(true);
-    getVCSInstallations()
-      .then((data) => setInstallations(data as VcsInstallation[]))
+    fetch("/api/vcs-installations")
+      .then((r) => (r.ok ? r.json() : Promise.reject()))
+      .then((data) => {
+        const list = data.installations ?? (Array.isArray(data) ? data : (data.data ?? []));
+        setInstallations(list);
+      })
       .catch(() => setFeedback({ type: "error", message: "Failed to load integrations." }))
       .finally(() => setLoading(false));
   }, []);
 
   const toggleActive = async (inst: VcsInstallation) => {
-    const updated = await updateVCSInstallation(inst.id, { active: !inst.active });
-    if (updated) {
+    const res = await fetch(`/api/vcs-installations/${inst.id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ active: !inst.active }),
+    });
+    if (res.ok) {
       setInstallations((prev) =>
         prev.map((i) => (i.id === inst.id ? { ...i, active: !inst.active } : i)),
       );
@@ -112,7 +114,7 @@ export default function VcsProvidersPage() {
 
   const deleteInstallation = async (id: string, owner: string) => {
     if (!window.confirm(`Remove the "${owner}" VCS connection? This cannot be undone.`)) return;
-    await deleteVCSInstallation(id);
+    await fetch(`/api/vcs-installations/${id}`, { method: "DELETE" });
     setInstallations((prev) => prev.filter((i) => i.id !== id));
   };
 
@@ -209,7 +211,8 @@ export default function VcsProvidersPage() {
 
     setSaving(true);
     try {
-      const saved = await createVCSInstallation(payload);
+      const res = await fetch("/api/vcs-installations", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+      const saved = res.ok ? await res.json() : null;
       if (saved) {
         setInstallations((prev) => [saved as VcsInstallation, ...prev]);
         resetForm();

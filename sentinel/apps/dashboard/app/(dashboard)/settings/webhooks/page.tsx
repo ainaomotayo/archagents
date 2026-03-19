@@ -3,13 +3,6 @@
 import { useState, useEffect } from "react";
 import { PageHeader } from "@/components/page-header";
 import { IconPlus, IconGlobe } from "@/components/icons";
-import {
-  getWebhooks,
-  createWebhook,
-  updateWebhook,
-  deleteWebhook,
-  testWebhook,
-} from "@/lib/api";
 
 interface Webhook {
   id: string;
@@ -44,15 +37,20 @@ export default function WebhooksPage() {
   // Load from API on mount
   useEffect(() => {
     setLoading(true);
-    getWebhooks()
-      .then((data) => setWebhooks(data as Webhook[]))
+    fetch("/api/webhooks")
+      .then((r) => (r.ok ? r.json() : Promise.reject()))
+      .then((data) => setWebhooks(Array.isArray(data) ? data : (data.data ?? [])))
       .catch(() => setFeedback({ type: "error", message: "Failed to load webhooks." }))
       .finally(() => setLoading(false));
   }, []);
 
   const toggleEnabled = async (wh: Webhook) => {
-    const updated = await updateWebhook(wh.id, { enabled: !wh.enabled });
-    if (updated) {
+    const res = await fetch(`/api/webhooks/${wh.id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ enabled: !wh.enabled }),
+    });
+    if (res.ok) {
       setWebhooks((prev) =>
         prev.map((w) => (w.id === wh.id ? { ...w, enabled: !wh.enabled } : w)),
       );
@@ -62,13 +60,13 @@ export default function WebhooksPage() {
   };
 
   const handleDelete = async (id: string) => {
-    await deleteWebhook(id);
+    await fetch(`/api/webhooks/${id}`, { method: "DELETE" });
     setWebhooks((prev) => prev.filter((w) => w.id !== id));
   };
 
   const handleTest = async (id: string) => {
-    const result = await testWebhook(id);
-    if (result) {
+    const res = await fetch(`/api/webhooks/${id}/test`, { method: "POST" });
+    if (res.ok) {
       setFeedback({ type: "success", message: "Test event delivered successfully." });
     } else {
       setFeedback({ type: "error", message: "Test delivery failed." });
@@ -110,13 +108,18 @@ export default function WebhooksPage() {
 
     setSaving(true);
     try {
-      const saved = await createWebhook({
-        name: formName.trim(),
-        url: formUrl.trim(),
-        topics: formEvents,
-        channelType: "http",
+      const res = await fetch("/api/webhooks", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: formName.trim(),
+          url: formUrl.trim(),
+          topics: formEvents,
+          channelType: "http",
+        }),
       });
-      if (saved) {
+      if (res.ok) {
+        const saved = await res.json();
         setWebhooks((prev) => [saved as Webhook, ...prev]);
         resetForm();
         setShowForm(false);

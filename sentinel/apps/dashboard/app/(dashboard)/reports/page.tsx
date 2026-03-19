@@ -31,9 +31,9 @@ export default async function ReportsPage() {
   };
 
   const trendLabels: Record<string, { sub: string; trend: string; trendUp: boolean }> = {
-    improving: { sub: "Trending down", trend: "-12%", trendUp: true },
-    stable: { sub: "No change", trend: "0%", trendUp: false },
-    degrading: { sub: "Trending up", trend: "+8%", trendUp: false },
+    improving: { sub: "Trending down", trend: "Improving", trendUp: true },
+    stable: { sub: "No change", trend: "Stable", trendUp: false },
+    degrading: { sub: "Trending up", trend: "Degrading", trendUp: false },
   };
 
   const riskTrendMeta = trendLabels[reportData.summary.riskTrend] ?? trendLabels.stable;
@@ -49,7 +49,7 @@ export default async function ReportsPage() {
       label: "Total Scans",
       value: reportData.summary.totalScans.toLocaleString(),
       sub: "Lifetime total",
-      trend: "+12%",
+      trend: "",
       trendUp: true,
       Icon: IconActivity,
       accent: "text-accent",
