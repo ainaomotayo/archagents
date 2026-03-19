@@ -375,8 +375,8 @@ export default function VcsProvidersPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="VCS Providers"
-        description="Connect and manage version control system integrations."
+        title="Integrations"
+        description="Connect your version control system to enable automated scanning."
         action={
           <button
             onClick={() => setShowForm(!showForm)}
