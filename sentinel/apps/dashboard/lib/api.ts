@@ -2,7 +2,7 @@
  * SENTINEL Dashboard — API Client
  *
  * Fetches data from the SENTINEL API when available.
- * Falls back to mock data when API is unreachable (dev/demo mode).
+ * Falls back to empty values when the API is unreachable.
  */
 
 import type {
@@ -147,8 +147,8 @@ export async function getProjectScans(projectId: string): Promise<Scan[]> {
     return (p.scans ?? []).map((s: any) => ({
       id: s.id,
       projectId: s.projectId,
-      commit: s.commitHash,
-      branch: s.branch,
+      commit: s.commitHash ?? "",
+      branch: s.branch ?? "",
       status: s.status === "completed" ? (s.riskScore <= 20 ? "pass" : s.riskScore <= 50 ? "provisional" : "fail") : "running",
       riskScore: s.riskScore ?? 0,
       findingCount: s._count?.findings ?? 0,
@@ -388,7 +388,7 @@ export async function getApprovalStats(): Promise<ApprovalStats> {
   return tryApi(async (headers) => {
     const { apiGet } = await import("./api-client");
     return apiGet<ApprovalStats>("/v1/approvals/stats", undefined, headers);
-  }, { pending: 0, escalated: 0, approved: 0, rejected: 0 });
+  }, { pending: 0, escalated: 0, decidedToday: 0, avgDecisionTimeHours: 0, expiringSoon: 0 });
 }
 
 export async function reassignApprovalGate(gateId: string, assignTo: string): Promise<void> {
