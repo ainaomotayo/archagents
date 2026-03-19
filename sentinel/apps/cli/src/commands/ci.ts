@@ -119,6 +119,7 @@ async function submitScan(
       "X-Sentinel-Signature": signature,
       "X-Sentinel-API-Key": options.apiKey || "cli",
       "X-Sentinel-Role": "service",
+            ...(process.env.SENTINEL_ORG_ID ? { "X-Sentinel-Org-Id": process.env.SENTINEL_ORG_ID } : {}),
     },
     body,
   });
@@ -150,6 +151,7 @@ export async function pollForResult(
             "X-Sentinel-Signature": signature,
             "X-Sentinel-API-Key": "cli",
             "X-Sentinel-Role": "service",
+            ...(process.env.SENTINEL_ORG_ID ? { "X-Sentinel-Org-Id": process.env.SENTINEL_ORG_ID } : {}),
           },
         },
       );
